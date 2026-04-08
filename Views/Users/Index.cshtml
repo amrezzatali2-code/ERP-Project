@@ -96,17 +96,39 @@
 @section Styles {
     <style>
         .erp-users-toolbar-btn {
-            font-size: 0.9rem;
-            padding: 0.38rem 0.8rem;
+            font-size: 0.82rem;
+            padding: 0.28rem 0.55rem;
             line-height: 1.25;
             white-space: nowrap;
         }
 
+        /* للأزرار الطويلة: عرض أصغر مع قصّ لطيف عند ضيق الشاشة */
+        .erp-users-toolbar-btn-compact {
+            padding: 0.24rem 0.45rem;
+            max-width: 165px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .erp-users-toolbar-btn-compact.erp-users-toolbar-btn-date {
+            max-width: 190px; /* أكبر سنة لزر فلترة التاريخ/الوقت */
+        }
+
+        .erp-users-toolbar-row {
+            max-width: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            flex-wrap: nowrap !important;
+            -webkit-overflow-scrolling: touch;
+        }
+        .erp-users-toolbar-row::-webkit-scrollbar { height: 6px; }
+
         .erp-users-export-select {
-            width: 78px;
-            min-width: 78px;
-            font-size: 0.88rem;
+            width: 86px;
+            min-width: 86px;
+            font-size: 0.85rem;
             font-weight: 500;
+            direction: ltr;
+            text-align: center;
         }
     </style>
 }
@@ -174,17 +196,17 @@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
-                    <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-center align-items-center">
+                    <div class="erp-toolbar-row erp-users-toolbar-row d-flex flex-nowrap gap-1 justify-content-center align-items-center">
                         <a class="btn btn-erp btn-erp-success btn-erp-sm erp-users-toolbar-btn" asp-action="Create" asp-controller="Users">مستخدم جديد</a>
-                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-users-toolbar-btn" data-bs-toggle="modal" data-bs-target="#dateFilterModalUsers">فلترة بالتاريخ/الوقت</button>
-                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-users-toolbar-btn" data-bs-toggle="modal" data-bs-target="#columnsModalUsers">اختيار الأعمدة</button>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-users-toolbar-btn erp-users-toolbar-btn-compact erp-users-toolbar-btn-date" data-bs-toggle="modal" data-bs-target="#dateFilterModalUsers">فلترة بالتاريخ/الوقت</button>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-users-toolbar-btn erp-users-toolbar-btn-compact" data-bs-toggle="modal" data-bs-target="#columnsModalUsers">اختيار الأعمدة</button>
+                        <button type="button" id="btnPrintUsers" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-users-toolbar-btn">🖨️ طباعة</button>
+                    </div>
+                    <div class="erp-toolbar-row erp-users-toolbar-row d-flex flex-nowrap gap-1 justify-content-center align-items-center">
                         @if (ViewBag.CanEdit == true)
                         {
                             <button type="button" id="btnEditUser" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-users-toolbar-btn" disabled title="اختر مستخدماً بالنقر على الصف">تعديل</button>
                         }
-                        <button type="button" id="btnPrintUsers" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-users-toolbar-btn">🖨️ طباعة</button>
-                    </div>
-                    <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-center align-items-center">
                         @if (ViewBag.CanDelete == true)
                         {
                         <div class="btn-group">
@@ -196,7 +218,7 @@
                             </ul>
                         </div>
                         }
-                        <form method="get" asp-action="Export" asp-controller="Users" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
+                        <form method="get" asp-action="Export" asp-controller="Users" class="d-inline-flex flex-nowrap gap-1 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
                             <input type="hidden" name="searchMode" value="@searchMode" />
@@ -215,7 +237,7 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
-                            <select name="format" class="form-select form-select-arrow erp-filter-input erp-users-export-select" title="اختر صيغة التصدير">
+                            <select name="format" class="form-select form-select-arrow erp-filter-input erp-users-export-select" dir="ltr" title="اختر صيغة التصدير">
                                 <option value="excel" selected>Excel</option>
                                 <option value="pdf">PDF</option>
                             </select>

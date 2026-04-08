@@ -1,4 +1,4 @@
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                  // كلاس PagedResult لتقسيم الصفحات + الفلاتر
@@ -58,6 +58,7 @@ namespace ERP.Controllers
         private IQueryable<WarehousePolicyRule> BuildRulesQuery(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int? fromCode,
@@ -117,9 +118,13 @@ namespace ERP.Controllers
                 }
             }
 
-            // 5) الحقول النصية (فارغ - الموديل عددي فقط)
+            // 5) الحقول النصية للبحث
             var stringFields =
-                new Dictionary<string, Expression<Func<WarehousePolicyRule, string?>>>();
+                new Dictionary<string, Expression<Func<WarehousePolicyRule, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["warehousename"] = x => x.Warehouse != null ? x.Warehouse.WarehouseName : null,
+                    ["policyname"] = x => x.Policy != null ? x.Policy.Name : null
+                };
 
             // 6) الحقول العددية للبحث
             var intFields =
@@ -153,8 +158,9 @@ namespace ERP.Controllers
                 stringFields,
                 intFields,
                 orderFields,
-                defaultSearchBy: "id",     // البحث الافتراضي بالكود
-                defaultSortBy: "id"        // الترتيب الافتراضي بالكود
+                defaultSearchBy: "all",    // البحث الافتراضي في الكل
+                defaultSortBy: "id",       // الترتيب الافتراضي بالكود
+                searchMode: searchMode
             );
 
             return q;
@@ -162,15 +168,123 @@ namespace ERP.Controllers
 
         private static readonly char[] _filterSep = { '|', ',', ';' };
 
+        private static string NormalizeNumericExpr(string? value)
+        {
+            var text = (value ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            var chars = text.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                chars[i] = chars[i] switch
+                {
+                    >= '\u0660' and <= '\u0669' => (char)('0' + (chars[i] - '\u0660')),
+                    >= '\u06F0' and <= '\u06F9' => (char)('0' + (chars[i] - '\u06F0')),
+                    '\u061B' or '\u0589' or '\uFE13' or '\uFE55' => ':',
+                    '\u2010' or '\u2011' or '\u2012' or '\u2013' or '\u2014' or '\u2015' or '\u2212' => '-',
+                    '\u2264' => '≤',
+                    '\u2265' => '≥',
+                    _ => chars[i]
+                };
+            }
+
+            text = new string(chars).Replace("≤", "<=").Replace("≥", ">=").Replace(" ", string.Empty);
+            if ((text.Split(',').Length - 1) == 1 && text.IndexOf('.') < 0)
+                text = text.Replace(',', '.');
+            return text;
+        }
+
+        private static IQueryable<WarehousePolicyRule> ApplyIntExpr(
+            IQueryable<WarehousePolicyRule> q,
+            string expr,
+            Expression<Func<WarehousePolicyRule, int>> selector)
+        {
+            if (string.IsNullOrWhiteSpace(expr))
+                return q;
+
+            if (expr.StartsWith("<=") && int.TryParse(expr[2..], NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.LessThanOrEqual(selector.Body, Expression.Constant(le)), selector.Parameters));
+            if (expr.StartsWith(">=") && int.TryParse(expr[2..], NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.GreaterThanOrEqual(selector.Body, Expression.Constant(ge)), selector.Parameters));
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && int.TryParse(expr[1..], NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.LessThan(selector.Body, Expression.Constant(lt)), selector.Parameters));
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && int.TryParse(expr[1..], NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.GreaterThan(selector.Body, Expression.Constant(gt)), selector.Parameters));
+
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b) (a, b) = (b, a);
+                    var geBody = Expression.GreaterThanOrEqual(selector.Body, Expression.Constant(a));
+                    var leBody = Expression.LessThanOrEqual(selector.Body, Expression.Constant(b));
+                    return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.AndAlso(geBody, leBody), selector.Parameters));
+                }
+            }
+
+            if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var eq))
+                return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.Equal(selector.Body, Expression.Constant(eq)), selector.Parameters));
+
+            return q;
+        }
+
+        private static IQueryable<WarehousePolicyRule> ApplyDecimalExpr(
+            IQueryable<WarehousePolicyRule> q,
+            string expr,
+            Expression<Func<WarehousePolicyRule, decimal>> selector)
+        {
+            if (string.IsNullOrWhiteSpace(expr))
+                return q;
+
+            if (expr.StartsWith("<=") && decimal.TryParse(expr[2..], NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.LessThanOrEqual(selector.Body, Expression.Constant(le)), selector.Parameters));
+            if (expr.StartsWith(">=") && decimal.TryParse(expr[2..], NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.GreaterThanOrEqual(selector.Body, Expression.Constant(ge)), selector.Parameters));
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && decimal.TryParse(expr[1..], NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.LessThan(selector.Body, Expression.Constant(lt)), selector.Parameters));
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && decimal.TryParse(expr[1..], NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.GreaterThan(selector.Body, Expression.Constant(gt)), selector.Parameters));
+
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && decimal.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && decimal.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b) (a, b) = (b, a);
+                    var geBody = Expression.GreaterThanOrEqual(selector.Body, Expression.Constant(a));
+                    var leBody = Expression.LessThanOrEqual(selector.Body, Expression.Constant(b));
+                    return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.AndAlso(geBody, leBody), selector.Parameters));
+                }
+            }
+
+            if (decimal.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var eq))
+                return q.Where(Expression.Lambda<Func<WarehousePolicyRule, bool>>(Expression.Equal(selector.Body, Expression.Constant(eq)), selector.Parameters));
+
+            return q;
+        }
+
         private IQueryable<WarehousePolicyRule> ApplyColumnFilters(
             IQueryable<WarehousePolicyRule> q,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_warehouse,
+            string? filterCol_warehouseExpr,
             string? filterCol_warehousename,
             string? filterCol_policy,
+            string? filterCol_policyExpr,
             string? filterCol_policyname,
             string? filterCol_profit,
+            string? filterCol_profitExpr,
             string? filterCol_maxdisc,
+            string? filterCol_maxdiscExpr,
             string? filterCol_created)
         {
             if (!string.IsNullOrWhiteSpace(filterCol_id))
@@ -181,6 +295,10 @@ namespace ERP.Controllers
                 if (ids.Count > 0)
                     q = q.Where(x => ids.Contains(x.Id));
             }
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                q = ApplyIntExpr(q, NormalizeNumericExpr(filterCol_idExpr), x => x.Id);
+            }
             if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
             {
                 var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -188,6 +306,10 @@ namespace ERP.Controllers
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0)
                     q = q.Where(x => ids.Contains(x.WarehouseId));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_warehouseExpr))
+            {
+                q = ApplyIntExpr(q, NormalizeNumericExpr(filterCol_warehouseExpr), x => x.WarehouseId);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_warehousename))
             {
@@ -203,6 +325,10 @@ namespace ERP.Controllers
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0)
                     q = q.Where(x => ids.Contains(x.PolicyId));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_policyExpr))
+            {
+                q = ApplyIntExpr(q, NormalizeNumericExpr(filterCol_policyExpr), x => x.PolicyId);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_policyname))
             {
@@ -220,6 +346,10 @@ namespace ERP.Controllers
                 if (terms.Count > 0)
                     q = q.Where(x => terms.Contains(x.ProfitPercent));
             }
+            else if (!string.IsNullOrWhiteSpace(filterCol_profitExpr))
+            {
+                q = ApplyDecimalExpr(q, NormalizeNumericExpr(filterCol_profitExpr), x => x.ProfitPercent);
+            }
             if (!string.IsNullOrWhiteSpace(filterCol_maxdisc))
             {
                 var terms = filterCol_maxdisc.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -228,6 +358,11 @@ namespace ERP.Controllers
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (terms.Count > 0)
                     q = q.Where(x => x.MaxDiscountToCustomer.HasValue && terms.Contains(x.MaxDiscountToCustomer.Value));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_maxdiscExpr))
+            {
+                q = q.Where(x => x.MaxDiscountToCustomer.HasValue);
+                q = ApplyDecimalExpr(q, NormalizeNumericExpr(filterCol_maxdiscExpr), x => x.MaxDiscountToCustomer ?? 0m);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_created))
             {
@@ -388,7 +523,8 @@ namespace ERP.Controllers
         // =========================
         public async Task<IActionResult> Index(
             string? search,
-            string? searchBy = "id",        // id | warehouse | policy
+            string? searchBy = "all",       // all | id | warehouse | policy ...
+            string? searchMode = "contains",
             string? sort = "id",            // id | warehouse | policy | profit | maxdisc | created
             string? dir = "asc",            // asc | desc
             int page = 1,
@@ -399,18 +535,28 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_warehouse = null,
+            string? filterCol_warehouseExpr = null,
             string? filterCol_warehousename = null,
             string? filterCol_policy = null,
+            string? filterCol_policyExpr = null,
             string? filterCol_policyname = null,
             string? filterCol_profit = null,
+            string? filterCol_profitExpr = null,
             string? filterCol_maxdisc = null,
+            string? filterCol_maxdiscExpr = null,
             string? filterCol_created = null)
         {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
             // بناء الاستعلام طبقاً للفلاتر
             var q = BuildRulesQuery(
                 search,
                 searchBy,
+                sm,
                 sort,
                 dir,
                 fromCode,
@@ -419,20 +565,29 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_warehouse, filterCol_warehousename, filterCol_policy, filterCol_policyname, filterCol_profit, filterCol_maxdisc, filterCol_created);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_warehouse, filterCol_warehouseExpr, filterCol_warehousename, filterCol_policy, filterCol_policyExpr, filterCol_policyname, filterCol_profit, filterCol_profitExpr, filterCol_maxdisc, filterCol_maxdiscExpr, filterCol_created);
+
+            var totalCount = await q.CountAsync();
+            var activeCount = await q.CountAsync(x => x.IsActive);
+            var inactiveCount = totalCount - activeCount;
 
             // تقسيم الصفحات (النظام الثابت)
             var model = await PagedResult<WarehousePolicyRule>.CreateAsync(q, page, pageSize);
 
             // تعبئة خصائص البحث/الترتيب داخل الموديل (للاستخدام في الواجهة)
             model.Search = search ?? "";
-            model.SearchBy = searchBy ?? "id";
+            model.SearchBy = searchBy ?? "all";
             model.SortColumn = sort ?? "id";
             model.SortDescending = (dir?.ToLower() == "desc");
             model.UseDateRange = useDateRange;
             model.FromDate = fromDate;
             model.ToDate = toDate;
 
+            ViewBag.Search = search ?? "";
+            ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = sm;
+            ViewBag.Sort = sort ?? "id";
+            ViewBag.Dir = (dir ?? "asc").ToLower() == "desc" ? "desc" : "asc";
             // تمرير فلتر الكود عن طريق ViewBag (مثل فواتير المبيعات)
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
@@ -440,13 +595,21 @@ namespace ERP.Controllers
             ViewBag.CodeTo = toCode;
 
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_WarehouseExpr = filterCol_warehouseExpr;
             ViewBag.FilterCol_Warehousename = filterCol_warehousename;
             ViewBag.FilterCol_Policy = filterCol_policy;
+            ViewBag.FilterCol_PolicyExpr = filterCol_policyExpr;
             ViewBag.FilterCol_Policyname = filterCol_policyname;
             ViewBag.FilterCol_Profit = filterCol_profit;
+            ViewBag.FilterCol_ProfitExpr = filterCol_profitExpr;
             ViewBag.FilterCol_Maxdisc = filterCol_maxdisc;
+            ViewBag.FilterCol_MaxdiscExpr = filterCol_maxdiscExpr;
             ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.ActiveCount = activeCount;
+            ViewBag.InactiveCount = inactiveCount;
+            ViewBag.TotalCount = totalCount;
 
             // حقل التاريخ المستخدم في الفلترة (للنموذج الموحد)
             ViewBag.DateField = "CreatedAt";
@@ -469,6 +632,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int? fromCode = null,
@@ -479,21 +643,31 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_warehouse = null,
+            string? filterCol_warehouseExpr = null,
             string? filterCol_warehousename = null,
             string? filterCol_policy = null,
+            string? filterCol_policyExpr = null,
             string? filterCol_policyname = null,
             string? filterCol_profit = null,
+            string? filterCol_profitExpr = null,
             string? filterCol_maxdisc = null,
+            string? filterCol_maxdiscExpr = null,
             string? filterCol_created = null,
             string format = "excel")
         {
             if (!fromCode.HasValue && codeFrom.HasValue) fromCode = codeFrom;
             if (!toCode.HasValue && codeTo.HasValue) toCode = codeTo;
 
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
             var query = BuildRulesQuery(
                 search,
                 searchBy,
+                sm,
                 sort,
                 dir,
                 fromCode,
@@ -502,7 +676,7 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_warehouse, filterCol_warehousename, filterCol_policy, filterCol_policyname, filterCol_profit, filterCol_maxdisc, filterCol_created);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_idExpr, filterCol_warehouse, filterCol_warehouseExpr, filterCol_warehousename, filterCol_policy, filterCol_policyExpr, filterCol_policyname, filterCol_profit, filterCol_profitExpr, filterCol_maxdisc, filterCol_maxdiscExpr, filterCol_created);
 
             // 2) جلب كل النتائج (بدون Paging) — Include موجود في BuildRulesQuery
             var list = await query.ToListAsync();
@@ -896,9 +1070,50 @@ public async Task<IActionResult> Delete(int? id)
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteAll()
+        public async Task<IActionResult> DeleteAll(
+            string? search,
+            string? searchBy,
+            string? searchMode,
+            string? sort,
+            string? dir,
+            int? fromCode = null,
+            int? toCode = null,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            string? filterCol_id = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_warehouseExpr = null,
+            string? filterCol_warehousename = null,
+            string? filterCol_policy = null,
+            string? filterCol_policyExpr = null,
+            string? filterCol_policyname = null,
+            string? filterCol_profit = null,
+            string? filterCol_profitExpr = null,
+            string? filterCol_maxdisc = null,
+            string? filterCol_maxdiscExpr = null,
+            string? filterCol_created = null)
         {
-            var rules = await _context.WarehousePolicyRules.ToListAsync();
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
+            var q = BuildRulesQuery(
+                search,
+                searchBy,
+                sm,
+                sort,
+                dir,
+                fromCode,
+                toCode,
+                useDateRange,
+                fromDate,
+                toDate);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_warehouse, filterCol_warehouseExpr, filterCol_warehousename, filterCol_policy, filterCol_policyExpr, filterCol_policyname, filterCol_profit, filterCol_profitExpr, filterCol_maxdisc, filterCol_maxdiscExpr, filterCol_created);
+
+            var rules = await q.ToListAsync();
             if (!rules.Any())
             {
                 TempData["Msg"] = "لا توجد قواعد لحذفها.";
@@ -913,3 +1128,6 @@ public async Task<IActionResult> Delete(int? id)
         }
     }
 }
+
+
+

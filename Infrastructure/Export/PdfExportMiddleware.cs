@@ -6,6 +6,7 @@ namespace ERP.Infrastructure.Export;
 public class PdfExportMiddleware
 {
     private const string PdfFlagKey = "__erp_pdf_export_requested";
+    private const string PdfInlineFlagKey = "__erp_pdf_export_inline";
     private readonly RequestDelegate _next;
 
     public PdfExportMiddleware(RequestDelegate next)
@@ -21,9 +22,12 @@ public class PdfExportMiddleware
             await _next(context);
             return;
         }
+        var preferInline = string.Equals(context.Request.Query["pdfInline"], "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(context.Request.Query["pdfInline"], "true", StringComparison.OrdinalIgnoreCase);
 
         var originalQuery = context.Request.QueryString;
         context.Items[PdfFlagKey] = true;
+        context.Items[PdfInlineFlagKey] = preferInline;
         context.Request.QueryString = ReplaceFormatQueryString(context.Request.Query, "csv");
 
         var originalBody = context.Response.Body;
@@ -46,11 +50,12 @@ public class PdfExportMiddleware
             var fileName = ResolvePdfFileName(context.Response.Headers.ContentDisposition);
             var title = Path.GetFileNameWithoutExtension(fileName);
             var pdfBytes = CsvPdfExportHelper.GeneratePdf(csvText, title);
+            var inline = context.Items.TryGetValue(PdfInlineFlagKey, out var inlineObj) && inlineObj is bool b && b;
 
             context.Response.Body = originalBody;
             context.Response.ContentType = "application/pdf";
             context.Response.ContentLength = pdfBytes.Length;
-            context.Response.Headers.ContentDisposition = BuildContentDispositionHeader(fileName);
+            context.Response.Headers.ContentDisposition = BuildContentDispositionHeader(fileName, inline);
             await context.Response.Body.WriteAsync(pdfBytes, 0, pdfBytes.Length);
         }
         finally
@@ -58,6 +63,7 @@ public class PdfExportMiddleware
             context.Response.Body = originalBody;
             context.Request.QueryString = originalQuery;
             context.Items.Remove(PdfFlagKey);
+            context.Items.Remove(PdfInlineFlagKey);
         }
     }
 
@@ -137,7 +143,7 @@ public class PdfExportMiddleware
         return Path.ChangeExtension(fileName, ".pdf");
     }
 
-    private static string BuildContentDispositionHeader(string fileName)
+    private static string BuildContentDispositionHeader(string fileName, bool inline = false)
     {
         var safeFileName = string.IsNullOrWhiteSpace(fileName)
             ? "export.pdf"
@@ -145,7 +151,8 @@ public class PdfExportMiddleware
 
         var asciiFileName = BuildAsciiFallbackFileName(safeFileName);
         var encodedFileName = Uri.EscapeDataString(safeFileName);
-        return $"attachment; filename=\"{asciiFileName}\"; filename*=UTF-8''{encodedFileName}";
+        var mode = inline ? "inline" : "attachment";
+        return $"{mode}; filename=\"{asciiFileName}\"; filename*=UTF-8''{encodedFileName}";
     }
 
     private static string BuildAsciiFallbackFileName(string fileName)

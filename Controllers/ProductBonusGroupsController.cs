@@ -3,7 +3,10 @@ using System.Collections.Generic;                    // Dictionary, List
 using System.Linq;                                   // أوامر LINQ
 using System.Linq.Expressions;                       // Expressions
 using System.Text;                                   // StringBuilder للتصدير
+using System.Globalization;
 using System.Threading.Tasks;                        // Task / async
+using System.IO;
+using ClosedXML.Excel;
 using ERP.Data;                                      // AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                            // PagedResult + ApplySearchSort
@@ -35,6 +38,7 @@ namespace ERP.Controllers
         private IQueryable<ProductBonusGroup> BuildBonusGroupsQuery(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int? fromCode,
@@ -137,8 +141,9 @@ namespace ERP.Controllers
                 stringFields,
                 intFields,
                 orderFields,
-                defaultSearchBy: "name",   // افتراضياً نبحث بالاسم
-                defaultSortBy: "id"        // وافتراضياً نرتّب بالكود
+                defaultSearchBy: "all",   // افتراضياً نبحث في الكل
+                defaultSortBy: "id",       // وافتراضياً نرتّب بالكود
+                searchMode: searchMode
             );
 
             return q;
@@ -146,9 +151,54 @@ namespace ERP.Controllers
 
         private static readonly char[] _filterSep = { '|', ',', ';' };
 
+        private static IQueryable<ProductBonusGroup> ApplyBonusGroupIdNumericExpr(IQueryable<ProductBonusGroup> q, string? rawExpr)
+        {
+            if (string.IsNullOrWhiteSpace(rawExpr))
+                return q;
+
+            var expr = rawExpr.Trim();
+
+            if (expr.StartsWith("<=") && expr.Length > 2
+                && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(x => x.ProductBonusGroupId <= le);
+
+            if (expr.StartsWith(">=") && expr.Length > 2
+                && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(x => x.ProductBonusGroupId >= ge);
+
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1
+                && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(x => x.ProductBonusGroupId < lt);
+
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1
+                && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(x => x.ProductBonusGroupId > gt);
+
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0))
+                && !expr.StartsWith("-"))
+            {
+                var separator = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b)
+                        (a, b) = (b, a);
+                    return q.Where(x => x.ProductBonusGroupId >= a && x.ProductBonusGroupId <= b);
+                }
+            }
+
+            if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var eq))
+                return q.Where(x => x.ProductBonusGroupId == eq);
+
+            return q;
+        }
+
         private IQueryable<ProductBonusGroup> ApplyColumnFilters(
             IQueryable<ProductBonusGroup> q,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_name,
             string? filterCol_bonus,
             string? filterCol_active,
@@ -162,6 +212,10 @@ namespace ERP.Controllers
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0)
                     q = q.Where(x => ids.Contains(x.ProductBonusGroupId));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                q = ApplyBonusGroupIdNumericExpr(q, filterCol_idExpr);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_name))
             {
@@ -259,7 +313,8 @@ namespace ERP.Controllers
         // =========================
         public async Task<IActionResult> Index(
             string? search,
-            string? searchBy = "name",       // name | id | status | desc
+            string? searchBy = "all",       // all | name | id | status | desc
+            string? searchMode = "contains",
             string? sort = "id",             // id | name | bonus | active | created | updated
             string? dir = "asc",             // asc | desc
             int page = 1,
@@ -270,16 +325,22 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_bonus = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
             string? filterCol_updated = null)
         {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
             // بناء الاستعلام طبقاً للفلاتر
             var q = BuildBonusGroupsQuery(
                 search,
                 searchBy,
+                sm,
                 sort,
                 dir,
                 fromCode,
@@ -288,14 +349,18 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_bonus, filterCol_active, filterCol_created, filterCol_updated);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_name, filterCol_bonus, filterCol_active, filterCol_created, filterCol_updated);
+
+            var totalCount = await q.CountAsync();
+            var activeCount = await q.CountAsync(x => x.IsActive);
+            var inactiveCount = totalCount - activeCount;
 
             // تقسيم الصفحات
             var model = await PagedResult<ProductBonusGroup>.CreateAsync(q, page, pageSize);
 
             // تعبئة خصائص البحث/الترتيب داخل الموديل (للاستخدام في الواجهة)
             model.Search = search ?? "";
-            model.SearchBy = searchBy ?? "name";
+            model.SearchBy = searchBy ?? "all";
             model.SortColumn = sort ?? "id";
             model.SortDescending = (dir?.ToLower() == "desc");
             model.UseDateRange = useDateRange;
@@ -307,12 +372,17 @@ namespace ERP.Controllers
             ViewBag.ToCode = toCode;
             ViewBag.CodeFrom = fromCode;
             ViewBag.CodeTo = toCode;
+            ViewBag.SearchMode = sm;
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Name = filterCol_name;
             ViewBag.FilterCol_Bonus = filterCol_bonus;
             ViewBag.FilterCol_Active = filterCol_active;
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Updated = filterCol_updated;
+            ViewBag.ActiveCount = activeCount;
+            ViewBag.InactiveCount = inactiveCount;
+            ViewBag.TotalCount = totalCount;
 
             // حقل التاريخ المستخدم في الفلترة (للنموذج الموحد)
             ViewBag.DateField = "CreatedAt";
@@ -321,12 +391,13 @@ namespace ERP.Controllers
         }
 
         // =========================
-        // Export — تصدير مجموعات الحوافز (CSV)
+        // Export — تصدير مجموعات الحوافز (Excel / CSV)
         // =========================
         [HttpGet]
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int? fromCode = null,
@@ -338,6 +409,7 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             string? format = "excel",
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_bonus = null,
             string? filterCol_active = null,
@@ -347,9 +419,14 @@ namespace ERP.Controllers
             if (!fromCode.HasValue && codeFrom.HasValue) fromCode = codeFrom;
             if (!toCode.HasValue && codeTo.HasValue) toCode = codeTo;
 
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
             var q = BuildBonusGroupsQuery(
                 search,
                 searchBy,
+                sm,
                 sort,
                 dir,
                 fromCode,
@@ -358,40 +435,77 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_bonus, filterCol_active, filterCol_created, filterCol_updated);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_name, filterCol_bonus, filterCol_active, filterCol_created, filterCol_updated);
 
             var list = await q.ToListAsync();
 
-            var sb = new StringBuilder();
-
-            // عناوين الأعمدة
-            sb.AppendLine("كود المجموعة,اسم المجموعة,قيمة الحافز/علبة,مفعّلة؟,تاريخ الإنشاء,آخر تعديل");
-
-            foreach (var x in list)
+            if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
             {
-                string createdText = x.CreatedAt.ToString("yyyy-MM-dd HH:mm");
-                string updatedText = x.UpdatedAt.HasValue
-                    ? x.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
-                    : "";
-                string nm = "\"" + (x.Name ?? "").Replace("\"", "\"\"") + "\"";
+                using var workbook = new XLWorkbook();
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("مجموعات الحوافز"));
 
-                var line = string.Join(",",
-                    x.ProductBonusGroupId,
-                    nm,
-                    x.BonusAmount.ToString("0.00"),
-                    $"\"{(x.IsActive ? "مفعّلة" : "موقوفة")}\"",
-                    createdText,
-                    updatedText
-                );
+                int row = 1;
+                worksheet.Cell(row, 1).Value = "كود المجموعة";
+                worksheet.Cell(row, 2).Value = "اسم المجموعة";
+                worksheet.Cell(row, 3).Value = "قيمة الحافز/علبة";
+                worksheet.Cell(row, 4).Value = "مفعّلة؟";
+                worksheet.Cell(row, 5).Value = "تاريخ الإنشاء";
+                worksheet.Cell(row, 6).Value = "آخر تعديل";
 
-                sb.AppendLine(line);
+                var header = worksheet.Range(row, 1, row, 6);
+                header.Style.Font.Bold = true;
+
+                foreach (var x in list)
+                {
+                    row++;
+                    worksheet.Cell(row, 1).Value = x.ProductBonusGroupId;
+                    worksheet.Cell(row, 2).Value = x.Name;
+                    worksheet.Cell(row, 3).Value = x.BonusAmount;
+                    worksheet.Cell(row, 4).Value = x.IsActive ? "نعم" : "لا";
+                    worksheet.Cell(row, 5).Value = x.CreatedAt;
+                    worksheet.Cell(row, 6).Value = x.UpdatedAt;
+                }
+
+                worksheet.Columns().AdjustToContents();
+
+                using var stream = new MemoryStream();
+                workbook.SaveAs(stream);
+                stream.Position = 0;
+
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("مجموعات الحوافز", ".xlsx");
+                const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                return File(stream.ToArray(), contentType, fileNameXlsx);
             }
+            else
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("كود المجموعة,اسم المجموعة,قيمة الحافز/علبة,مفعّلة؟,تاريخ الإنشاء,آخر تعديل");
 
-            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
-            var ext = (format ?? "excel").ToLower() == "csv" ? "csv" : "csv";
-            var fileName = ExcelExportNaming.ArabicTimestampedFileName("مجموعات الحوافز", "." + ext);
+                foreach (var x in list)
+                {
+                    string createdText = x.CreatedAt.ToString("yyyy-MM-dd HH:mm");
+                    string updatedText = x.UpdatedAt.HasValue
+                        ? x.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
+                        : "";
+                    string nm = "\"" + (x.Name ?? "").Replace("\"", "\"\"") + "\"";
 
-            return File(bytes, "text/csv; charset=utf-8", fileName);
+                    var line = string.Join(",",
+                        x.ProductBonusGroupId,
+                        nm,
+                        x.BonusAmount.ToString("0.00"),
+                        $"\"{(x.IsActive ? "مفعّلة" : "موقوفة")}\"",
+                        createdText,
+                        updatedText
+                    );
+
+                    sb.AppendLine(line);
+                }
+
+                var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("مجموعات الحوافز", ".csv");
+
+                return File(bytes, "text/csv; charset=utf-8", fileNameCsv);
+            }
         }
 
         // =========================

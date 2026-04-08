@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, ToListAsync, AnyAsync
 using System;                                     // متغيرات الوقت DateTime
 using System.Collections.Generic;                 // القوائم List, Dictionary
+using System.Globalization;
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Linq.Expressions;                    // Expression<Func<...>> لحقول البحث
 using System.Text;                                // StringBuilder لتجهيز ملف التصدير
@@ -46,6 +47,7 @@ namespace ERP.Controllers
         private IQueryable<Policy> BuildPoliciesQuery(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int? fromCode,
@@ -135,8 +137,9 @@ namespace ERP.Controllers
                 searchForSort, searchByForSort,
                 sort, dir,
                 stringFields, intFields, orderFields,
-                defaultSearchBy: "name",
-                defaultSortBy: "id");
+                defaultSearchBy: "all",
+                defaultSortBy: "id",
+                searchMode: searchMode);
 
             return q;
         }
@@ -146,9 +149,54 @@ namespace ERP.Controllers
         // =========================
         private static readonly char[] _filterSep = { '|', ',', ';' };
 
+        private static IQueryable<Policy> ApplyPolicyIdNumericExpr(IQueryable<Policy> q, string? rawExpr)
+        {
+            if (string.IsNullOrWhiteSpace(rawExpr))
+                return q;
+
+            var expr = rawExpr.Trim();
+
+            if (expr.StartsWith("<=") && expr.Length > 2
+                && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(x => x.PolicyId <= le);
+
+            if (expr.StartsWith(">=") && expr.Length > 2
+                && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(x => x.PolicyId >= ge);
+
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1
+                && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(x => x.PolicyId < lt);
+
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1
+                && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(x => x.PolicyId > gt);
+
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0))
+                && !expr.StartsWith("-"))
+            {
+                var separator = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b)
+                        (a, b) = (b, a);
+                    return q.Where(x => x.PolicyId >= a && x.PolicyId <= b);
+                }
+            }
+
+            if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var eq))
+                return q.Where(x => x.PolicyId == eq);
+
+            return q;
+        }
+
         private IQueryable<Policy> ApplyColumnFilters(
             IQueryable<Policy> q,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_name,
             string? filterCol_description,
             string? filterCol_active,
@@ -162,6 +210,10 @@ namespace ERP.Controllers
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0)
                     q = q.Where(x => ids.Contains(x.PolicyId));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                q = ApplyPolicyIdNumericExpr(q, filterCol_idExpr);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_name))
             {
@@ -255,7 +307,8 @@ namespace ERP.Controllers
 
         public async Task<IActionResult> Index(
             string? search,
-            string? searchBy = "name",
+            string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "id",
             string? dir = "asc",
             int page = 1,
@@ -266,25 +319,34 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_description = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
             string? filterCol_updated = null)
         {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
             var q = BuildPoliciesQuery(
-                search, searchBy,
+                search, searchBy, sm,
                 sort, dir,
                 fromCode, toCode,
                 useDateRange, fromDate, toDate);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_description, filterCol_active, filterCol_created, filterCol_updated);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_name, filterCol_description, filterCol_active, filterCol_created, filterCol_updated);
+
+            var totalCount = await q.CountAsync();
+            var activeCount = await q.CountAsync(x => x.IsActive);
+            var inactiveCount = totalCount - activeCount;
 
             var model = await PagedResult<Policy>.CreateAsync(q, page, pageSize);
 
             // تعبئة خصائص إضافية في PagedResult (نفس ما نستخدمه في الجداول الأخرى)
             model.Search = search;
-            model.SearchBy = searchBy;
+            model.SearchBy = searchBy ?? "all";
             model.SortColumn = sort;
             model.SortDescending = (dir ?? "asc").ToLower() == "desc";
             model.UseDateRange = useDateRange;
@@ -293,7 +355,8 @@ namespace ERP.Controllers
 
             // 3) تجهيز قيم الـ ViewBag للفلاتر والواجهة
             ViewBag.Search = search ?? "";
-            ViewBag.SearchBy = searchBy ?? "name";
+            ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = sort ?? "id";
             ViewBag.Dir = (dir ?? "asc").ToLower() == "desc" ? "desc" : "asc";
 
@@ -302,6 +365,7 @@ namespace ERP.Controllers
             ViewBag.CodeFrom = fromCode;
             ViewBag.CodeTo = toCode;
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Name = filterCol_name;
             ViewBag.FilterCol_Description = filterCol_description;
             ViewBag.FilterCol_Active = filterCol_active;
@@ -312,7 +376,9 @@ namespace ERP.Controllers
 
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
-            ViewBag.TotalCount = model.TotalCount;
+            ViewBag.TotalCount = totalCount;
+            ViewBag.ActiveCount = activeCount;
+            ViewBag.InactiveCount = inactiveCount;
 
             return View(model);
         }
@@ -330,6 +396,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
         string? search,
         string? searchBy,
+        string? searchMode,
         string? sort,
         string? dir,
         bool useDateRange = false,
@@ -338,6 +405,7 @@ namespace ERP.Controllers
         int? fromCode = null,
         int? toCode = null,
         string? filterCol_id = null,
+        string? filterCol_idExpr = null,
         string? filterCol_name = null,
         string? filterCol_description = null,
         string? filterCol_active = null,
@@ -345,9 +413,14 @@ namespace ERP.Controllers
         string? filterCol_updated = null,
         string format = "excel")
         {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
             var query = BuildPoliciesQuery(
                 search,
                 searchBy,
+                sm,
                 sort,
                 dir,
                 fromCode,
@@ -356,7 +429,7 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_name, filterCol_description, filterCol_active, filterCol_created, filterCol_updated);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_idExpr, filterCol_name, filterCol_description, filterCol_active, filterCol_created, filterCol_updated);
 
             var list = await query.ToListAsync();   // متغير: قائمة السياسات الجاهزة للتصدير
 
@@ -740,6 +813,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> DeleteAll(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int? fromCode,
@@ -749,8 +823,12 @@ namespace ERP.Controllers
             DateTime? toDate = null)
         {
             // نستخدم نفس BuildPoliciesQuery عشان نحترم الفلاتر الحالية
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
             var q = BuildPoliciesQuery(
-                search, searchBy,
+                search, searchBy, sm,
                 sort, dir,
                 fromCode, toCode,
                 useDateRange, fromDate, toDate);

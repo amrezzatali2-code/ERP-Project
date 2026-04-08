@@ -89,6 +89,17 @@
     };
 }
 
+@section Styles {
+    <style>
+        .erp-ur-toolbar-btn {
+            font-size: 0.85rem;
+            padding: 0.30rem 0.65rem;
+            line-height: 1.25;
+            white-space: nowrap;
+        }
+    </style>
+}
+
 <div dir="rtl" class="container-fluid">
 
     @* ===== شريط الفلاتر الموحد ===== *@
@@ -156,15 +167,15 @@
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
                     <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-center align-items-center">
-                        <a class="btn btn-erp btn-erp-success btn-erp-sm" asp-action="Create" asp-controller="UserRoles">إسناد دور لمستخدم</a>
-                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModalUR">فلترة بالتاريخ/الوقت</button>
-                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalUR">اختيار الأعمدة</button>
-                        <button type="button" id="btnEditUserRole" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="اختر سطراً ثم اضغط تعديل (سطر له ربط دور)">تعديل</button>
+                        <a class="btn btn-erp btn-erp-success btn-erp-sm erp-ur-toolbar-btn" asp-action="Create" asp-controller="UserRoles">إسناد دور لمستخدم</a>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-ur-toolbar-btn" data-bs-toggle="modal" data-bs-target="#dateFilterModalUR">فلترة بالتاريخ/الوقت</button>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-ur-toolbar-btn" data-bs-toggle="modal" data-bs-target="#columnsModalUR">اختيار الأعمدة</button>
+                        <button type="button" id="btnPrintUR" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-ur-toolbar-btn">🖨️ طباعة</button>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-center align-items-center">
-                        <button type="button" id="btnPrintUR" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <button type="button" id="btnEditUserRole" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-ur-toolbar-btn" disabled title="اختر سطراً ثم اضغط تعديل (سطر له ربط دور)">تعديل</button>
                         <div class="btn-group">
-                            <button type="button" class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
+                            <button type="button" class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle erp-ur-toolbar-btn" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
                                 <li><button type="button" class="dropdown-item text-danger" id="btnBulkDelete">حذف المحدد</button></li>
                                 <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الجميع</button></li>
@@ -188,11 +199,11 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_role)) { <input type="hidden" name="filterCol_role" value="@filterCol_role" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_primary)) { <input type="hidden" name="filterCol_primary" value="@filterCol_primary" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_assigned)) { <input type="hidden" name="filterCol_assigned" value="@filterCol_assigned" /> }
-                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="اختر صيغة التصدير">
+                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.85rem;font-weight:500;" title="اختر صيغة التصدير">
                                 <option value="excel" selected>Excel</option>
                                 <option value="pdf">PDF</option>
                             </select>
-                            <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
+                            <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm erp-ur-toolbar-btn">تصدير</button>
                         </form>
                     </div>
                     <form id="formBulkDelete" asp-action="BulkDelete" asp-controller="UserRoles" method="post" class="d-none">

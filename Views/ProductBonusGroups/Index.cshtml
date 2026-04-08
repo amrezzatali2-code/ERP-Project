@@ -9,7 +9,9 @@
     var controller = Convert.ToString(ViewContext.RouteData.Values["controller"]) ?? "ProductBonusGroups";
 
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
-    var searchBy = (string?)ViewBag.SearchBy ?? "name";
+    var searchBy = Model.SearchBy ?? (string?)ViewBag.SearchBy ?? "all";
+    var searchMode = ((string?)ViewBag.SearchMode ?? "contains").ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "id";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
@@ -18,8 +20,8 @@
     int page = Model.PageNumber;
     int pages = Model.TotalPages;
 
-    int start = total == 0 ? 0 : ((page - 1) * ps) + 1;
-    int end = Math.Min(total, page * ps);
+    int start = Model.StartIndex;
+    int end = Model.EndIndex;
 
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
@@ -31,16 +33,21 @@
     var dateField = (string?)ViewBag.DateField ?? "CreatedAt";
 
     string? filterCol_id = ViewBag.FilterCol_Id as string;
+    string? filterCol_idExpr = ViewBag.FilterCol_IdExpr as string;
     string? filterCol_name = ViewBag.FilterCol_Name as string;
     string? filterCol_bonus = ViewBag.FilterCol_Bonus as string;
     string? filterCol_active = ViewBag.FilterCol_Active as string;
     string? filterCol_created = ViewBag.FilterCol_Created as string;
     string? filterCol_updated = ViewBag.FilterCol_Updated as string;
+    int activeCount = ViewBag.ActiveCount is int ac ? ac : 0;
+    int inactiveCount = ViewBag.InactiveCount is int ic ? ic : 0;
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
 
     string Link(int p) => Url.Action(action, controller, new
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -52,6 +59,7 @@
         fromCode,
         toCode,
         filterCol_id,
+        filterCol_idExpr,
         filterCol_name,
         filterCol_bonus,
         filterCol_active,
@@ -59,7 +67,7 @@
         filterCol_updated
     })!;
 
-    string? FilterForCol(string colKey) => colKey == "id" ? filterCol_id : colKey == "name" ? filterCol_name : colKey == "bonus" ? filterCol_bonus : colKey == "active" ? filterCol_active : colKey == "created" ? filterCol_created : colKey == "updated" ? filterCol_updated : null;
+    string? FilterForCol(string colKey) => colKey == "id" ? (!string.IsNullOrWhiteSpace(filterCol_idExpr) ? filterCol_idExpr : filterCol_id) : colKey == "name" ? filterCol_name : colKey == "bonus" ? filterCol_bonus : colKey == "active" ? filterCol_active : colKey == "created" ? filterCol_created : colKey == "updated" ? filterCol_updated : null;
 
     Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
     {
@@ -94,9 +102,14 @@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في مجموعات الحوافز</label>
-                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
-                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
-                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:150px">
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100" style="overflow-x:auto;">
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
+                        <input type="text" name="search" class="form-control erp-filter-input flex-shrink-1" placeholder="نص أو رقم..." value="@search" style="min-width:100px;max-width:200px;width:180px;" />
+                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:150px;min-width:120px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>البحث في الكل</option>
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود المجموعة</option>
                             <option value="name"@Html.Raw(searchBy == "name" ? " selected" : "")>اسم المجموعة</option>
@@ -106,7 +119,9 @@
                             <option value="created"@Html.Raw(searchBy == "created" ? " selected" : "")>تاريخ الإنشاء</option>
                             <option value="updated"@Html.Raw(searchBy == "updated" ? " selected" : "")>آخر تعديل</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">بحث</button>
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-2 mt-2 w-100">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
                         <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
@@ -120,6 +135,7 @@
                     @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                     @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_bonus)) { <input type="hidden" name="filterCol_bonus" value="@filterCol_bonus" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
@@ -147,6 +163,7 @@
                         <a class="btn btn-erp btn-erp-success btn-erp-sm" asp-action="Create">إضافة مجموعة جديدة</a>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#pbgDateFilterModal">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#pbgColumnsModal">اختيار الأعمدة</button>
+                        <button type="button" id="btnEditBonusGroup" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="اختر مجموعة بالنقر على السطر">تعديل</button>
                         <button type="button" id="btnPbgPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
                         <div class="dropdown d-inline">
                             <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
@@ -159,6 +176,7 @@
                         <form method="get" asp-action="Export" asp-controller="ProductBonusGroups" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="dateField" value="@dateField" />
@@ -168,6 +186,7 @@
                             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_bonus)) { <input type="hidden" name="filterCol_bonus" value="@filterCol_bonus" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
@@ -193,10 +212,38 @@
         </div>
     </div>
 
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي المجموعات</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">المجموعات المفعلة</div>
+                    <div class="h4 mb-0 text-success fw-bold">@activeCount.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #b91c1c !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">المجموعات غير المفعلة</div>
+                    <div class="h4 mb-0 text-danger fw-bold">@inactiveCount.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @* ===== جدول مجموعات الحوافز ===== *@
-    <div class="erp-table-wrapper mt-3 erp-print-area">
+    <div class="erp-table-scroll-container erp-list-table-after-summary mt-3 ps-0 pe-0" dir="rtl">
+    <div id="pbgTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
         <table id="pbgTable" class="table table-striped table-hover erp-table erp-table-sortable">
-            <thead class="table-light">
+            <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                 <tr>
                     <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
                         <input type="checkbox" id="selectAll" class="form-check-input" />
@@ -208,18 +255,13 @@
                     <th data-col="active">@filterableCol("active", "active", "مفعّلة؟")</th>
                     <th data-col="created">@filterableCol("created", "created", "تاريخ الإنشاء")</th>
                     <th data-col="updated">@filterableCol("updated", "updated", "آخر تعديل")</th>
-
-                    <th class="text-nowrap no-print"
-                        data-col="actions"
-                        data-col-fixed="true"
-                        style="width:220px;"></th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-4">
+                        <td colspan="7" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -228,7 +270,10 @@
                 {
                     foreach (var r in Model.Items)
                     {
-                        <tr>
+                        <tr class="erp-list-selectable-row"
+                            data-group-id="@r.ProductBonusGroupId"
+                            data-edit-url="@Url.Action("Edit", "ProductBonusGroups", new { id = r.ProductBonusGroupId, frame = 1 })"
+                            data-tab-title="تعديل مجموعة حافز">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="form-check-input row-select"
@@ -243,36 +288,19 @@
                             <td data-col="updated">
                                 @(r.UpdatedAt.HasValue? r.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "-")
                             </td>
-
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                   asp-action="Details"
-                                   asp-route-id="@r.ProductBonusGroupId">
-                                    تفاصيل
-                                </a>
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@r.ProductBonusGroupId">
-                                    تعديل
-                                </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@r.ProductBonusGroupId">
-                                    حذف
-                                </a>
-                            </td>
                         </tr>
                     }
                 }
             </tbody>
         </table>
     </div>
+    </div>
 
     @* لوحة فلتر العمود (بنمط Excel) *@
-    <div id="erpColumnFilterPanelPbg" class="erp-column-filter-panel d-none" dir="rtl">
+    <div id="erpColumnFilterPanelProductBonusGroups" class="erp-column-filter-panel d-none" dir="rtl">
         <div class="erp-column-filter-header">
-            <span id="erpColumnFilterTitlePbg">ترتيب وفلتر</span>
-            <button type="button" class="btn-close btn-sm" id="erpColumnFilterClosePbg" aria-label="إغلاق"></button>
+            <span id="erpColumnFilterTitleProductBonusGroups">ترتيب وفلتر</span>
+            <button type="button" class="btn-close btn-sm" id="erpColumnFilterCloseProductBonusGroups" aria-label="إغلاق"></button>
         </div>
         <div class="erp-column-filter-body">
             <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
@@ -283,17 +311,17 @@
                 </div>
             </div>
             <div class="erp-filter-section">
-                <div id="erpColumnFilterSearchRowPbg">
+                <div id="erpColumnFilterSearchRow">
                     <label class="form-label small mb-1 fw-bold">الفلترة:</label>
-                    <input type="text" id="erpColumnFilterSearchPbg" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+                    <input type="text" id="erpColumnFilterSearchProductBonusGroups" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
                 </div>
-                <div id="erpColumnFilterListPbg" class="erp-column-filter-list">
+                <div id="erpColumnFilterListProductBonusGroups" class="erp-column-filter-list">
                     <div class="text-muted text-center py-3">جاري التحميل...</div>
                 </div>
             </div>
             <div class="erp-column-filter-actions">
-                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpColumnFilterOkPbg">تطبيق</button>
-                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpColumnFilterClearPbg">مسح الفلتر</button>
+                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpColumnFilterOkProductBonusGroups" data-action="apply">تطبيق</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpColumnFilterClearProductBonusGroups" data-action="clear">مسح الفلتر</button>
             </div>
         </div>
     </div>
@@ -309,6 +337,7 @@
               class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" id="PageInput" value="1" />
@@ -331,6 +360,7 @@
                 <input type="hidden" name="toCode" value="@toCode" />
             }
             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_bonus)) { <input type="hidden" name="filterCol_bonus" value="@filterCol_bonus" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
@@ -341,10 +371,12 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="document.getElementById('PageInput').value = 1; this.form.submit();">
+                <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
     </div>
@@ -401,6 +433,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -409,6 +442,7 @@
                     <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
                     <input type="hidden" name="dateField" value="@dateField" />
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_bonus)) { <input type="hidden" name="filterCol_bonus" value="@filterCol_bonus" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
@@ -499,36 +533,87 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
-        // طباعة
         document.getElementById("btnPbgPrint")?.addEventListener("click", function () {
             window.print();
         });
 
+        ERP.initListColumnFilter({
+            panelId: 'erpColumnFilterPanelProductBonusGroups',
+            tableId: 'pbgTable',
+            wrapperId: 'pbgTableScrollWrapper',
+            getColumnValuesUrl: '@Url.Action("GetColumnValues", "ProductBonusGroups")',
+            defaultSort: 'id',
+            defaultDir: 'asc',
+            numericColumns: ['id']
+        });
+
+        if (window.ERP && typeof ERP.initListSelection === "function") {
+            ERP.initListSelection({
+                rowSelector: "#pbgTable tbody tr.erp-list-selectable-row",
+                idAttribute: "data-group-id",
+                editButtonId: "btnEditBonusGroup",
+                editUrlAttribute: "data-edit-url",
+                editTabId: "product-bonus-group-edit-tab",
+                tabTitleAttribute: "data-tab-title",
+                editTabTitleAttribute: "data-tab-title",
+                multiSelectCheckboxes: true
+            });
+        }
+
         // تحديد الكل + الحذف الجماعي + حذف الكل
         (function () {
+            const table = document.getElementById("pbgTable");
             const selectAll = document.getElementById("selectAll");
             const bulkBtn = document.getElementById("btnBulkDelete");
             const bulkForm = document.getElementById("formBulkDelete");
             const deleteAllBtn = document.getElementById("btnDeleteAll");
             const deleteAllForm = document.getElementById("formDeleteAll");
             const selectedIdsInput = document.getElementById("selectedIdsInput");
+
             function getRowCheckboxes() { return Array.from(document.querySelectorAll(".row-select")); }
-            selectAll?.addEventListener("change", function () { getRowCheckboxes().forEach(cb => cb.checked = this.checked); });
+
+            selectAll?.addEventListener("change", function () {
+                const checked = this.checked;
+                getRowCheckboxes().forEach(cb => cb.checked = checked);
+            });
+
+            table?.addEventListener("change", function (e) {
+                const target = e.target;
+                if (!(target instanceof HTMLInputElement) || !target.classList.contains("row-select") || !selectAll) {
+                    return;
+                }
+
+                const rowCheckboxes = getRowCheckboxes();
+                const allChecked = rowCheckboxes.length > 0 && rowCheckboxes.every(cb => cb.checked);
+                const noneChecked = rowCheckboxes.every(cb => !cb.checked);
+
+                selectAll.checked = allChecked;
+                selectAll.indeterminate = !allChecked && !noneChecked;
+            });
+
             bulkBtn?.addEventListener("click", function () {
-                const checks = getRowCheckboxes().filter(cb => cb.checked);
-                if (checks.length === 0) { alert("من فضلك اختر على الأقل مجموعة حافز واحدة للحذف."); return; }
+                let idValues = getRowCheckboxes().filter(cb => cb.checked).map(cb => cb.value);
+                if (idValues.length === 0) {
+                    const selected = document.querySelector("#pbgTable tbody tr.erp-list-selectable-row.selected");
+                    const id = selected && selected.getAttribute("data-group-id");
+                    if (id) idValues = [id];
+                }
+                if (idValues.length === 0) { alert("من فضلك اختر على الأقل مجموعة واحدة للحذف."); return; }
                 if (!confirm("هل أنت متأكد من حذف المجموعات المحددة؟")) return;
-                if (selectedIdsInput) selectedIdsInput.value = checks.map(cb => cb.value).join(",");
+                if (selectedIdsInput) selectedIdsInput.value = idValues.join(",");
                 bulkForm?.submit();
             });
+
             deleteAllBtn?.addEventListener("click", function () {
                 if (!confirm("تحذير: سيتم حذف جميع مجموعات الحوافز. هل أنت متأكد؟")) return;
                 deleteAllForm?.submit();
             });
         })();
 
-        // اختيار الأعمدة + تخزين الاختيار
+        // اختيار الأعمدة + حفظها في localStorage
         (function () {
             const table = document.getElementById("pbgTable");
             if (!table) return;
@@ -540,7 +625,7 @@
                 .filter(th => !th.hasAttribute("data-col-fixed"))
                 .map(th => ({
                     key: th.getAttribute("data-col"),
-                    title: th.innerText.trim()
+                    title: (th.querySelector(".erp-col-title") && th.querySelector(".erp-col-title").textContent) || th.innerText.trim()
                 }));
 
             if (columns.length === 0) return;
@@ -605,7 +690,7 @@
                     applyVisibility();
 
                     const modalEl = document.getElementById("pbgColumnsModal");
-                    const modal   = bootstrap.Modal.getInstance(modalEl);
+                    const modal = bootstrap.Modal.getInstance(modalEl);
                     modal?.hide();
                 });
         })();
@@ -617,214 +702,27 @@
             const fromInp = document.getElementById("codeFromInput");
             const toInp = document.getElementById("codeToInput");
 
-            function buildUrl(codeFrom, codeTo) {
-                const url = new URL(window.location.href);
+            function applyCodeToUrl(url, codeFrom, codeTo) {
                 if (codeFrom) url.searchParams.set("fromCode", codeFrom);
                 else url.searchParams.delete("fromCode");
                 if (codeTo) url.searchParams.set("toCode", codeTo);
                 else url.searchParams.delete("toCode");
                 url.searchParams.set("page", "1");
-                return url.toString();
             }
 
             btnApply?.addEventListener("click", function () {
-                const cf = fromInp?.value.trim() ?? "";
-                const ct = toInp?.value.trim() ?? "";
-                window.location.href = buildUrl(cf, ct);
+                const url = new URL(window.location.href);
+                applyCodeToUrl(url, fromInp?.value.trim() ?? "", toInp?.value.trim() ?? "");
+                window.location.href = url.toString();
             });
 
             btnClear?.addEventListener("click", function () {
                 if (fromInp) fromInp.value = "";
                 if (toInp) toInp.value = "";
-                window.location.href = buildUrl("", "");
+                const url = new URL(window.location.href);
+                applyCodeToUrl(url, "", "");
+                window.location.href = url.toString();
             });
         })();
-
-        // فلتر الأعمدة بنمط Excel (ترتيب + فلترة)
-        (function () {
-            var panel = document.getElementById("erpColumnFilterPanelPbg");
-            if (!panel) return;
-            var titleEl = document.getElementById("erpColumnFilterTitlePbg");
-            var searchInp = document.getElementById("erpColumnFilterSearchPbg");
-            var listEl = document.getElementById("erpColumnFilterListPbg");
-            var btnOk = document.getElementById("erpColumnFilterOkPbg");
-            var btnClear = document.getElementById("erpColumnFilterClearPbg");
-            var btnClose = document.getElementById("erpColumnFilterClosePbg");
-            var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
-
-            function getCurrentFilterValue(col) { return new URL(window.location.href).searchParams.get("filterCol_" + col) || ""; }
-            function getCurrentSort() {
-                var url = new URL(window.location.href);
-                return { sort: url.searchParams.get("sort") || "id", dir: url.searchParams.get("dir") || "asc" };
-            }
-            function adjustPanelPosition() {
-                if (!panel || !anchorRect) return;
-                setTimeout(function () {
-                    var r = panel.getBoundingClientRect();
-                    var top = anchorRect.bottom + 4, left = anchorRect.left;
-                    if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - r.height);
-                    if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - r.width);
-                    panel.style.top = top + "px";
-                    panel.style.left = left + "px";
-                }, 50);
-            }
-
-            function showPanel(btn) {
-                currentCol = btn.dataset.col;
-                currentSortKey = btn.dataset.sortKey || currentCol;
-                titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
-                searchInp.value = "";
-                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split(/[|,;]/).filter(Boolean));
-                anchorRect = btn.getBoundingClientRect();
-                panel.style.minWidth = Math.max(250, anchorRect.width) + "px";
-                panel.classList.remove("d-none");
-
-                var currentSort = getCurrentSort();
-                var isCurrent = currentSort.sort.toLowerCase() === (currentSortKey || "").toLowerCase();
-                var currentDir = isCurrent ? currentSort.dir : "asc";
-                panel.querySelectorAll(".erp-sort-btn").forEach(function (b) {
-                    if (isCurrent && b.dataset.sortDir === currentDir) {
-                        b.classList.add("active", "btn-primary");
-                        b.classList.remove("btn-outline-secondary");
-                    } else {
-                        b.classList.remove("active", "btn-primary");
-                        b.classList.add("btn-outline-secondary");
-                    }
-                });
-                adjustPanelPosition();
-                document.getElementById("erpColumnFilterSearchRowPbg").classList.remove("d-none");
-                listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
-                var url = "/ProductBonusGroups/GetColumnValues?column=" + encodeURIComponent(currentCol);
-                var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                    allItems = items;
-                    renderList(searchInp ? searchInp.value : "");
-                }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
-            }
-
-            function renderList(search) {
-                var term = (search || "").toLowerCase();
-                var filtered = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term) >= 0; }) : allItems;
-                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
-                var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
-                listEl.innerHTML = '<div class="form-check mb-1"><input type="checkbox" class="form-check-input" id="erpFilterSelectAllPbg" ' + (allChecked ? "checked" : "") + '><label class="form-check-label small" for="erpFilterSelectAllPbg">(تحديد الكل)</label></div><div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' + filtered.map(function (x) {
-                    var v = String(x.value);
-                    var checked = currentSelected.has(v);
-                    return '<div class="form-check"><input type="checkbox" class="form-check-input erp-filter-item" value="' + v.replace(/"/g, "&quot;") + '" ' + (checked ? "checked" : "") + '><label class="form-check-label small">' + (x.display || v).replace(/</g, "&lt;") + '</label></div>';
-                }).join("") + "</div>";
-                var selectAllCb = listEl.querySelector("#erpFilterSelectAllPbg");
-                if (selectAllCb) {
-                    selectAllCb.indeterminate = someChecked && !allChecked;
-                    selectAllCb.onchange = function () {
-                        filtered.forEach(function (x) { if (this.checked) currentSelected.add(String(x.value)); else currentSelected.delete(String(x.value)); }.bind(this));
-                        renderList(searchInp.value);
-                    };
-                }
-                listEl.querySelectorAll(".erp-filter-item").forEach(function (cb) {
-                    cb.onchange = function () {
-                        if (this.checked) currentSelected.add(this.value); else currentSelected.delete(this.value);
-                        var term2 = (searchInp && searchInp.value ? searchInp.value : "").toLowerCase();
-                        var filteredHere = term2 ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term2) >= 0; }) : allItems;
-                        var allCheckedHere = filteredHere.length > 0 && filteredHere.every(function (x) { return currentSelected.has(String(x.value)); });
-                        var someCheckedHere = filteredHere.some(function (x) { return currentSelected.has(String(x.value)); });
-                        var selectAllCbHere = listEl.querySelector("#erpFilterSelectAllPbg");
-                        if (selectAllCbHere) {
-                            selectAllCbHere.checked = allCheckedHere;
-                            selectAllCbHere.indeterminate = someCheckedHere && !allCheckedHere;
-                        }
-                    };
-                });
-                adjustPanelPosition();
-            }
-
-            function applyFilter(applySort, sortDir) {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                url.searchParams.delete("filterCol_" + currentCol);
-                if (applySort !== undefined && sortDir !== undefined) {
-                    url.searchParams.set("sort", applySort);
-                    url.searchParams.set("dir", sortDir);
-                }
-                var val = Array.from(currentSelected).filter(Boolean).join("|");
-                if (val) url.searchParams.set("filterCol_" + currentCol, val);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-            function clearFilter() {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-
-            document.querySelectorAll("#pbgTable .erp-col-filter-btn").forEach(function (btn) {
-                btn.addEventListener("click", function (e) { e.stopPropagation(); showPanel(this); });
-            });
-            document.addEventListener("click", function (e) {
-                var sortBtn = e.target.closest(".erp-sort-btn");
-                if (sortBtn && panel && !panel.classList.contains("d-none") && panel.contains(sortBtn) && currentSortKey)
-                    applyFilter(currentSortKey, sortBtn.dataset.sortDir);
-            });
-            var fetchDebounce = null;
-            searchInp && searchInp.addEventListener("input", function () {
-                renderList(this.value);
-                if (fetchDebounce) clearTimeout(fetchDebounce);
-                fetchDebounce = setTimeout(function () {
-                    fetchDebounce = null;
-                    if (!currentCol) return;
-                    var url = "/ProductBonusGroups/GetColumnValues?column=" + encodeURIComponent(currentCol);
-                    var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                    if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                    fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                        allItems = items;
-                        renderList(searchInp ? searchInp.value : "");
-                    });
-                }, 400);
-            });
-            searchInp && searchInp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applyFilter(); } });
-            btnOk && btnOk.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); applyFilter(); });
-            btnClear && btnClear.addEventListener("click", clearFilter);
-            btnClose && btnClose.addEventListener("click", function () { panel.classList.add("d-none"); });
-            document.addEventListener("click", function (e) {
-                if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn"))
-                    panel.classList.add("d-none");
-            });
-        })();
-
-        // تكبير/تصغير عرض الأعمدة (ما عدا عمودي التحديد والإجراءات)
-        document.addEventListener("DOMContentLoaded", function () {
-            var wrapper = document.querySelector(".erp-table-wrapper");
-            if (!wrapper) return;
-            var table = document.getElementById("pbgTable");
-            if (!table) return;
-            var ths = table.querySelectorAll("thead th");
-            ths.forEach(function (th) {
-                if (th.getAttribute("data-col-fixed") === "true") return;
-                th.style.position = "relative";
-                var handle = document.createElement("div");
-                handle.className = "erp-col-resize-handle";
-                th.appendChild(handle);
-                var startX, startWidth;
-                handle.addEventListener("mousedown", function (e) {
-                    e.preventDefault();
-                    startX = e.pageX;
-                    startWidth = th.offsetWidth;
-                    function onMouseMove(eMove) {
-                        var diffX = eMove.pageX - startX;
-                        var newWidth = startWidth + diffX;
-                        if (newWidth < 50) newWidth = 50;
-                        th.style.width = newWidth + "px";
-                    }
-                    function onMouseUp() {
-                        document.removeEventListener("mousemove", onMouseMove);
-                        document.removeEventListener("mouseup", onMouseUp);
-                    }
-                    document.addEventListener("mousemove", onMouseMove);
-                    document.addEventListener("mouseup", onMouseUp);
-                });
-            });
-        });
     </script>
 }

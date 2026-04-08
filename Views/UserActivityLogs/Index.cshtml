@@ -39,10 +39,12 @@
     var dateField = (string?)ViewBag.DateField ?? "ActionTime";
 
     string? filterCol_id = ViewBag.FilterCol_Id as string;
+    string? filterCol_idExpr = ViewBag.FilterCol_IdExpr as string;
     string? filterCol_user = ViewBag.FilterCol_User as string;
     string? filterCol_action = ViewBag.FilterCol_Action as string;
     string? filterCol_entity = ViewBag.FilterCol_Entity as string;
     string? filterCol_entityId = ViewBag.FilterCol_EntityId as string;
+    string? filterCol_entityIdExpr = ViewBag.FilterCol_EntityIdExpr as string;
     string? filterCol_time = ViewBag.FilterCol_Time as string;
     string? filterCol_ip = ViewBag.FilterCol_Ip as string;
     string? filterCol_desc = ViewBag.FilterCol_Desc as string;
@@ -63,16 +65,18 @@
         fromCode,
         toCode,
         filterCol_id,
+        filterCol_idExpr,
         filterCol_user,
         filterCol_action,
         filterCol_entity,
         filterCol_entityId,
+        filterCol_entityIdExpr,
         filterCol_time,
         filterCol_ip,
         filterCol_desc
     })!;
 
-    string? FilterForCol(string colKey) => colKey == "id" ? filterCol_id : colKey == "user" ? filterCol_user : colKey == "action" ? filterCol_action : colKey == "entity" ? filterCol_entity : colKey == "entityId" ? filterCol_entityId : colKey == "time" ? filterCol_time : colKey == "ip" ? filterCol_ip : colKey == "desc" ? filterCol_desc : null;
+    string? FilterForCol(string colKey) => colKey == "id" ? (!string.IsNullOrWhiteSpace(filterCol_idExpr) ? filterCol_idExpr : filterCol_id) : colKey == "user" ? filterCol_user : colKey == "action" ? filterCol_action : colKey == "entity" ? filterCol_entity : colKey == "entityId" ? (!string.IsNullOrWhiteSpace(filterCol_entityIdExpr) ? filterCol_entityIdExpr : filterCol_entityId) : colKey == "time" ? filterCol_time : colKey == "ip" ? filterCol_ip : colKey == "desc" ? filterCol_desc : null;
 
     Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
     {
@@ -306,10 +310,12 @@
                     @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                     @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_user)) { <input type="hidden" name="filterCol_user" value="@filterCol_user" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_action)) { <input type="hidden" name="filterCol_action" value="@filterCol_action" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_entity)) { <input type="hidden" name="filterCol_entity" value="@filterCol_entity" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_entityId)) { <input type="hidden" name="filterCol_entityId" value="@filterCol_entityId" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_entityIdExpr)) { <input type="hidden" name="filterCol_entityIdExpr" value="@filterCol_entityIdExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_time)) { <input type="hidden" name="filterCol_time" value="@filterCol_time" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_ip)) { <input type="hidden" name="filterCol_ip" value="@filterCol_ip" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_desc)) { <input type="hidden" name="filterCol_desc" value="@filterCol_desc" /> }
@@ -354,10 +360,12 @@
                             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_user)) { <input type="hidden" name="filterCol_user" value="@filterCol_user" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_action)) { <input type="hidden" name="filterCol_action" value="@filterCol_action" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_entity)) { <input type="hidden" name="filterCol_entity" value="@filterCol_entity" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_entityId)) { <input type="hidden" name="filterCol_entityId" value="@filterCol_entityId" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_entityIdExpr)) { <input type="hidden" name="filterCol_entityIdExpr" value="@filterCol_entityIdExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_time)) { <input type="hidden" name="filterCol_time" value="@filterCol_time" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_ip)) { <input type="hidden" name="filterCol_ip" value="@filterCol_ip" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_desc)) { <input type="hidden" name="filterCol_desc" value="@filterCol_desc" /> }
@@ -455,9 +463,9 @@
         </div>
     </div>
 
-    @* ===== الشريط السفلي (محاذاة لليمين في RTL — نمط القوائم) ===== *@
-    <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
-        <small class="text-muted">عرض @start - @end من @total</small>
+    @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة (نفس المستخدمين) ===== *@
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
+        <small class="text-muted text-start">عرض @start - @end من @total</small>
         <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
@@ -472,31 +480,36 @@
             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_user)) { <input type="hidden" name="filterCol_user" value="@filterCol_user" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_action)) { <input type="hidden" name="filterCol_action" value="@filterCol_action" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_entity)) { <input type="hidden" name="filterCol_entity" value="@filterCol_entity" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_entityId)) { <input type="hidden" name="filterCol_entityId" value="@filterCol_entityId" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_entityIdExpr)) { <input type="hidden" name="filterCol_entityIdExpr" value="@filterCol_entityIdExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_time)) { <input type="hidden" name="filterCol_time" value="@filterCol_time" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_ip)) { <input type="hidden" name="filterCol_ip" value="@filterCol_ip" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_desc)) { <input type="hidden" name="filterCol_desc" value="@filterCol_desc" /> }
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
-                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
-                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
-                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
-                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="10" selected="@(ps == 10 ? "selected" : null)">10</option>
+                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
+                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
+                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
+                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="0" selected="@(ps == 0 ? "selected" : null)">الكل</option>
             </select>
         </form>
-        <nav aria-label="pagination">
-            <ul class="pagination pagination-sm mb-0">
-                <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@Link(first)">الأول</a></li>
-                <li class="page-item @(page > first ? "" : "disabled")"><a class="page-link" href="@Link(prev)">السابق</a></li>
-                <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(pages)</span></li>
-                <li class="page-item @(page < last ? "" : "disabled")"><a class="page-link" href="@Link(next)">التالي</a></li>
-                <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
-            </ul>
-        </nav>
     </div>
+
+    <nav aria-label="pagination" class="mt-3 no-print">
+        <ul class="pagination justify-content-center">
+            <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@Link(first)">الأول</a></li>
+            <li class="page-item @(Model.HasPrevious ? "" : "disabled")"><a class="page-link" href="@Link(prev)">السابق</a></li>
+            <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(pages)</span></li>
+            <li class="page-item @(Model.HasNext ? "" : "disabled")"><a class="page-link" href="@Link(next)">التالي</a></li>
+            <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
+        </ul>
+    </nav>
 </div>
 
 @* Modal فلترة التاريخ/الوقت *@
@@ -529,10 +542,12 @@
                     <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
                     <input type="hidden" name="dateField" value="@dateField" />
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_user)) { <input type="hidden" name="filterCol_user" value="@filterCol_user" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_action)) { <input type="hidden" name="filterCol_action" value="@filterCol_action" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_entity)) { <input type="hidden" name="filterCol_entity" value="@filterCol_entity" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_entityId)) { <input type="hidden" name="filterCol_entityId" value="@filterCol_entityId" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_entityIdExpr)) { <input type="hidden" name="filterCol_entityIdExpr" value="@filterCol_entityIdExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_time)) { <input type="hidden" name="filterCol_time" value="@filterCol_time" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_ip)) { <input type="hidden" name="filterCol_ip" value="@filterCol_ip" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_desc)) { <input type="hidden" name="filterCol_desc" value="@filterCol_desc" /> }
@@ -592,8 +607,19 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
     <script>
         document.getElementById("btnPrintActivity")?.addEventListener("click", function () { window.print(); });
+
+        ERP.initListColumnFilter({
+            panelId: 'erpColumnFilterPanelActivity',
+            tableId: 'activityTable',
+            wrapperId: 'activityTableScrollWrapper',
+            getColumnValuesUrl: '@Url.Action("GetColumnValues", "UserActivityLogs")',
+            defaultSort: 'ActionTime',
+            defaultDir: 'desc',
+            numericColumns: ['id', 'entityId']
+        });
 
         // اختيار الأعمدة
         (function () {
@@ -651,204 +677,6 @@
                 scrollToRtlStart();
                 window.addEventListener("load", function () { setTimeout(scrollToRtlStart, 50); });
             }
-        })();
-
-        // أعمدة قابلة للتوسعة (ما عدا عمودي التحديد والإجراءات)
-        document.addEventListener("DOMContentLoaded", function () {
-            var wrapper = document.getElementById("activityTableScrollWrapper");
-            if (!wrapper) return;
-            var table = document.getElementById("activityTable");
-            if (table) {
-                var ths = table.querySelectorAll("thead th");
-                ths.forEach(function (th) {
-                    if (th.getAttribute("data-col-fixed") === "true") return;
-                    th.style.position = "relative";
-                    var handle = document.createElement("div");
-                    handle.className = "erp-col-resize-handle";
-                    th.appendChild(handle);
-                    var startX, startWidth;
-                    handle.addEventListener("mousedown", function (e) {
-                        e.preventDefault();
-                        startX = e.pageX;
-                        startWidth = th.offsetWidth;
-                        function onMouseMove(eMove) {
-                            var diffX = eMove.pageX - startX;
-                            var newWidth = startWidth + diffX;
-                            if (newWidth < 50) newWidth = 50;
-                            th.style.minWidth = newWidth + "px";
-                            th.style.width = newWidth + "px";
-                        }
-                        function onMouseUp() {
-                            document.removeEventListener("mousemove", onMouseMove);
-                            document.removeEventListener("mouseup", onMouseUp);
-                        }
-                        document.addEventListener("mousemove", onMouseMove);
-                        document.addEventListener("mouseup", onMouseUp);
-                    });
-                });
-            }
-            if (wrapper.scrollWidth > wrapper.clientWidth)
-                wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
-        });
-
-        // فلتر الأعمدة بنمط Excel (ترتيب + فلترة)
-        (function () {
-            var panel = document.getElementById("erpColumnFilterPanelActivity");
-            if (!panel) return;
-            var titleEl = document.getElementById("erpColumnFilterTitleActivity");
-            var searchInp = document.getElementById("erpColumnFilterSearchActivity");
-            var listEl = document.getElementById("erpColumnFilterListActivity");
-            var btnOk = document.getElementById("erpColumnFilterOkActivity");
-            var btnClear = document.getElementById("erpColumnFilterClearActivity");
-            var btnClose = document.getElementById("erpColumnFilterCloseActivity");
-            var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
-
-            function getCurrentFilterValue(col) { return new URL(window.location.href).searchParams.get("filterCol_" + col) || ""; }
-            function getCurrentSort() {
-                var url = new URL(window.location.href);
-                return { sort: url.searchParams.get("sort") || "ActionTime", dir: url.searchParams.get("dir") || "desc" };
-            }
-            function adjustPanelPosition() {
-                if (!panel || !anchorRect) return;
-                setTimeout(function () {
-                    var r = panel.getBoundingClientRect();
-                    var top = anchorRect.bottom + 4, left = anchorRect.left;
-                    if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - r.height);
-                    if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - r.width);
-                    panel.style.top = top + "px";
-                    panel.style.left = left + "px";
-                }, 50);
-            }
-
-            function showPanel(btn) {
-                currentCol = btn.dataset.col;
-                currentSortKey = btn.dataset.sortKey || currentCol;
-                titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
-                searchInp.value = "";
-                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split(/[|,;]/).filter(Boolean));
-                anchorRect = btn.getBoundingClientRect();
-                panel.style.minWidth = Math.max(250, anchorRect.width) + "px";
-                panel.classList.remove("d-none");
-
-                var currentSort = getCurrentSort();
-                var isCurrent = currentSort.sort.toLowerCase() === (currentSortKey || "").toLowerCase();
-                var currentDir = isCurrent ? currentSort.dir : "asc";
-                panel.querySelectorAll(".erp-sort-btn").forEach(function (b) {
-                    if (isCurrent && b.dataset.sortDir === currentDir) {
-                        b.classList.add("active", "btn-primary");
-                        b.classList.remove("btn-outline-secondary");
-                    } else {
-                        b.classList.remove("active", "btn-primary");
-                        b.classList.add("btn-outline-secondary");
-                    }
-                });
-                adjustPanelPosition();
-                document.getElementById("erpColumnFilterSearchRowActivity").classList.remove("d-none");
-                listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
-                var url = "/UserActivityLogs/GetColumnValues?column=" + encodeURIComponent(currentCol);
-                var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                    allItems = items;
-                    renderList(searchInp ? searchInp.value : "");
-                }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
-            }
-
-            function renderList(search) {
-                var term = (search || "").toLowerCase();
-                var filtered = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term) >= 0; }) : allItems;
-                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
-                var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
-                listEl.innerHTML = '<div class="form-check mb-1"><input type="checkbox" class="form-check-input" id="erpFilterSelectAllActivity" ' + (allChecked ? "checked" : "") + '><label class="form-check-label small" for="erpFilterSelectAllActivity">(تحديد الكل)</label></div><div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' + filtered.map(function (x) {
-                    var v = String(x.value);
-                    var checked = currentSelected.has(v);
-                    return '<div class="form-check"><input type="checkbox" class="form-check-input erp-filter-item" value="' + v.replace(/"/g, "&quot;") + '" ' + (checked ? "checked" : "") + '><label class="form-check-label small">' + (x.display || v).replace(/</g, "&lt;") + '</label></div>';
-                }).join("") + "</div>";
-                var selectAllCb = listEl.querySelector("#erpFilterSelectAllActivity");
-                if (selectAllCb) {
-                    selectAllCb.indeterminate = someChecked && !allChecked;
-                    selectAllCb.onchange = function () {
-                        filtered.forEach(function (x) { if (this.checked) currentSelected.add(String(x.value)); else currentSelected.delete(String(x.value)); }.bind(this));
-                        renderList(searchInp.value);
-                    };
-                }
-                listEl.querySelectorAll(".erp-filter-item").forEach(function (cb) {
-                    cb.onchange = function () {
-                        if (this.checked) currentSelected.add(this.value); else currentSelected.delete(this.value);
-                        // تحديث "تحديد الكل" فقط دون إعادة رسم القائمة لئلا ينتقل التمرير لأول عنصر
-                        var term = (searchInp && searchInp.value ? searchInp.value : "").toLowerCase();
-                        var filteredHere = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term) >= 0; }) : allItems;
-                        var allCheckedHere = filteredHere.length > 0 && filteredHere.every(function (x) { return currentSelected.has(String(x.value)); });
-                        var someCheckedHere = filteredHere.some(function (x) { return currentSelected.has(String(x.value)); });
-                        var selectAllCbHere = listEl.querySelector("#erpFilterSelectAllActivity");
-                        if (selectAllCbHere) {
-                            selectAllCbHere.checked = allCheckedHere;
-                            selectAllCbHere.indeterminate = someCheckedHere && !allCheckedHere;
-                        }
-                    };
-                });
-                adjustPanelPosition();
-            }
-
-            function applyFilter(applySort, sortDir) {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.delete("filterCol_" + currentCol + "Expr");
-                if (applySort !== undefined && sortDir !== undefined) {
-                    url.searchParams.set("sort", applySort);
-                    url.searchParams.set("dir", sortDir);
-                } else if (currentSortKey) {
-                    var cur = getCurrentSort();
-                    url.searchParams.set("sort", cur.sort);
-                    url.searchParams.set("dir", cur.dir);
-                }
-                var val = Array.from(currentSelected).filter(Boolean).join("|");
-                if (val) url.searchParams.set("filterCol_" + currentCol, val);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-            function clearFilter() {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-
-            document.querySelectorAll("#activityTable .erp-col-filter-btn").forEach(function (btn) {
-                btn.addEventListener("click", function (e) { e.stopPropagation(); showPanel(this); });
-            });
-            document.addEventListener("click", function (e) {
-                if (e.target.closest(".erp-sort-btn")) {
-                    var sortBtn = e.target.closest(".erp-sort-btn");
-                    if (currentSortKey) applyFilter(currentSortKey, sortBtn.dataset.sortDir);
-                }
-            });
-            var fetchDebounce = null;
-            searchInp && searchInp.addEventListener("input", function () {
-                renderList(this.value);
-                if (fetchDebounce) clearTimeout(fetchDebounce);
-                fetchDebounce = setTimeout(function () {
-                    fetchDebounce = null;
-                    if (!currentCol) return;
-                    var url = "/UserActivityLogs/GetColumnValues?column=" + encodeURIComponent(currentCol);
-                    var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                    if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                    fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                        allItems = items;
-                        renderList(searchInp ? searchInp.value : "");
-                    });
-                }, 400);
-            });
-            searchInp && searchInp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applyFilter(); } });
-            btnOk && btnOk.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); applyFilter(); });
-            btnClear && btnClear.addEventListener("click", clearFilter);
-            btnClose && btnClose.addEventListener("click", function () { panel.classList.add("d-none"); });
-            document.addEventListener("click", function (e) {
-                if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn"))
-                    panel.classList.add("d-none");
-            });
         })();
 
         // فلتر الكود من/إلى

@@ -10,6 +10,27 @@ namespace ERP.Infrastructure
     /// </summary>
     public static partial class QueryableExtensions
     {
+        private static string NormalizeSearchText(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            var chars = value.Trim().ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                chars[i] = chars[i] switch
+                {
+                    >= '\u0660' and <= '\u0669' => (char)('0' + (chars[i] - '\u0660')), // Arabic-Indic
+                    >= '\u06F0' and <= '\u06F9' => (char)('0' + (chars[i] - '\u06F0')), // Eastern Arabic-Indic
+                    _ => chars[i]
+                };
+            }
+
+            // Normalize input in .NET only (safe for EF) using invariant rules.
+            // The database-side expression uses ToLower() for translation.
+            return new string(chars).ToLowerInvariant();
+        }
+
         /// <summary>
         /// يطبّق "بحث + ترتيب" على أي استعلام IQueryable بشكل موحّد.
         /// - stringFields: مفاتيح الحقول النصية (يتم البحث فيها بـ Contains).
@@ -47,7 +68,8 @@ namespace ERP.Infrastructure
             // ===== البحث =====
             if (!string.IsNullOrWhiteSpace(search))
             {
-                var text = search.Trim();
+                var rawText = search.Trim();
+                var text = NormalizeSearchText(rawText);
 
                 // --- بحث "الكل": OR على كل stringFields (+ كل intFields لو النص رقم)
                 if (sb == "all")
@@ -141,18 +163,24 @@ namespace ERP.Infrastructure
         private static Expression BuildStringSearchMatch(Expression stringMember, string text, string mode)
         {
             var constText = Expression.Constant(text);
+
+            // Case-insensitive (and digit-normalized) match:
+            // Apply ToLower() to the member; text already normalized.
+            var toLower = typeof(string).GetMethod(nameof(string.ToLower), Type.EmptyTypes)!;
+            var loweredMember = Expression.Call(stringMember, toLower);
+
             return mode switch
             {
                 "starts" => Expression.Call(
-                    stringMember,
+                    loweredMember,
                     typeof(string).GetMethod(nameof(string.StartsWith), new[] { typeof(string) })!,
                     constText),
                 "ends" => Expression.Call(
-                    stringMember,
+                    loweredMember,
                     typeof(string).GetMethod(nameof(string.EndsWith), new[] { typeof(string) })!,
                     constText),
                 _ => Expression.Call(
-                    stringMember,
+                    loweredMember,
                     typeof(string).GetMethod(nameof(string.Contains), new[] { typeof(string) })!,
                     constText)
             };

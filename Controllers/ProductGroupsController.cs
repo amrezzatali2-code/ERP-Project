@@ -8,10 +8,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;          // Dictionary
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;             // Expressions
 using System.Text;                         // StringBuilder للتصدير
 using System.Threading.Tasks;
+using System.IO;
+using ClosedXML.Excel;
 
 namespace ERP.Controllers
 {
@@ -40,6 +43,7 @@ namespace ERP.Controllers
         private IQueryable<ProductGroup> BuildGroupsQuery(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int? fromCode,
@@ -135,8 +139,9 @@ namespace ERP.Controllers
                 stringFields,
                 intFields,
                 orderFields,
-                defaultSearchBy: "name",
-                defaultSortBy: "id"
+                defaultSearchBy: "all",
+                defaultSortBy: "id",
+                searchMode: searchMode
             );
 
             return q;
@@ -144,9 +149,54 @@ namespace ERP.Controllers
 
         private static readonly char[] _filterSep = { '|', ',', ';' };
 
+        private static IQueryable<ProductGroup> ApplyGroupIdNumericExpr(IQueryable<ProductGroup> q, string? rawExpr)
+        {
+            if (string.IsNullOrWhiteSpace(rawExpr))
+                return q;
+
+            var expr = rawExpr.Trim();
+
+            if (expr.StartsWith("<=") && expr.Length > 2
+                && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(x => x.ProductGroupId <= le);
+
+            if (expr.StartsWith(">=") && expr.Length > 2
+                && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(x => x.ProductGroupId >= ge);
+
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1
+                && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(x => x.ProductGroupId < lt);
+
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1
+                && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(x => x.ProductGroupId > gt);
+
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0))
+                && !expr.StartsWith("-"))
+            {
+                var separator = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b)
+                        (a, b) = (b, a);
+                    return q.Where(x => x.ProductGroupId >= a && x.ProductGroupId <= b);
+                }
+            }
+
+            if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var eq))
+                return q.Where(x => x.ProductGroupId == eq);
+
+            return q;
+        }
+
         private IQueryable<ProductGroup> ApplyColumnFilters(
             IQueryable<ProductGroup> q,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_name,
             string? filterCol_active,
             string? filterCol_created,
@@ -159,6 +209,10 @@ namespace ERP.Controllers
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0)
                     q = q.Where(x => ids.Contains(x.ProductGroupId));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                q = ApplyGroupIdNumericExpr(q, filterCol_idExpr);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_name))
             {
@@ -241,7 +295,8 @@ namespace ERP.Controllers
         // =========================
         public async Task<IActionResult> Index(
             string? search,
-            string? searchBy = "name",      // name | id | desc
+            string? searchBy = "all",       // all | name | id | desc
+            string? searchMode = "contains",
             string? sort = "id",            // id | name | active | created
             string? dir = "asc",
             int page = 1,
@@ -252,14 +307,20 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
             string? filterCol_updated = null)
         {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
             var q = BuildGroupsQuery(
                 search,
                 searchBy,
+                sm,
                 sort,
                 dir,
                 fromCode,
@@ -268,12 +329,16 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_active, filterCol_created, filterCol_updated);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_name, filterCol_active, filterCol_created, filterCol_updated);
+
+            var totalCount = await q.CountAsync();
+            var activeCount = await q.CountAsync(x => x.IsActive);
+            var inactiveCount = totalCount - activeCount;
 
             var model = await PagedResult<ProductGroup>.CreateAsync(q, page, pageSize);
 
             model.Search = search ?? "";
-            model.SearchBy = searchBy ?? "name";
+            model.SearchBy = searchBy ?? "all";
             model.SortColumn = sort ?? "id";
             model.SortDescending = (dir?.ToLower() == "desc");
             model.UseDateRange = useDateRange;
@@ -284,11 +349,16 @@ namespace ERP.Controllers
             ViewBag.ToCode = toCode;
             ViewBag.CodeFrom = fromCode;
             ViewBag.CodeTo = toCode;
+            ViewBag.SearchMode = sm;
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Name = filterCol_name;
             ViewBag.FilterCol_Active = filterCol_active;
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Updated = filterCol_updated;
+            ViewBag.ActiveCount = activeCount;
+            ViewBag.InactiveCount = inactiveCount;
+            ViewBag.TotalCount = totalCount;
 
             ViewBag.DateField = "CreatedAt";
 
@@ -296,12 +366,13 @@ namespace ERP.Controllers
         }
 
         // =========================
-        // Export — تصدير CSV
+        // Export — تصدير Excel / CSV
         // =========================
         [HttpGet]
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int? fromCode = null,
@@ -313,6 +384,7 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             string? format = "excel",
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
@@ -321,9 +393,14 @@ namespace ERP.Controllers
             if (!fromCode.HasValue && codeFrom.HasValue) fromCode = codeFrom;
             if (!toCode.HasValue && codeTo.HasValue) toCode = codeTo;
 
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
             var q = BuildGroupsQuery(
                 search,
                 searchBy,
+                sm,
                 sort,
                 dir,
                 fromCode,
@@ -332,34 +409,70 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_active, filterCol_created, filterCol_updated);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_name, filterCol_active, filterCol_created, filterCol_updated);
 
             var list = await q.ToListAsync();
 
-            var sb = new StringBuilder();
-            sb.AppendLine("كود المجموعة,اسم المجموعة,الوصف,مفعّلة؟,تاريخ الإنشاء");
-
-            foreach (var g in list)
+            if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
             {
-                string createdText = g.CreatedAt.ToString("yyyy-MM-dd HH:mm");
-                string desc = (g.Description ?? "").Replace("\"", "\"\"");
+                using var workbook = new XLWorkbook();
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("مجموعات الأصناف"));
 
-                var line = string.Join(",",
-                    g.ProductGroupId,
-                    $"\"{(g.Name ?? "").Replace("\"", "\"\"")}\"",
-                    $"\"{desc}\"",
-                    $"\"{(g.IsActive ? "مفعّلة" : "موقوفة")}\"",
-                    createdText
-                );
+                int row = 1;
+                worksheet.Cell(row, 1).Value = "كود المجموعة";
+                worksheet.Cell(row, 2).Value = "اسم المجموعة";
+                worksheet.Cell(row, 3).Value = "الوصف";
+                worksheet.Cell(row, 4).Value = "مفعّلة؟";
+                worksheet.Cell(row, 5).Value = "تاريخ الإنشاء";
 
-                sb.AppendLine(line);
+                var header = worksheet.Range(row, 1, row, 5);
+                header.Style.Font.Bold = true;
+
+                foreach (var g in list)
+                {
+                    row++;
+                    worksheet.Cell(row, 1).Value = g.ProductGroupId;
+                    worksheet.Cell(row, 2).Value = g.Name;
+                    worksheet.Cell(row, 3).Value = g.Description ?? string.Empty;
+                    worksheet.Cell(row, 4).Value = g.IsActive ? "نعم" : "لا";
+                    worksheet.Cell(row, 5).Value = g.CreatedAt;
+                }
+
+                worksheet.Columns().AdjustToContents();
+
+                using var stream = new MemoryStream();
+                workbook.SaveAs(stream);
+                stream.Position = 0;
+
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("مجموعات الأصناف", ".xlsx");
+                const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                return File(stream.ToArray(), contentType, fileNameXlsx);
             }
+            else
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("كود المجموعة,اسم المجموعة,الوصف,مفعّلة؟,تاريخ الإنشاء");
 
-            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
-            var ext = (format ?? "excel").ToLower() == "csv" ? "csv" : "csv";
-            var fileName = ExcelExportNaming.ArabicTimestampedFileName("مجموعات الأصناف", "." + ext);
+                foreach (var g in list)
+                {
+                    string createdText = g.CreatedAt.ToString("yyyy-MM-dd HH:mm");
+                    string desc = (g.Description ?? "").Replace("\"", "\"\"");
 
-            return File(bytes, "text/csv; charset=utf-8", fileName);
+                    var line = string.Join(",",
+                        g.ProductGroupId,
+                        $"\"{(g.Name ?? "").Replace("\"", "\"\"")}\"",
+                        $"\"{desc}\"",
+                        $"\"{(g.IsActive ? "مفعّلة" : "موقوفة")}\"",
+                        createdText
+                    );
+
+                    sb.AppendLine(line);
+                }
+
+                var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("مجموعات الأصناف", ".csv");
+                return File(bytes, "text/csv; charset=utf-8", fileNameCsv);
+            }
         }
 
         // =========================

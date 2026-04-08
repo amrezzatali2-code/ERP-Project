@@ -24,10 +24,17 @@
         return normalizeDigits(String(s).toLowerCase());
     }
 
-    /** تطبيع إدخال البحث الرقمي قبل الإرسال (أرقام عربية + فاصلة عشرية واحدة) — مواءمة مع الخادم */
+    /** تطبيع إدخال البحث الرقمي قبل الإرسال (أرقام عربية + توحيد رموز المقارنة/النطاق) — مواءمة مع الخادم */
     function normalizeNumericExprForSubmit(s) {
         var t = normalizeDigits(String(s || '').trim());
         if (!t) return '';
+        // توحيد رموز قد يكتبها المستخدم بلوحة عربية/نسخ من خارج النظام
+        t = t
+            .replace(/[\u061B\u0589\uFE13\uFE55]/g, ':') // ؛ և ﹕ ︓ -> :
+            .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-') // dash variants -> -
+            .replace(/[\u2264]/g, '<=') // ≤
+            .replace(/[\u2265]/g, '>=') // ≥
+            .replace(/\s+/g, '');
         if ((t.split(',').length - 1) === 1 && t.indexOf('.') < 0)
             t = t.replace(',', '.');
         return t;
@@ -268,8 +275,6 @@
                 url.searchParams.delete('filterCol_' + currentCol + '_contains');
                 if (expr) {
                     url.searchParams.set('filterCol_' + currentCol + 'Expr', expr);
-                    url.searchParams.delete('search');
-                    url.searchParams.delete('searchBy');
                 } else {
                     url.searchParams.delete('filterCol_' + currentCol + 'Expr');
                 }
@@ -283,8 +288,6 @@
             if (val) {
                 url.searchParams.set('filterCol_' + currentCol, val);
                 url.searchParams.delete(containsParam);
-                url.searchParams.delete('search');
-                url.searchParams.delete('searchBy');
             } else {
                 url.searchParams.delete('filterCol_' + currentCol);
                 url.searchParams.delete(containsParam);

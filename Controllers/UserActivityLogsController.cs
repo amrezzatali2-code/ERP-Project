@@ -1,6 +1,8 @@
 using System;                                // متغيرات التاريخ DateTime
 using System.Collections.Generic;           // Dictionary
+using System.Globalization;
 using System.Linq;                           // أوامر LINQ مثل Where و OrderBy
+using System.Linq.Expressions;
 using System.Text;                           // StringBuilder لتجهيز ملف التصدير
 using System.Text.RegularExpressions;        // Regex لتعريب الوصف
 using ClosedXML.Excel;                       // تصدير Excel فعلي (.xlsx)
@@ -131,10 +133,12 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_user = null,
             string? filterCol_action = null,
             string? filterCol_entity = null,
             string? filterCol_entityId = null,
+            string? filterCol_entityIdExpr = null,
             string? filterCol_time = null,
             string? filterCol_ip = null,
             string? filterCol_desc = null)
@@ -160,7 +164,18 @@ namespace ERP.Controllers
                 toCode);
 
             // فلاتر الأعمدة (بنمط Excel)
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_user, filterCol_action, filterCol_entity, filterCol_entityId, filterCol_time, filterCol_ip, filterCol_desc);
+            query = ApplyColumnFilters(
+                query,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_user,
+                filterCol_action,
+                filterCol_entity,
+                filterCol_entityId,
+                filterCol_entityIdExpr,
+                filterCol_time,
+                filterCol_ip,
+                filterCol_desc);
 
             // الترتيب
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -216,10 +231,12 @@ namespace ERP.Controllers
             ViewBag.ToCode = toCode;
             ViewBag.DateField = "ActionTime";
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_User = filterCol_user;
             ViewBag.FilterCol_Action = filterCol_action;
             ViewBag.FilterCol_Entity = filterCol_entity;
             ViewBag.FilterCol_EntityId = filterCol_entityId;
+            ViewBag.FilterCol_EntityIdExpr = filterCol_entityIdExpr;
             ViewBag.FilterCol_Time = filterCol_time;
             ViewBag.FilterCol_Ip = filterCol_ip;
             ViewBag.FilterCol_Desc = filterCol_desc;
@@ -232,21 +249,26 @@ namespace ERP.Controllers
         private IQueryable<UserActivityLog> ApplyColumnFilters(
             IQueryable<UserActivityLog> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_user,
             string? filterCol_action,
             string? filterCol_entity,
             string? filterCol_entityId,
+            string? filterCol_entityIdExpr,
             string? filterCol_time,
             string? filterCol_ip,
             string? filterCol_desc)
         {
+            var idList = new List<int>();
             if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
-                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                idList = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0) query = query.Where(x => ids.Contains(x.Id));
             }
+            if (idList.Count > 0) query = query.Where(x => idList.Contains(x.Id));
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                query = ApplyIntExpr(query, NormalizeNumericExpr(filterCol_idExpr), x => x.Id);
             if (!string.IsNullOrWhiteSpace(filterCol_user))
             {
                 var terms = filterCol_user.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
@@ -265,13 +287,16 @@ namespace ERP.Controllers
                 var names = filterCol_entity.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
                 if (names.Count > 0) query = query.Where(x => x.EntityName != null && names.Contains(x.EntityName));
             }
+            var entityIdList = new List<int>();
             if (!string.IsNullOrWhiteSpace(filterCol_entityId))
             {
-                var ids = filterCol_entityId.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                entityIdList = filterCol_entityId.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0) query = query.Where(x => x.EntityId.HasValue && ids.Contains(x.EntityId.Value));
             }
+            if (entityIdList.Count > 0) query = query.Where(x => x.EntityId.HasValue && entityIdList.Contains(x.EntityId.Value));
+            else if (!string.IsNullOrWhiteSpace(filterCol_entityIdExpr))
+                query = ApplyNullableIntExpr(query, NormalizeNumericExpr(filterCol_entityIdExpr), x => x.EntityId);
             if (!string.IsNullOrWhiteSpace(filterCol_time))
             {
                 var terms = filterCol_time.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
@@ -309,11 +334,13 @@ namespace ERP.Controllers
             if (!string.IsNullOrWhiteSpace(search))
             {
                 string term = search.Trim();
+                string termLower = term.ToLowerInvariant();
                 string numericTerm = NormalizeArabicDigitsToLatin(term);
                 string mode = (searchBy ?? "all").ToLowerInvariant();
                 var sm = NormalizeActivitySearchMode(searchMode);
 
                 var matchingActionTypes = GetMatchingActionTypesForSearch(term, sm);
+                var matchingEntityNames = GetMatchingEntityNamesForSearch(term, sm);
 
                 query = mode switch
                 {
@@ -321,16 +348,16 @@ namespace ERP.Controllers
                     {
                         "starts" => query.Where(x =>
                             x.User != null &&
-                            (x.User.UserName.StartsWith(term) ||
-                             (x.User.DisplayName != null && x.User.DisplayName.StartsWith(term)))),
+                            ((x.User.UserName != null && x.User.UserName.ToLower().StartsWith(termLower)) ||
+                             (x.User.DisplayName != null && x.User.DisplayName.ToLower().StartsWith(termLower)))),
                         "ends" => query.Where(x =>
                             x.User != null &&
-                            (x.User.UserName.EndsWith(term) ||
-                             (x.User.DisplayName != null && x.User.DisplayName.EndsWith(term)))),
+                            ((x.User.UserName != null && x.User.UserName.ToLower().EndsWith(termLower)) ||
+                             (x.User.DisplayName != null && x.User.DisplayName.ToLower().EndsWith(termLower)))),
                         _ => query.Where(x =>
                             x.User != null &&
-                            (x.User.UserName.Contains(term) ||
-                             (x.User.DisplayName != null && x.User.DisplayName.Contains(term))))
+                            ((x.User.UserName != null && x.User.UserName.ToLower().Contains(termLower)) ||
+                             (x.User.DisplayName != null && x.User.DisplayName.ToLower().Contains(termLower))))
                     },
 
                     "action" => matchingActionTypes.Length > 0
@@ -339,16 +366,22 @@ namespace ERP.Controllers
 
                     "entity" => sm switch
                     {
-                        "starts" => query.Where(x => x.EntityName != null && x.EntityName.StartsWith(term)),
-                        "ends" => query.Where(x => x.EntityName != null && x.EntityName.EndsWith(term)),
-                        _ => query.Where(x => x.EntityName != null && x.EntityName.Contains(term))
+                        "starts" => query.Where(x =>
+                            (x.EntityName != null && x.EntityName.ToLower().StartsWith(termLower))
+                            || (matchingEntityNames.Length > 0 && x.EntityName != null && matchingEntityNames.Contains(x.EntityName))),
+                        "ends" => query.Where(x =>
+                            (x.EntityName != null && x.EntityName.ToLower().EndsWith(termLower))
+                            || (matchingEntityNames.Length > 0 && x.EntityName != null && matchingEntityNames.Contains(x.EntityName))),
+                        _ => query.Where(x =>
+                            (x.EntityName != null && x.EntityName.ToLower().Contains(termLower))
+                            || (matchingEntityNames.Length > 0 && x.EntityName != null && matchingEntityNames.Contains(x.EntityName)))
                     },
 
                     "description" => sm switch
                     {
-                        "starts" => query.Where(x => x.Description != null && x.Description.StartsWith(term)),
-                        "ends" => query.Where(x => x.Description != null && x.Description.EndsWith(term)),
-                        _ => query.Where(x => x.Description != null && x.Description.Contains(term))
+                        "starts" => query.Where(x => x.Description != null && x.Description.ToLower().StartsWith(termLower)),
+                        "ends" => query.Where(x => x.Description != null && x.Description.ToLower().EndsWith(termLower)),
+                        _ => query.Where(x => x.Description != null && x.Description.ToLower().Contains(termLower))
                     },
 
                     "id" => int.TryParse(numericTerm, out var idVal)
@@ -364,30 +397,33 @@ namespace ERP.Controllers
                     {
                         "starts" => query.Where(x =>
                             (x.User != null &&
-                             (x.User.UserName.StartsWith(term) ||
-                              (x.User.DisplayName != null && x.User.DisplayName.StartsWith(term))))
-                            || (x.EntityName != null && x.EntityName.StartsWith(term))
-                            || (x.Description != null && x.Description.StartsWith(term))
-                            || (x.OldValues != null && x.OldValues.StartsWith(term))
-                            || (x.NewValues != null && x.NewValues.StartsWith(term))
+                            ((x.User.UserName != null && x.User.UserName.ToLower().StartsWith(termLower)) ||
+                              (x.User.DisplayName != null && x.User.DisplayName.ToLower().StartsWith(termLower))))
+                            || (x.EntityName != null && x.EntityName.ToLower().StartsWith(termLower))
+                            || (x.Description != null && x.Description.ToLower().StartsWith(termLower))
+                            || (x.OldValues != null && x.OldValues.ToLower().StartsWith(termLower))
+                            || (x.NewValues != null && x.NewValues.ToLower().StartsWith(termLower))
+                            || (matchingEntityNames.Length > 0 && x.EntityName != null && matchingEntityNames.Contains(x.EntityName))
                             || (matchingActionTypes.Length > 0 && matchingActionTypes.Contains(x.ActionType))),
                         "ends" => query.Where(x =>
                             (x.User != null &&
-                             (x.User.UserName.EndsWith(term) ||
-                              (x.User.DisplayName != null && x.User.DisplayName.EndsWith(term))))
-                            || (x.EntityName != null && x.EntityName.EndsWith(term))
-                            || (x.Description != null && x.Description.EndsWith(term))
-                            || (x.OldValues != null && x.OldValues.EndsWith(term))
-                            || (x.NewValues != null && x.NewValues.EndsWith(term))
+                             ((x.User.UserName != null && x.User.UserName.ToLower().EndsWith(termLower)) ||
+                              (x.User.DisplayName != null && x.User.DisplayName.ToLower().EndsWith(termLower))))
+                            || (x.EntityName != null && x.EntityName.ToLower().EndsWith(termLower))
+                            || (x.Description != null && x.Description.ToLower().EndsWith(termLower))
+                            || (x.OldValues != null && x.OldValues.ToLower().EndsWith(termLower))
+                            || (x.NewValues != null && x.NewValues.ToLower().EndsWith(termLower))
+                            || (matchingEntityNames.Length > 0 && x.EntityName != null && matchingEntityNames.Contains(x.EntityName))
                             || (matchingActionTypes.Length > 0 && matchingActionTypes.Contains(x.ActionType))),
                         _ => query.Where(x =>
                             (x.User != null &&
-                             (x.User.UserName.Contains(term) ||
-                              (x.User.DisplayName != null && x.User.DisplayName.Contains(term))))
-                            || (x.EntityName != null && x.EntityName.Contains(term))
-                            || (x.Description != null && x.Description.Contains(term))
-                            || (x.OldValues != null && x.OldValues.Contains(term))
-                            || (x.NewValues != null && x.NewValues.Contains(term))
+                             ((x.User.UserName != null && x.User.UserName.ToLower().Contains(termLower)) ||
+                              (x.User.DisplayName != null && x.User.DisplayName.ToLower().Contains(termLower))))
+                            || (x.EntityName != null && x.EntityName.ToLower().Contains(termLower))
+                            || (x.Description != null && x.Description.ToLower().Contains(termLower))
+                            || (x.OldValues != null && x.OldValues.ToLower().Contains(termLower))
+                            || (x.NewValues != null && x.NewValues.ToLower().Contains(termLower))
+                            || (matchingEntityNames.Length > 0 && x.EntityName != null && matchingEntityNames.Contains(x.EntityName))
                             || (matchingActionTypes.Length > 0 && matchingActionTypes.Contains(x.ActionType)))
                     }
                 };
@@ -432,6 +468,31 @@ namespace ERP.Controllers
             return new string(chars);
         }
 
+        /// <summary>تطبيع تعبير البحث الرقمي (أرقام عربية + رموز نطاق/مقارنة متعددة) لصيغة يفهمها المحلل.</summary>
+        private static string NormalizeNumericExpr(string? value)
+        {
+            var text = NormalizeArabicDigitsToLatin(value ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            text = text
+                .Replace('\u061B', ':') // ؛
+                .Replace('\u0589', ':') // ։
+                .Replace('\uFE13', ':') // ︓
+                .Replace('\uFE55', ':') // ﹕
+                .Replace('\u2010', '-') // ‐
+                .Replace('\u2011', '-') // ‑
+                .Replace('\u2012', '-') // ‒
+                .Replace('\u2013', '-') // –
+                .Replace('\u2014', '-') // —
+                .Replace('\u2015', '-') // ―
+                .Replace('\u2212', '-') // −
+                .Replace("\u2264", "<=") // ≤
+                .Replace("\u2265", ">="); // ≥
+
+            return string.Concat(text.Where(c => !char.IsWhiteSpace(c)));
+        }
+
         private static string NormalizeActivitySearchMode(string? searchMode)
         {
             var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
@@ -441,14 +502,205 @@ namespace ERP.Controllers
         /// <summary>مطابقة أسماء enum لنوع العملية مع وضع النص (يبدأ / يحتوي / ينتهي).</summary>
         private static UserActionType[] GetMatchingActionTypesForSearch(string term, string sm)
         {
+            var termAr = (term ?? string.Empty).Trim();
+            string termArLower = termAr.ToLowerInvariant();
+
             return Enum.GetValues<UserActionType>()
                 .Where(e => sm switch
                 {
-                    "starts" => e.ToString().StartsWith(term, StringComparison.OrdinalIgnoreCase),
-                    "ends" => e.ToString().EndsWith(term, StringComparison.OrdinalIgnoreCase),
+                    "starts" => e.ToString().StartsWith(term, StringComparison.OrdinalIgnoreCase)
+                                || ActionTypeToArabic(e).ToLowerInvariant().StartsWith(termArLower),
+                    "ends" => e.ToString().EndsWith(term, StringComparison.OrdinalIgnoreCase)
+                              || ActionTypeToArabic(e).ToLowerInvariant().EndsWith(termArLower),
                     _ => e.ToString().Contains(term, StringComparison.OrdinalIgnoreCase)
+                         || ActionTypeToArabic(e).ToLowerInvariant().Contains(termArLower)
                 })
                 .ToArray();
+        }
+
+        private static IQueryable<UserActivityLog> ApplyIntExpr(
+            IQueryable<UserActivityLog> q,
+            string? raw,
+            Expression<Func<UserActivityLog, int>> selector)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return q;
+            var expr = raw.Trim();
+
+            if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(BuildIntPredicate(selector, le, "le"));
+            if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(BuildIntPredicate(selector, ge, "ge"));
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(BuildIntPredicate(selector, lt, "lt"));
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(BuildIntPredicate(selector, gt, "gt"));
+
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+            {
+                var separator = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b) (a, b) = (b, a);
+                    return q.Where(BuildIntRangePredicate(selector, a, b));
+                }
+            }
+
+            if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                return q.Where(BuildIntPredicate(selector, ex, "eq"));
+
+            return q;
+        }
+
+        private static IQueryable<UserActivityLog> ApplyNullableIntExpr(
+            IQueryable<UserActivityLog> q,
+            string? raw,
+            Expression<Func<UserActivityLog, int?>> selector)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return q;
+            var expr = raw.Trim();
+
+            if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(BuildNullableIntPredicate(selector, le, "le"));
+            if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(BuildNullableIntPredicate(selector, ge, "ge"));
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(BuildNullableIntPredicate(selector, lt, "lt"));
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(BuildNullableIntPredicate(selector, gt, "gt"));
+
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+            {
+                var separator = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b) (a, b) = (b, a);
+                    return q.Where(BuildNullableIntRangePredicate(selector, a, b));
+                }
+            }
+
+            if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                return q.Where(BuildNullableIntPredicate(selector, ex, "eq"));
+
+            return q;
+        }
+
+        private static Expression<Func<UserActivityLog, bool>> BuildIntPredicate(
+            Expression<Func<UserActivityLog, int>> selector, int value, string op)
+        {
+            var p = selector.Parameters[0];
+            var left = selector.Body;
+            var right = Expression.Constant(value);
+            var body = op switch
+            {
+                "le" => Expression.LessThanOrEqual(left, right),
+                "ge" => Expression.GreaterThanOrEqual(left, right),
+                "lt" => Expression.LessThan(left, right),
+                "gt" => Expression.GreaterThan(left, right),
+                _ => Expression.Equal(left, right)
+            };
+            return Expression.Lambda<Func<UserActivityLog, bool>>(body, p);
+        }
+
+        private static Expression<Func<UserActivityLog, bool>> BuildIntRangePredicate(
+            Expression<Func<UserActivityLog, int>> selector, int min, int max)
+        {
+            var p = selector.Parameters[0];
+            var left = selector.Body;
+            var body = Expression.AndAlso(
+                Expression.GreaterThanOrEqual(left, Expression.Constant(min)),
+                Expression.LessThanOrEqual(left, Expression.Constant(max)));
+            return Expression.Lambda<Func<UserActivityLog, bool>>(body, p);
+        }
+
+        private static Expression<Func<UserActivityLog, bool>> BuildNullableIntPredicate(
+            Expression<Func<UserActivityLog, int?>> selector, int value, string op)
+        {
+            var p = selector.Parameters[0];
+            var bodyVal = selector.Body;
+            var hasValue = Expression.Property(bodyVal, nameof(Nullable<int>.HasValue));
+            var valueProp = Expression.Property(bodyVal, nameof(Nullable<int>.Value));
+            var right = Expression.Constant(value);
+            var cmp = op switch
+            {
+                "le" => Expression.LessThanOrEqual(valueProp, right),
+                "ge" => Expression.GreaterThanOrEqual(valueProp, right),
+                "lt" => Expression.LessThan(valueProp, right),
+                "gt" => Expression.GreaterThan(valueProp, right),
+                _ => Expression.Equal(valueProp, right)
+            };
+            return Expression.Lambda<Func<UserActivityLog, bool>>(Expression.AndAlso(hasValue, cmp), p);
+        }
+
+        private static Expression<Func<UserActivityLog, bool>> BuildNullableIntRangePredicate(
+            Expression<Func<UserActivityLog, int?>> selector, int min, int max)
+        {
+            var p = selector.Parameters[0];
+            var bodyVal = selector.Body;
+            var hasValue = Expression.Property(bodyVal, nameof(Nullable<int>.HasValue));
+            var valueProp = Expression.Property(bodyVal, nameof(Nullable<int>.Value));
+            var range = Expression.AndAlso(
+                Expression.GreaterThanOrEqual(valueProp, Expression.Constant(min)),
+                Expression.LessThanOrEqual(valueProp, Expression.Constant(max)));
+            return Expression.Lambda<Func<UserActivityLog, bool>>(Expression.AndAlso(hasValue, range), p);
+        }
+
+        private static string[] GetMatchingEntityNamesForSearch(string term, string sm)
+        {
+            var t = (term ?? string.Empty).Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(t)) return Array.Empty<string>();
+
+            // نفس مفاتيح الكيانات الشائعة في السجل
+            var keys = new[]
+            {
+                "CashReceipt","CashPayment","SalesInvoice","PurchaseInvoice","PurchaseRequest","PurchaseRequests",
+                "Product","User","Customer","Category","Warehouse","Account","LedgerEntry","StockLedger",
+                "PILine","SILine","SalesInvoiceLine","SalesInvoiceLines","SalesInvoices","PurchaseInvoices",
+                "PurchaseInvoiceLine","SalesOrder","SalesOrderLine","SalesReturn","PurchaseReturn","DebitNote",
+                "CreditNote","StockTransfer","ProductDiscountOverride","DocumentSeries","SalesReturnLine",
+                "PurchaseReturnLine","StockAdjustment","Batch","Governorate","District","Area","NumberSeries",
+                "Policy","Invoice","Permission","Role","Branch","City","ProductGroup","StockAdjustmentLine",
+                "PRLine","SOLine"
+            };
+
+            bool Match(string text)
+            {
+                var s = (text ?? string.Empty).Trim().ToLowerInvariant();
+                return sm switch
+                {
+                    "starts" => s.StartsWith(t),
+                    "ends" => s.EndsWith(t),
+                    _ => s.Contains(t)
+                };
+            }
+
+            return keys
+                .Where(k => Match(k) || Match(EntityNameToArabic(k)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        private static string ActionTypeToArabic(UserActionType t)
+        {
+            return t switch
+            {
+                UserActionType.Create => "إنشاء",
+                UserActionType.Edit => "تعديل",
+                UserActionType.Delete => "حذف",
+                UserActionType.Post => "ترحيل",
+                UserActionType.Unpost => "فتح",
+                UserActionType.Login => "دخول",
+                UserActionType.Logout => "خروج",
+                UserActionType.Export => "تصدير",
+                UserActionType.Import => "استيراد",
+                UserActionType.View => "عرض",
+                _ => t.ToString()
+            };
         }
 
         // GET: UserActivityLogs/Details/5
@@ -624,10 +876,12 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_user = null,
             string? filterCol_action = null,
             string? filterCol_entity = null,
             string? filterCol_entityId = null,
+            string? filterCol_entityIdExpr = null,
             string? filterCol_time = null,
             string? filterCol_ip = null,
             string? filterCol_desc = null,
@@ -638,7 +892,18 @@ namespace ERP.Controllers
                 .Include(x => x.User);
 
             query = ApplyFilters(query, search, searchBy, searchMode, useDateRange, fromDate, toDate, fromCode, toCode);
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_user, filterCol_action, filterCol_entity, filterCol_entityId, filterCol_time, filterCol_ip, filterCol_desc);
+            query = ApplyColumnFilters(
+                query,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_user,
+                filterCol_action,
+                filterCol_entity,
+                filterCol_entityId,
+                filterCol_entityIdExpr,
+                filterCol_time,
+                filterCol_ip,
+                filterCol_desc);
 
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             sort ??= "ActionTime";

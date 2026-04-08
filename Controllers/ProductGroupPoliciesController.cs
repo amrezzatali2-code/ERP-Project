@@ -112,6 +112,7 @@ namespace ERP.Controllers
         private IQueryable<ProductGroupPolicy> BuildPoliciesQuery(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int? fromCode,
@@ -214,7 +215,8 @@ namespace ERP.Controllers
                 intFields,
                 orderFields,
                 defaultSearchBy: "id",     // افتراضياً نبحث بالكود
-                defaultSortBy: "id"        // وافتراضياً نرتّب بالكود
+                defaultSortBy: "id",       // وافتراضياً نرتّب بالكود
+                searchMode: searchMode
             );
 
             return q;
@@ -226,21 +228,26 @@ namespace ERP.Controllers
         private IQueryable<ProductGroupPolicy> ApplyColumnFilters(
             IQueryable<ProductGroupPolicy> q,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_group,
             string? filterCol_policy,
             string? filterCol_warehouse,
             string? filterCol_profit,
+            string? filterCol_profitExpr,
             string? filterCol_active,
             string? filterCol_created)
         {
+            var idList = new List<int>();
             if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
-                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                idList = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    q = q.Where(x => ids.Contains(x.Id));
             }
+            if (idList.Count > 0)
+                q = q.Where(x => idList.Contains(x.Id));
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                q = ApplyIntExpr(q, NormalizeNumericExpr(filterCol_idExpr), x => x.Id);
             if (!string.IsNullOrWhiteSpace(filterCol_group))
             {
                 var terms = filterCol_group.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -262,15 +269,18 @@ namespace ERP.Controllers
                 if (terms.Count > 0)
                     q = q.Where(x => x.Warehouse != null && terms.Contains(x.Warehouse.WarehouseName));
             }
+            var profitList = new List<decimal>();
             if (!string.IsNullOrWhiteSpace(filterCol_profit))
             {
-                var terms = filterCol_profit.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                profitList = filterCol_profit.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(t => t.Trim())
                     .Select(t => decimal.TryParse(t, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (terms.Count > 0)
-                    q = q.Where(x => terms.Contains(x.ProfitPercent));
             }
+            if (profitList.Count > 0)
+                q = q.Where(x => profitList.Contains(x.ProfitPercent));
+            else if (!string.IsNullOrWhiteSpace(filterCol_profitExpr))
+                q = ApplyDecimalExpr(q, NormalizeNumericExpr(filterCol_profitExpr), x => x.ProfitPercent);
             if (!string.IsNullOrWhiteSpace(filterCol_active))
             {
                 var parts = filterCol_active.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -288,6 +298,161 @@ namespace ERP.Controllers
                     q = q.Where(x => terms.Any(t => x.CreatedAt.ToString("yyyy-MM-dd HH:mm").Contains(t)));
             }
             return q;
+        }
+
+        private static string NormalizeNumericExpr(string? value)
+        {
+            var text = (value ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            var chars = text.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                chars[i] = chars[i] switch
+                {
+                    >= '\u0660' and <= '\u0669' => (char)('0' + (chars[i] - '\u0660')),
+                    >= '\u06F0' and <= '\u06F9' => (char)('0' + (chars[i] - '\u06F0')),
+                    '\u061B' or '\u0589' or '\uFE13' or '\uFE55' => ':',
+                    '\u2010' or '\u2011' or '\u2012' or '\u2013' or '\u2014' or '\u2015' or '\u2212' => '-',
+                    '\u2264' => '≤',
+                    '\u2265' => '≥',
+                    _ => chars[i]
+                };
+            }
+
+            text = new string(chars).Replace("≤", "<=").Replace("≥", ">=").Replace(" ", string.Empty);
+            if ((text.Split(',').Length - 1) == 1 && text.IndexOf('.') < 0)
+                text = text.Replace(',', '.');
+            return text;
+        }
+
+        private static IQueryable<ProductGroupPolicy> ApplyIntExpr(
+            IQueryable<ProductGroupPolicy> q,
+            string? raw,
+            Expression<Func<ProductGroupPolicy, int>> selector)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return q;
+            var expr = raw.Trim();
+
+            if (expr.StartsWith("<=") && int.TryParse(expr[2..], NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(BuildIntPredicate(selector, le, "le"));
+            if (expr.StartsWith(">=") && int.TryParse(expr[2..], NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(BuildIntPredicate(selector, ge, "ge"));
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && int.TryParse(expr[1..], NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(BuildIntPredicate(selector, lt, "lt"));
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && int.TryParse(expr[1..], NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(BuildIntPredicate(selector, gt, "gt"));
+
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b) (a, b) = (b, a);
+                    return q.Where(BuildIntRangePredicate(selector, a, b));
+                }
+            }
+
+            if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var eq))
+                return q.Where(BuildIntPredicate(selector, eq, "eq"));
+
+            return q;
+        }
+
+        private static IQueryable<ProductGroupPolicy> ApplyDecimalExpr(
+            IQueryable<ProductGroupPolicy> q,
+            string? raw,
+            Expression<Func<ProductGroupPolicy, decimal>> selector)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return q;
+            var expr = raw.Trim();
+
+            if (expr.StartsWith("<=") && decimal.TryParse(expr[2..], NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(BuildDecimalPredicate(selector, le, "le"));
+            if (expr.StartsWith(">=") && decimal.TryParse(expr[2..], NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(BuildDecimalPredicate(selector, ge, "ge"));
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && decimal.TryParse(expr[1..], NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(BuildDecimalPredicate(selector, lt, "lt"));
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && decimal.TryParse(expr[1..], NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(BuildDecimalPredicate(selector, gt, "gt"));
+
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && decimal.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && decimal.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b) (a, b) = (b, a);
+                    return q.Where(BuildDecimalRangePredicate(selector, a, b));
+                }
+            }
+
+            if (decimal.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var eq))
+                return q.Where(BuildDecimalPredicate(selector, eq, "eq"));
+
+            return q;
+        }
+
+        private static Expression<Func<ProductGroupPolicy, bool>> BuildIntPredicate(
+            Expression<Func<ProductGroupPolicy, int>> selector, int value, string op)
+        {
+            var p = selector.Parameters[0];
+            var left = selector.Body;
+            var right = Expression.Constant(value);
+            var body = op switch
+            {
+                "le" => Expression.LessThanOrEqual(left, right),
+                "ge" => Expression.GreaterThanOrEqual(left, right),
+                "lt" => Expression.LessThan(left, right),
+                "gt" => Expression.GreaterThan(left, right),
+                _ => Expression.Equal(left, right)
+            };
+            return Expression.Lambda<Func<ProductGroupPolicy, bool>>(body, p);
+        }
+
+        private static Expression<Func<ProductGroupPolicy, bool>> BuildIntRangePredicate(
+            Expression<Func<ProductGroupPolicy, int>> selector, int min, int max)
+        {
+            var p = selector.Parameters[0];
+            var left = selector.Body;
+            var body = Expression.AndAlso(
+                Expression.GreaterThanOrEqual(left, Expression.Constant(min)),
+                Expression.LessThanOrEqual(left, Expression.Constant(max)));
+            return Expression.Lambda<Func<ProductGroupPolicy, bool>>(body, p);
+        }
+
+        private static Expression<Func<ProductGroupPolicy, bool>> BuildDecimalPredicate(
+            Expression<Func<ProductGroupPolicy, decimal>> selector, decimal value, string op)
+        {
+            var p = selector.Parameters[0];
+            var left = selector.Body;
+            var right = Expression.Constant(value);
+            var body = op switch
+            {
+                "le" => Expression.LessThanOrEqual(left, right),
+                "ge" => Expression.GreaterThanOrEqual(left, right),
+                "lt" => Expression.LessThan(left, right),
+                "gt" => Expression.GreaterThan(left, right),
+                _ => Expression.Equal(left, right)
+            };
+            return Expression.Lambda<Func<ProductGroupPolicy, bool>>(body, p);
+        }
+
+        private static Expression<Func<ProductGroupPolicy, bool>> BuildDecimalRangePredicate(
+            Expression<Func<ProductGroupPolicy, decimal>> selector, decimal min, decimal max)
+        {
+            var p = selector.Parameters[0];
+            var left = selector.Body;
+            var body = Expression.AndAlso(
+                Expression.GreaterThanOrEqual(left, Expression.Constant(min)),
+                Expression.LessThanOrEqual(left, Expression.Constant(max)));
+            return Expression.Lambda<Func<ProductGroupPolicy, bool>>(body, p);
         }
 
         /// <summary>قيم مميزة للعمود (للوحة فلتر الأعمدة بنمط Excel).</summary>
@@ -357,6 +522,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "id",        // id | group | policy | warehouse | status
+            string? searchMode = "contains",
             string? sort = "id",            // id | group | policy | warehouse | active | created
             string? dir = "asc",            // asc | desc
             int page = 1,
@@ -367,10 +533,12 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_group = null,
             string? filterCol_policy = null,
             string? filterCol_warehouse = null,
             string? filterCol_profit = null,
+            string? filterCol_profitExpr = null,
             string? filterCol_active = null,
             string? filterCol_created = null)
         {
@@ -378,6 +546,7 @@ namespace ERP.Controllers
             var q = BuildPoliciesQuery(
                 search,
                 searchBy,
+                searchMode,
                 sort,
                 dir,
                 fromCode,
@@ -386,7 +555,21 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_group, filterCol_policy, filterCol_warehouse, filterCol_profit, filterCol_active, filterCol_created);
+            q = ApplyColumnFilters(
+                q,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_group,
+                filterCol_policy,
+                filterCol_warehouse,
+                filterCol_profit,
+                filterCol_profitExpr,
+                filterCol_active,
+                filterCol_created);
+
+            var totalCount = await q.CountAsync();
+            var activeCount = await q.CountAsync(x => x.IsActive);
+            var inactiveCount = totalCount - activeCount;
 
             // تقسيم الصفحات
             var model = await PagedResult<ProductGroupPolicy>.CreateAsync(q, page, pageSize);
@@ -408,12 +591,18 @@ namespace ERP.Controllers
 
             // فلتر الأعمدة (نظام البحث Excel)
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Group = filterCol_group;
             ViewBag.FilterCol_Policy = filterCol_policy;
             ViewBag.FilterCol_Warehouse = filterCol_warehouse;
             ViewBag.FilterCol_Profit = filterCol_profit;
+            ViewBag.FilterCol_ProfitExpr = filterCol_profitExpr;
             ViewBag.FilterCol_Active = filterCol_active;
             ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.SearchMode = searchMode;
+            ViewBag.TotalCount = totalCount;
+            ViewBag.ActiveCount = activeCount;
+            ViewBag.InactiveCount = inactiveCount;
 
             // حقل التاريخ المستخدم في الفلترة (للنموذج الموحد)
             ViewBag.DateField = "CreatedAt";
@@ -435,8 +624,9 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
-            string? sort,
-            string? dir,
+            string? searchMode = "contains",
+            string? sort = null,
+            string? dir = null,
             int? fromCode = null,           // fromCode للاسم الجديد
             int? toCode = null,
             int? codeFrom = null,           // دعم الأسماء القديمة codeFrom/codeTo لو موجودة في الواجهة
@@ -445,10 +635,12 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_group = null,
             string? filterCol_policy = null,
             string? filterCol_warehouse = null,
             string? filterCol_profit = null,
+            string? filterCol_profitExpr = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
             string format = "excel")        // excel | csv
@@ -464,6 +656,7 @@ namespace ERP.Controllers
             var query = BuildPoliciesQuery(
                 search,
                 searchBy,
+                searchMode,
                 sort,
                 dir,
                 fromCode,
@@ -472,7 +665,17 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_group, filterCol_policy, filterCol_warehouse, filterCol_profit, filterCol_active, filterCol_created);
+            query = ApplyColumnFilters(
+                query,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_group,
+                filterCol_policy,
+                filterCol_warehouse,
+                filterCol_profit,
+                filterCol_profitExpr,
+                filterCol_active,
+                filterCol_created);
 
             // 2) جلب كل النتائج (بدون Paging) — الـ Include موجود في BuildPoliciesQuery
             var list = await query.ToListAsync();
