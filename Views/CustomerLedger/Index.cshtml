@@ -194,6 +194,48 @@
         background-color: #0d6efd !important;
         color: #fff !important;
     }
+
+    /* فوتر الجدول — مميز عن صفوف البيانات + متناسق مع هوية القوائم */
+    #ledgerTable.customer-ledger-table tfoot.customer-ledger-table-tfoot tr td {
+        border-top: 2px solid #6366f1 !important;
+        background: linear-gradient(180deg, #f5f3ff 0%, #eef2ff 100%) !important;
+        font-weight: 700;
+        padding-top: 0.65rem !important;
+        padding-bottom: 0.65rem !important;
+        vertical-align: middle;
+        color: #312e81;
+        box-shadow: 0 -1px 0 rgba(99, 102, 241, 0.2);
+    }
+    #ledgerTable.customer-ledger-table tfoot.customer-ledger-table-tfoot .customer-ledger-tfoot-label {
+        font-size: 0.95rem;
+        letter-spacing: 0.01em;
+    }
+    #ledgerTable.customer-ledger-table tfoot.customer-ledger-table-tfoot .customer-ledger-tfoot-hint {
+        display: block;
+        font-size: 0.72rem;
+        font-weight: 500;
+        color: #64748b;
+        margin-top: 0.15rem;
+    }
+    #ledgerTable.customer-ledger-table tfoot.customer-ledger-table-tfoot .customer-ledger-tfoot-debit {
+        color: #1d4ed8 !important;
+        font-variant-numeric: tabular-nums;
+    }
+    #ledgerTable.customer-ledger-table tfoot.customer-ledger-table-tfoot .customer-ledger-tfoot-credit {
+        color: #15803d !important;
+        font-variant-numeric: tabular-nums;
+    }
+    #ledgerTable.customer-ledger-table tfoot.customer-ledger-table-tfoot .customer-ledger-tfoot-net {
+        color: #6d28d9 !important;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+    @@media print {
+        #ledgerTable.customer-ledger-table tfoot.customer-ledger-table-tfoot tr td {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+    }
 </style>
 
 <div dir="rtl" class="container-fluid">
@@ -293,7 +335,7 @@
 
     @* جدول القيود (فلترة بنمط Excel على كل الأعمدة) *@
     <div class="erp-table-wrapper">
-        <table id="ledgerTable" class="table table-striped table-hover erp-table">
+        <table id="ledgerTable" class="table table-striped table-hover erp-table customer-ledger-table">
             <thead class="table-light">
                 <tr>
                     <th style="min-width:140px;" data-col="customerName">اسم العميل</th>
@@ -338,14 +380,23 @@
                     }
                 }
             </tbody>
-            <tfoot class="table-light erp-list-summary-tfoot">
-                <tr class="fw-bold">
-                    <td colspan="6" class="text-end">الإجمالي:</td>
-                    <td class="text-end">@totalDebit.ToString("N2")</td>
-                    <td class="text-end">@totalCredit.ToString("N2")</td>
-                    <td>صافي: @netBalance.ToString("N2")</td>
-                </tr>
-            </tfoot>
+            @if (customer != null)
+            {
+                <tfoot class="customer-ledger-table-tfoot erp-list-summary-tfoot">
+                    <tr>
+                        <td colspan="6" class="text-end customer-ledger-tfoot-label">
+                            الإجمالي
+                            <span class="customer-ledger-tfoot-hint">(بعد الفلترة — لكل النتائج)</span>
+                        </td>
+                        <td class="text-end customer-ledger-tfoot-debit" data-col="debit">@totalDebit.ToString("N2")</td>
+                        <td class="text-end customer-ledger-tfoot-credit" data-col="credit">@totalCredit.ToString("N2")</td>
+                        <td class="customer-ledger-tfoot-net" data-col="description">
+                            <span class="text-muted fw-normal small">صافي:</span>
+                            @netBalance.ToString("N2")
+                        </td>
+                    </tr>
+                </tfoot>
+            }
         </table>
     </div>
 

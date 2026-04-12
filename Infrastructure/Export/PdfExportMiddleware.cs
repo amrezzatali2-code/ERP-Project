@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http.Extensions;
 
 namespace ERP.Infrastructure.Export;
@@ -48,7 +49,8 @@ public class PdfExportMiddleware
             var csvBytes = buffer.ToArray();
             var csvText = DecodeCsv(csvBytes);
             var fileName = ResolvePdfFileName(context.Response.Headers.ContentDisposition);
-            var title = Path.GetFileNameWithoutExtension(fileName);
+            // عنوان داخل الـ PDF: بدون لاحقة الطابع الزمني في اسم الملف (مثل _20260411_191304)
+            var title = StripExportTimestampSuffixForPdfTitle(Path.GetFileNameWithoutExtension(fileName));
             var pdfBytes = CsvPdfExportHelper.GeneratePdf(csvText, title);
             var inline = context.Items.TryGetValue(PdfInlineFlagKey, out var inlineObj) && inlineObj is bool b && b;
 
@@ -94,6 +96,15 @@ public class PdfExportMiddleware
             builder.Add("format", formatValue);
 
         return builder.ToQueryString();
+    }
+
+    private static readonly Regex ExportTitleTimestampSuffix = new(@"_\d{8}_\d{6}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>يزيل لاحقة <c>_yyyyMMdd_HHmmss</c> من عنوان الـ PDF فقط (اسم الملف المحمّل يبقى مع الطابع).</summary>
+    private static string StripExportTimestampSuffixForPdfTitle(string title)
+    {
+        if (string.IsNullOrEmpty(title)) return title;
+        return ExportTitleTimestampSuffix.Replace(title, "");
     }
 
     private static string DecodeCsv(byte[] csvBytes)

@@ -402,9 +402,9 @@
                 </div>
 
                 <div class="col-12 col-lg-1 erp-filter-section">
-                    <label class="form-label d-none d-md-block" style="visibility:hidden">عرض</label>
+                    <label class="form-label d-none d-md-block" style="visibility:hidden">تجميع</label>
                     <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm w-100">
-                        عرض
+                        تجميع
                     </button>
                 </div>
             </form>
@@ -417,7 +417,7 @@
     @if (Model == null)
     {
         <div class="alert alert-light border text-muted text-center">
-            برجاء اختيار عميل أو مورد من أعلى الصفحة ثم اضغط زر <strong>عرض</strong>.
+            برجاء اختيار عميل أو مورد من أعلى الصفحة ثم اضغط زر <strong>تجميع</strong>.
         </div>
     }
     else
@@ -659,7 +659,7 @@
                                     }
                                     else
                                     {
-                                        <tr><td colspan="5" class="text-center text-muted py-3"><small>لا توجد فواتير مبيعات للعميل المحدد@(fromDate.HasValue || toDate.HasValue ? " في الفترة المحددة. لرؤية الكل اترك من تاريخ / إلى تاريخ فارغة واضغط عرض." : "")</small></td></tr>
+                                        <tr><td colspan="5" class="text-center text-muted py-3"><small>لا توجد فواتير مبيعات للعميل المحدد@(fromDate.HasValue || toDate.HasValue ? " في الفترة المحددة. لرؤية الكل اترك من تاريخ / إلى تاريخ فارغة واضغط تجميع." : "")</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -1462,7 +1462,7 @@
 
                     if (!hiddenId.value) {
                         e.preventDefault();
-                        alert('من فضلك اختر عميل من القائمة أو أدخل كوده الرقمى ثم اضغط عرض.');
+                        alert('من فضلك اختر عميل من القائمة أو أدخل كوده الرقمى ثم اضغط تجميع.');
                     }
                 });
             }

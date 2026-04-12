@@ -35,5 +35,11 @@ namespace ERP.ViewModels
         public string? FirstBatchNo { get; set; }
         /// <summary>عند وجود تشغيلة واحدة فقط: تاريخ الصلاحية للصف الرئيسي.</summary>
         public DateTime? FirstBatchExpiry { get; set; }
+
+        /// <summary>
+        /// خصم البيع % لسياسات العميل 1..10 من سياسات المخزن (الفهرس 0 = سياسة 1).
+        /// يُملأ عند اختيار مخزن في التقرير؛ يعتمد على الخصم المرجّح للصف.
+        /// </summary>
+        public decimal?[] PolicySaleDiscountPct { get; set; } = new decimal?[10];
     }
 }

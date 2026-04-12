@@ -2,6 +2,7 @@ using ERP.Controllers;
 using ERP.Data;
 using ERP.Infrastructure;
 using ERP.Models;
+using ERP.Services;
 using ERP.Services.Caching;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -37,10 +38,16 @@ public class WarehousesController_CacheInvalidation_Tests
                 It.IsAny<string?>()))
             .Returns(Task.CompletedTask);
 
+        var permissionService = new Mock<IPermissionService>(MockBehavior.Loose);
+        permissionService
+            .Setup(x => x.HasPermissionAsync(It.IsAny<string>()))
+            .ReturnsAsync(true);
+
         var controller = new WarehousesController(
             db,
             activityLogger.Object,
-            lookupCache.Object);
+            lookupCache.Object,
+            permissionService.Object);
 
         var httpContext = new DefaultHttpContext();
         controller.ControllerContext = new ControllerContext

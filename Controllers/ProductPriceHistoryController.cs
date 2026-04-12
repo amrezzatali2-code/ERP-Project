@@ -108,10 +108,68 @@ namespace ERP.Controllers
             return q;
         }
 
+        /// <summary>بحث السجل: يحتوي / يبدأ بـ / ينتهي بـ — يُستخدم في Index و Export.</summary>
+        private static IQueryable<ProductPriceHistory> ApplyListSearch(
+            IQueryable<ProductPriceHistory> q,
+            string? search,
+            string? searchBy,
+            string? searchMode)
+        {
+            var term = (search ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(term))
+                return q;
+
+            var sb = (searchBy ?? "prod").Trim().ToLowerInvariant();
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm == "startswith") sm = "starts";
+            if (sm != "contains" && sm != "starts" && sm != "ends")
+                sm = "contains";
+
+            var likeContains = $"%{term}%";
+            var likeStarts = $"{term}%";
+            var likeEnds = $"%{term}";
+            // لا تستخدم دالة محلية داخل Where — تعبيرات EF لا تدعمها (CS8110).
+            var pattern = sm == "starts" ? likeStarts : sm == "ends" ? likeEnds : likeContains;
+
+            const string dateFmt = "yyyy/MM/dd HH:mm";
+
+            switch (sb)
+            {
+                case "code":
+                    if (int.TryParse(term, out var code))
+                        return q.Where(h => h.ProdId == code);
+                    return q.Where(h => EF.Functions.Like(h.ProdId.ToString(), pattern));
+
+                case "user":
+                    return q.Where(h => h.ChangedBy != null && EF.Functions.Like(h.ChangedBy, pattern));
+
+                case "reason":
+                    return q.Where(h => h.Reason != null && EF.Functions.Like(h.Reason, pattern));
+
+                case "date":
+                    return q.Where(h => EF.Functions.Like(h.ChangeDate.ToString(dateFmt), pattern));
+
+                case "all":
+                    return q.Where(h =>
+                        (h.Product != null && h.Product.ProdName != null && EF.Functions.Like(h.Product.ProdName, pattern))
+                        || EF.Functions.Like(h.ProdId.ToString(), pattern)
+                        || (h.ChangedBy != null && EF.Functions.Like(h.ChangedBy, pattern))
+                        || (h.Reason != null && EF.Functions.Like(h.Reason, pattern))
+                        || EF.Functions.Like(h.ChangeDate.ToString(dateFmt), pattern));
+
+                case "prod":
+                default:
+                    return q.Where(h =>
+                        (h.Product != null && h.Product.ProdName != null && EF.Functions.Like(h.Product.ProdName, pattern))
+                        || EF.Functions.Like(h.ProdId.ToString(), pattern));
+            }
+        }
+
         [HttpGet]
         public async Task<IActionResult> Index(
             string? search,                 // نص البحث المكتوب في صندوق البحث
-            string? searchBy = "prod",    // prod | code | user | reason
+            string? searchBy = "prod",    // prod | code | user | reason | date | all
+            string? searchMode = "contains", // contains | starts | ends
             string? sort = "date",    // date | prod | code | old | new | user
             string? dir = "desc",    // asc | desc
             int page = 1,         // رقم الصفحة الحالية
@@ -135,6 +193,10 @@ namespace ERP.Controllers
             if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
                 pageSize = psVal;
 
+            var searchModeQuery = Request.Query["searchMode"].LastOrDefault();
+            if (!string.IsNullOrEmpty(searchModeQuery))
+                searchMode = searchModeQuery;
+
             // (1) مصدر البيانات — IQueryable للسماح بالبناء التدريجي
             IQueryable<ProductPriceHistory> q =
                 _ctx.ProductPriceHistories
@@ -144,50 +206,17 @@ namespace ERP.Controllers
             // تجهيز قيم الفلاتر بعد التنظيف
             var term = (search ?? string.Empty).Trim();                // نص البحث بعد إزالة المسافات
             var sb = (searchBy ?? "prod").Trim().ToLowerInvariant(); // حقل البحث
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm == "startswith") sm = "starts";
+            if (sm != "contains" && sm != "starts" && sm != "ends")
+                sm = "contains";
             var so = (sort ?? "date").Trim().ToLowerInvariant();     // حقل الترتيب
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase); // هل الترتيب تنازلي؟
 
-            bool hasSearch = !string.IsNullOrEmpty(term);              // هل يوجد نص بحث فعلاً؟
-
             // =====================================================
-            // (2) البحث (اختياري حسب searchBy)
+            // (2) البحث (يبدأ بـ / يحتوي / ينتهي بـ)
             // =====================================================
-            if (hasSearch)
-            {
-                switch (sb)
-                {
-                    case "code":     // البحث برقم الصنف (ProdId كـ int)
-                        if (int.TryParse(term, out int code))
-                        {
-                            q = q.Where(h => h.ProdId == code);
-                        }
-                        else
-                        {
-                            // لو المستخدم كتب نص مش رقم → لا توجد نتائج
-                            q = q.Where(h => 1 == 0);
-                        }
-                        break;
-
-                    case "user":     // البحث باسم المستخدم الذي غيّر السعر
-                        q = q.Where(h => h.ChangedBy != null &&
-                                         h.ChangedBy.Contains(term));
-                        break;
-
-                    case "reason":   // البحث في سبب التغيير
-                        q = q.Where(h => h.Reason != null &&
-                                         h.Reason.Contains(term));
-                        break;
-
-                    case "prod":     // البحث باسم الصنف (أولوية) أو برقم الصنف كنص
-                    default:
-                        q = q.Where(h =>
-                               (h.Product != null &&
-                                h.Product.ProdName != null &&
-                                h.Product.ProdName.Contains(term))    // اسم الصنف
-                            || h.ProdId.ToString().Contains(term));  // رقم الصنف بعد تحويله لنص
-                        break;
-                }
-            }
+            q = ApplyListSearch(q, term, sb, sm);
 
             // =====================================================
             // (3) فلترة بالتاريخ (ChangeDate) — حسب نظام القوائم الموحد
@@ -380,13 +409,15 @@ namespace ERP.Controllers
             // (6) إعداد خيارات البارشال (_IndexFilters)
             // =====================================================
 
-            // خيارات البحث (ابحث في)
+            // خيارات البحث (ابحث في) — للتوافق مع أي واجهة تستخدم ViewBag
             ViewBag.SearchOptions = new[]
             {
-                new SelectListItem("اسم الصنف", "prod",   sb == "prod"),
-                new SelectListItem("كود الصنف", "code",   sb == "code"),
-                new SelectListItem("المستخدم", "user",   sb == "user"),
+                new SelectListItem("الكل", "all", sb == "all"),
+                new SelectListItem("اسم الصنف", "prod", sb == "prod"),
+                new SelectListItem("كود الصنف", "code", sb == "code"),
+                new SelectListItem("المستخدم", "user", sb == "user"),
                 new SelectListItem("سبب التغيير", "reason", sb == "reason"),
+                new SelectListItem("تاريخ التغيير", "date", sb == "date"),
             };
 
             // خيارات الترتيب (رتّب حسب)
@@ -402,6 +433,7 @@ namespace ERP.Controllers
 
             ViewBag.Search = term;
             ViewBag.SearchBy = sb;
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = so;
             ViewBag.Dir = desc ? "desc" : "asc";
             ViewBag.PageSize = pageSize;
@@ -497,6 +529,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string searchBy = "prod",
+            string? searchMode = "contains",
             string sort = "date",
             string dir = "desc",
             bool useDateRange = false,
@@ -521,44 +554,11 @@ namespace ERP.Controllers
                     .Include(h => h.Product);
 
             var term = (search ?? string.Empty).Trim();
-            bool hasSearch = !string.IsNullOrEmpty(term);
-
-            if (hasSearch)
-            {
-                switch (searchBy.ToLowerInvariant())
-                {
-                    case "code":     // البحث برقم الصنف (ProdId كـ int)
-                        if (int.TryParse(term, out int code))
-                        {
-                            q = q.Where(h => h.ProdId == code);
-                        }
-                        else
-                        {
-                            // لو مش رقم → لا نتائج
-                            q = q.Where(h => 1 == 0);
-                        }
-                        break;
-
-                    case "user":     // البحث باسم المستخدم
-                        q = q.Where(h => h.ChangedBy != null &&
-                                         h.ChangedBy.Contains(term));
-                        break;
-
-                    case "reason":   // البحث في سبب التغيير
-                        q = q.Where(h => h.Reason != null &&
-                                         h.Reason.Contains(term));
-                        break;
-
-                    case "prod":     // البحث باسم الصنف أو رقم الصنف كنص
-                    default:
-                        q = q.Where(h =>
-                               (h.Product != null &&
-                                h.Product.ProdName != null &&
-                                h.Product.ProdName.Contains(term))   // اسم الصنف
-                            || h.ProdId.ToString().Contains(term));   // كود الصنف كنص
-                        break;
-                }
-            }
+            var smExport = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (smExport == "startswith") smExport = "starts";
+            if (smExport != "contains" && smExport != "starts" && smExport != "ends")
+                smExport = "contains";
+            q = ApplyListSearch(q, term, searchBy, smExport);
 
             if (useDateRange)
             {

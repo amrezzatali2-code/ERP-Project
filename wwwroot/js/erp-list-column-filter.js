@@ -62,10 +62,10 @@
 
         var titleEl = panel.querySelector('.erp-column-filter-header span');
         var btnClose = panel.querySelector('.erp-column-filter-header .btn-close');
-        var searchInp = panel.querySelector('.erp-column-filter-body input[type="text"]');
+        var searchInp = panel.querySelector('#erpColumnFilterSearch') || panel.querySelector('.erp-column-filter-body input[type="text"]');
         var listEl = panel.querySelector('.erp-column-filter-list');
         // إخفاء صف «بحث في العناصر» فقط للأعمدة الرقمية — لا نخفي كامل .erp-filter-section حتى تبقى قائمة القيم/البحث الرقمي ظاهرة
-        var searchRow = panel.querySelector('#erpColumnFilterSearchRow') || (searchInp ? searchInp.parentElement : null);
+        var searchRow = panel.querySelector('#erpColumnFilterSearchRow') || searchInp || null;
         var sortSection = panel.querySelector('.erp-filter-sort-section');
         var btnOk = panel.querySelector('.erp-column-filter-actions button[data-action="apply"]') || panel.querySelector('.erp-column-filter-actions .btn-primary') || panel.querySelector('.erp-column-filter-actions .btn-erp-primary');
         var btnClear = panel.querySelector('.erp-column-filter-actions button[data-action="clear"]') || panel.querySelector('.erp-column-filter-actions .btn-secondary') || panel.querySelector('.erp-column-filter-actions .btn-erp-secondary');
@@ -116,7 +116,8 @@
             currentSortKey = btn.getAttribute('data-sort-key') || currentCol;
             if (titleEl) titleEl.textContent = 'ترتيب وفلتر: ' + (btn.getAttribute('data-col-title') || currentCol);
             anchorRect = btn.getBoundingClientRect();
-            panel.style.minWidth = Math.max(250, anchorRect.width) + 'px';
+            // لا نوسع اللوحة بعرض العمود (قد تكون أعمدة عريضة جداً) — حد أقصى منطقي للاتساق
+            panel.style.minWidth = Math.min(380, Math.max(250, anchorRect.width)) + 'px';
             panel.classList.remove('d-none');
 
             var currentSort = getCurrentSort();
@@ -171,9 +172,24 @@
             if (searchRow) searchRow.classList.remove('d-none');
             if (listEl) listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
 
-            var url = options.getColumnValuesUrl + (options.getColumnValuesUrl.indexOf('?') >= 0 ? '&' : '?') + 'column=' + encodeURIComponent(currentCol);
+            // نرسل حالة الفلاتر الحالية (بدون page/pageSize) حتى قائمة القيم تعكس "المفلتر الحالي"
+            var qs = new URLSearchParams(window.location.search);
+            qs.delete('page');
+            qs.delete('pageSize');
+            qs.delete('column');
+            qs.delete('valuesSearch');
+
+            // تجنب تعارض "search" الخاص بالبحث في القائمة مع "بحث في العناصر" داخل اللوحة
+            if (qs.has('search')) { qs.set('listSearch', qs.get('search') || ''); qs.delete('search'); }
+            if (qs.has('searchBy')) { qs.set('listSearchBy', qs.get('searchBy') || ''); qs.delete('searchBy'); }
+            if (qs.has('searchMode')) { qs.set('listSearchMode', qs.get('searchMode') || ''); qs.delete('searchMode'); }
+
+            qs.set('column', currentCol);
+
             var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : '';
-            if (searchVal) url += '&search=' + encodeURIComponent(searchVal);
+            if (searchVal) qs.set('valuesSearch', searchVal);
+
+            var url = options.getColumnValuesUrl + (options.getColumnValuesUrl.indexOf('?') >= 0 ? '&' : '?') + qs.toString();
 
             fetch(url)
                 .then(function (r) { return r.json(); })
@@ -332,9 +348,18 @@
                     fetchDebounce = null;
                     if (!currentCol) return;
                     if (isNumericCol(currentCol)) return;
-                    var url = options.getColumnValuesUrl + (options.getColumnValuesUrl.indexOf('?') >= 0 ? '&' : '?') + 'column=' + encodeURIComponent(currentCol);
+                    var qs = new URLSearchParams(window.location.search);
+                    qs.delete('page');
+                    qs.delete('pageSize');
+                    qs.delete('column');
+                    qs.delete('valuesSearch');
+                    if (qs.has('search')) { qs.set('listSearch', qs.get('search') || ''); qs.delete('search'); }
+                    if (qs.has('searchBy')) { qs.set('listSearchBy', qs.get('searchBy') || ''); qs.delete('searchBy'); }
+                    if (qs.has('searchMode')) { qs.set('listSearchMode', qs.get('searchMode') || ''); qs.delete('searchMode'); }
+                    qs.set('column', currentCol);
                     var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : '';
-                    if (searchVal) url += '&search=' + encodeURIComponent(searchVal);
+                    if (searchVal) qs.set('valuesSearch', searchVal);
+                    var url = options.getColumnValuesUrl + (options.getColumnValuesUrl.indexOf('?') >= 0 ? '&' : '?') + qs.toString();
                     fetch(url).then(function (r) { return r.json(); }).then(function (items) {
                         var raw = Array.isArray(items) ? items : [];
                         allItems = raw.map(function (v) {

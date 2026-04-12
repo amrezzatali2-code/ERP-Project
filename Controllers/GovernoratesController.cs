@@ -63,9 +63,70 @@ namespace ERP.Controllers
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
+        private static string NormalizeNumericExpr(string? value)
+        {
+            var text = (value ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            var chars = text.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                chars[i] = chars[i] switch
+                {
+                    >= '\u0660' and <= '\u0669' => (char)('0' + (chars[i] - '\u0660')),
+                    >= '\u06F0' and <= '\u06F9' => (char)('0' + (chars[i] - '\u06F0')),
+                    '\u061B' or '\u0589' or '\uFE13' or '\uFE55' => ':',
+                    '\u2010' or '\u2011' or '\u2012' or '\u2013' or '\u2014' or '\u2015' or '\u2212' => '-',
+                    '\u2264' => '≤',
+                    '\u2265' => '≥',
+                    _ => chars[i]
+                };
+            }
+
+            text = new string(chars).Replace("≤", "<=").Replace("≥", ">=").Replace(" ", string.Empty);
+            return text;
+        }
+
+        private static IQueryable<Governorate> ApplyIntExpr(IQueryable<Governorate> q, string expr, Expression<Func<Governorate, int>> selector)
+        {
+            if (string.IsNullOrWhiteSpace(expr))
+                return q;
+
+            if (expr.StartsWith("<=") && int.TryParse(expr[2..], NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(Expression.Lambda<Func<Governorate, bool>>(Expression.LessThanOrEqual(selector.Body, Expression.Constant(le)), selector.Parameters));
+            if (expr.StartsWith(">=") && int.TryParse(expr[2..], NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(Expression.Lambda<Func<Governorate, bool>>(Expression.GreaterThanOrEqual(selector.Body, Expression.Constant(ge)), selector.Parameters));
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && int.TryParse(expr[1..], NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(Expression.Lambda<Func<Governorate, bool>>(Expression.LessThan(selector.Body, Expression.Constant(lt)), selector.Parameters));
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && int.TryParse(expr[1..], NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(Expression.Lambda<Func<Governorate, bool>>(Expression.GreaterThan(selector.Body, Expression.Constant(gt)), selector.Parameters));
+
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b) (a, b) = (b, a);
+                    var geBody = Expression.GreaterThanOrEqual(selector.Body, Expression.Constant(a));
+                    var leBody = Expression.LessThanOrEqual(selector.Body, Expression.Constant(b));
+                    return q.Where(Expression.Lambda<Func<Governorate, bool>>(Expression.AndAlso(geBody, leBody), selector.Parameters));
+                }
+            }
+
+            if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var eq))
+                return q.Where(Expression.Lambda<Func<Governorate, bool>>(Expression.Equal(selector.Body, Expression.Constant(eq)), selector.Parameters));
+
+            return q;
+        }
+
         private static IQueryable<Governorate> ApplyColumnFilters(
             IQueryable<Governorate> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_name,
             string? filterCol_created,
             string? filterCol_updated)
@@ -76,6 +137,10 @@ namespace ERP.Controllers
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0) query = query.Where(g => ids.Contains(g.GovernorateId));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                query = ApplyIntExpr(query, NormalizeNumericExpr(filterCol_idExpr), g => g.GovernorateId);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_name))
             {
@@ -89,10 +154,33 @@ namespace ERP.Controllers
                     .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
                 if (parts.Count > 0)
                 {
-                    var dates = new List<DateTime?>();
+                    var mins = new List<DateTime>();
                     foreach (var p in parts)
-                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
-                    if (dates.Count > 0) query = query.Where(g => g.CreatedAt.HasValue && dates.Contains(g.CreatedAt));
+                    {
+                        if (DateTime.TryParse(p, out var d))
+                            mins.Add(new DateTime(d.Year, d.Month, d.Day, d.Hour, d.Minute, 0));
+                    }
+
+                    if (mins.Count > 0)
+                    {
+                        // مطابقة بالدقيقة (yyyy-MM-dd HH:mm) بدل المطابقة الكاملة للثواني
+                        var param = Expression.Parameter(typeof(Governorate), "g");
+                        var createdProp = Expression.Property(param, nameof(Governorate.CreatedAt));
+                        var hasValue = Expression.Property(createdProp, "HasValue");
+                        var value = Expression.Property(createdProp, "Value");
+
+                        Expression body = Expression.Constant(false);
+                        foreach (var m in mins.Distinct())
+                        {
+                            var ge = Expression.GreaterThanOrEqual(value, Expression.Constant(m));
+                            var lt = Expression.LessThan(value, Expression.Constant(m.AddMinutes(1)));
+                            var and = Expression.AndAlso(hasValue, Expression.AndAlso(ge, lt));
+                            body = Expression.OrElse(body, and);
+                        }
+
+                        var pred = Expression.Lambda<Func<Governorate, bool>>(body, param);
+                        query = query.Where(pred);
+                    }
                 }
             }
             if (!string.IsNullOrWhiteSpace(filterCol_updated))
@@ -101,10 +189,32 @@ namespace ERP.Controllers
                     .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
                 if (parts.Count > 0)
                 {
-                    var dates = new List<DateTime?>();
+                    var mins = new List<DateTime>();
                     foreach (var p in parts)
-                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
-                    if (dates.Count > 0) query = query.Where(g => g.UpdatedAt.HasValue && dates.Contains(g.UpdatedAt));
+                    {
+                        if (DateTime.TryParse(p, out var d))
+                            mins.Add(new DateTime(d.Year, d.Month, d.Day, d.Hour, d.Minute, 0));
+                    }
+
+                    if (mins.Count > 0)
+                    {
+                        var param = Expression.Parameter(typeof(Governorate), "g");
+                        var updatedProp = Expression.Property(param, nameof(Governorate.UpdatedAt));
+                        var hasValue = Expression.Property(updatedProp, "HasValue");
+                        var value = Expression.Property(updatedProp, "Value");
+
+                        Expression body = Expression.Constant(false);
+                        foreach (var m in mins.Distinct())
+                        {
+                            var ge = Expression.GreaterThanOrEqual(value, Expression.Constant(m));
+                            var lt = Expression.LessThan(value, Expression.Constant(m.AddMinutes(1)));
+                            var and = Expression.AndAlso(hasValue, Expression.AndAlso(ge, lt));
+                            body = Expression.OrElse(body, and);
+                        }
+
+                        var pred = Expression.Lambda<Func<Governorate, bool>>(body, param);
+                        query = query.Where(pred);
+                    }
                 }
             }
             return query;
@@ -113,6 +223,7 @@ namespace ERP.Controllers
         private IQueryable<Governorate> SearchSortFilter(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange,
@@ -122,6 +233,7 @@ namespace ERP.Controllers
             int? codeFrom,
             int? codeTo,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_name,
             string? filterCol_created,
             string? filterCol_updated)
@@ -154,7 +266,7 @@ namespace ERP.Controllers
             if (codeTo.HasValue)
                 q = q.Where(g => g.GovernorateId <= codeTo.Value);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_created, filterCol_updated);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_name, filterCol_created, filterCol_updated);
 
             // بحث + ترتيب (ApplySearchSort)
             q = q.ApplySearchSort(
@@ -162,7 +274,8 @@ namespace ERP.Controllers
                 sort, dir,
                 GovStringFields, GovIntFields, GovOrderFields,
                 defaultSearchBy: "all",
-                defaultSortBy: "name"
+                defaultSortBy: "name",
+                searchMode: searchMode
             );
 
             return q;
@@ -181,6 +294,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "name",
             string? dir = "asc",
             bool useDateRange = false,
@@ -190,22 +304,39 @@ namespace ERP.Controllers
             int? codeFrom = null,
             int? codeTo = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_created = null,
             string? filterCol_updated = null,
             int page = 1,
-            int pageSize = 50)
+            int pageSize = 10)
         {
+            // تجنّب أخذ قيمة قديمة عند تكرار المعامل في الـ Query (مثل pageSize من فورم آخر)
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+            if (Request.Query.ContainsKey("search"))
+                search = Request.Query["search"].LastOrDefault();
+            if (Request.Query.ContainsKey("searchBy"))
+                searchBy = Request.Query["searchBy"].LastOrDefault();
+            if (Request.Query.ContainsKey("searchMode"))
+                searchMode = Request.Query["searchMode"].LastOrDefault();
+
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
+
             var q = SearchSortFilter(
-                search, searchBy,
+                search, searchBy, sm,
                 sort, dir,
                 useDateRange, fromDate, toDate, dateField ?? "created",
                 codeFrom, codeTo,
-                filterCol_id, filterCol_name, filterCol_created, filterCol_updated
+                filterCol_id, filterCol_idExpr, filterCol_name, filterCol_created, filterCol_updated
             );
 
             if (page < 1) page = 1;
-            if (pageSize < 1) pageSize = 50;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
 
             bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             var model = await PagedResult<Governorate>.CreateAsync(q, page, pageSize, sort, descending, search, searchBy);
@@ -217,12 +348,14 @@ namespace ERP.Controllers
 
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = sort;
             ViewBag.Dir = dir;
             ViewBag.DateField = dateField ?? "created";
             ViewBag.CodeFrom = codeFrom;
             ViewBag.CodeTo = codeTo;
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Name = filterCol_name;
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Updated = filterCol_updated;
@@ -233,9 +366,42 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> GetColumnValues(string column, string? search = null)
         {
-            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var valuesSearch = Request.Query["valuesSearch"].LastOrDefault();
+            var searchTerm = (valuesSearch ?? search ?? "").Trim().ToLowerInvariant();
             var columnLower = (column ?? "").Trim().ToLowerInvariant();
-            var q = _db.Governorates.AsNoTracking();
+
+            // نطبّق نفس فلاتر الصفحة الحالية على قائمة القيم (حتى القيم تعكس "المفلتر الحالي")
+            var listSearch = Request.Query["listSearch"].LastOrDefault();
+            var listSearchBy = Request.Query["listSearchBy"].LastOrDefault();
+            var listSearchMode = Request.Query["listSearchMode"].LastOrDefault();
+            var sort = Request.Query["sort"].LastOrDefault();
+            var dir = Request.Query["dir"].LastOrDefault();
+            var dateField = Request.Query["dateField"].LastOrDefault() ?? "created";
+
+            bool useDateRange = string.Equals(Request.Query["useDateRange"].LastOrDefault(), "true", StringComparison.OrdinalIgnoreCase);
+            DateTime? fromDate = null;
+            DateTime? toDate = null;
+            if (DateTime.TryParse(Request.Query["fromDate"].LastOrDefault(), out var fd)) fromDate = fd;
+            if (DateTime.TryParse(Request.Query["toDate"].LastOrDefault(), out var td)) toDate = td;
+
+            int? codeFrom = null;
+            int? codeTo = null;
+            if (int.TryParse(Request.Query["codeFrom"].LastOrDefault(), out var cf)) codeFrom = cf;
+            if (int.TryParse(Request.Query["codeTo"].LastOrDefault(), out var ct)) codeTo = ct;
+
+            var filterCol_id = Request.Query["filterCol_id"].LastOrDefault();
+            var filterCol_idExpr = Request.Query["filterCol_idExpr"].LastOrDefault();
+            var filterCol_name = Request.Query["filterCol_name"].LastOrDefault();
+            var filterCol_created = Request.Query["filterCol_created"].LastOrDefault();
+            var filterCol_updated = Request.Query["filterCol_updated"].LastOrDefault();
+
+            var q = SearchSortFilter(
+                listSearch, listSearchBy, (listSearchMode ?? "contains").Trim().ToLowerInvariant(),
+                sort ?? "name", dir ?? "asc",
+                useDateRange, fromDate, toDate, dateField,
+                codeFrom, codeTo,
+                filterCol_id, filterCol_idExpr, filterCol_name, filterCol_created, filterCol_updated
+            );
 
             if (columnLower == "id" || columnLower == "governorateid")
             {
@@ -471,6 +637,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -480,17 +647,21 @@ namespace ERP.Controllers
             int? codeFrom = null,
             int? codeTo = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_created = null,
             string? filterCol_updated = null,
             string? format = "excel")
         {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
+
             var q = SearchSortFilter(
-                search, searchBy,
+                search, searchBy, sm,
                 sort ?? "name", dir ?? "asc",
                 useDateRange, fromDate, toDate, dateField ?? "created",
                 codeFrom, codeTo,
-                filterCol_id, filterCol_name, filterCol_created, filterCol_updated
+                filterCol_id, filterCol_idExpr, filterCol_name, filterCol_created, filterCol_updated
             );
             var rows = await q.ToListAsync();
             var fmt = (format ?? "excel").Trim().ToLowerInvariant();

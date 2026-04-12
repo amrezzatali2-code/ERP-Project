@@ -78,7 +78,7 @@ public class UserActivityLogsController_Search_Tests
 
         var controller = CreateController(db);
 
-        var result = Assert.IsType<ViewResult>(await controller.Index(search: "١٢", searchBy: "id", sort: null, dir: null));
+        var result = Assert.IsType<ViewResult>(await controller.Index(search: "١٢", searchBy: "id", searchMode: "contains", sort: null, dir: null));
         var model = Assert.IsType<PagedResult<UserActivityLog>>(result.Model);
 
         Assert.Single(model.Items);
@@ -93,7 +93,7 @@ public class UserActivityLogsController_Search_Tests
 
         var controller = CreateController(db);
 
-        var result = Assert.IsType<ViewResult>(await controller.Index(search: "بطاقة", searchBy: "description", sort: null, dir: null));
+        var result = Assert.IsType<ViewResult>(await controller.Index(search: "بطاقة", searchBy: "description", searchMode: "contains", sort: null, dir: null));
         var model = Assert.IsType<PagedResult<UserActivityLog>>(result.Model);
 
         Assert.Single(model.Items);

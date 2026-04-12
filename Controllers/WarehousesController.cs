@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,7 @@ using ERP.Filters;
 using ERP.Models;
 using ERP.Infrastructure;                     // PagedResult + UserActivityLogger
 using ERP.Security;
+using ERP.Services;
 using ERP.Services.Caching;
 using System.IO;                 // MemoryStream
 using System.Text;               // StringBuilder + Encoding للـ CSV
@@ -31,15 +33,18 @@ namespace ERP.Controllers
         private readonly AppDbContext _db;
         private readonly IUserActivityLogger _activityLogger;
         private readonly ILookupCacheService _lookupCache;
+        private readonly IPermissionService _permissionService;
 
         public WarehousesController(
             AppDbContext db,
             IUserActivityLogger activityLogger,
-            ILookupCacheService lookupCache)
+            ILookupCacheService lookupCache,
+            IPermissionService permissionService)
         {
             _db = db;
             _activityLogger = activityLogger;
             _lookupCache = lookupCache;
+            _permissionService = permissionService;
         }
 
         // =========================
@@ -48,107 +53,230 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> Index(
             string? search,
-            string? searchBy = "name",      // name | id | branch | active
-            string? sort = "name",          // name | id | branch | active | created | modified
+            string? searchBy = "name",
+            string? searchMode = "contains",
+            string? sort = "name",
             string? dir = "asc",
             int page = 1,
-            int pageSize = 25,
-            bool useDateRange = false,      // تفعيل فلترة التاريخ
-            DateTime? fromDate = null,      // من تاريخ (تاريخ إنشاء المخزن)
-            DateTime? toDate = null,        // إلى تاريخ
-            int? fromCode = null,          // فلتر كود من
-            int? toCode = null,            // فلتر كود إلى
+            int pageSize = 10,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null,
             string? filterCol_id = null,
             string? filterCol_name = null,
             string? filterCol_branch = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
-            string? filterCol_modified = null
-        )
+            string? filterCol_modified = null)
         {
-            // الاستعلام الأساسي مع جلب الفرع (Branch)
-            IQueryable<Warehouse> q = _db.Warehouses
-                                         .AsNoTracking()
-                                         .Include(w => w.Branch);
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
 
-            // تنظيف قيم الفلاتر
+            var smRaw = Request.Query["searchMode"];
+            if (smRaw.Count > 0)
+            {
+                static string NormSm(string? v)
+                {
+                    if (string.IsNullOrWhiteSpace(v)) return "";
+                    var t = v.Trim().ToLowerInvariant();
+                    if (t == "startswith") t = "starts";
+                    if (t == "eq" || t == "equals") t = "contains";
+                    if (t != "contains" && t != "starts" && t != "ends") t = "contains";
+                    return t;
+                }
+                if (smRaw.Count == 1 && !string.IsNullOrEmpty(smRaw[0]))
+                    searchMode = smRaw[0];
+                else
+                {
+                    var norms = smRaw.Select(NormSm).Where(x => x.Length > 0).ToList();
+                    if (norms.Count == 0) { }
+                    else if (norms.Distinct().Count() == 1)
+                        searchMode = norms[0];
+                    else if (norms.Contains("contains"))
+                        searchMode = "contains";
+                    else
+                        searchMode = norms[^1];
+                }
+            }
+
             var s = (search ?? string.Empty).Trim();
             var sb = (searchBy ?? "name").Trim().ToLowerInvariant();
-            var so = (sort ?? "name").Trim().ToLowerInvariant();
-            bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            if (sb == "updated") sb = "modified";
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm == "startswith") sm = "starts";
+            if (sm == "eq" || sm == "equals") sm = "contains";
+            if (sm != "contains" && sm != "starts" && sm != "ends")
+                sm = "contains";
 
-            // ===== البحث =====
+            var so = (sort ?? "name").Trim().ToLowerInvariant();
+            var desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+
+            page = page <= 0 ? 1 : page;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
+            IQueryable<Warehouse> q = _db.Warehouses.AsNoTracking().Include(w => w.Branch);
+            q = ApplyWarehouseFilters(q, s, sb, sm, useDateRange, fromDate, toDate, fromCode, toCode,
+                filterCol_id, filterCol_name, filterCol_branch, filterCol_active, filterCol_created, filterCol_modified);
+
+            var activeFiltered = await q.CountAsync(w => w.IsActive);
+            var inactiveFiltered = await q.CountAsync(w => !w.IsActive);
+
+            q = ApplyWarehouseSort(q, so, desc);
+
+            var model = await PagedResult<Warehouse>.CreateAsync(q, page, pageSize);
+            model.Search = s;
+            model.SearchBy = sb;
+            model.SortColumn = so;
+            model.SortDescending = desc;
+            model.UseDateRange = useDateRange;
+            model.FromDate = fromDate;
+            model.ToDate = toDate;
+
+            ViewBag.SearchMode = sm;
+            ViewBag.PageSize = model.PageSize;
+            ViewBag.ActiveFilteredCount = activeFiltered;
+            ViewBag.InactiveFilteredCount = inactiveFiltered;
+
+            ViewBag.CanCreate = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Warehouses", "Create"));
+            ViewBag.CanEdit = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Warehouses", "Edit"));
+            ViewBag.CanShow = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Warehouses", "Show"));
+            ViewBag.CanDelete = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Warehouses", "Delete"));
+            ViewBag.CanBulkDelete = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Warehouses", "BulkDelete"));
+            ViewBag.CanDeleteAll = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Warehouses", "DeleteAll"));
+            ViewBag.CanExport = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Warehouses", "Export"));
+
+            ViewBag.SearchOptions = new[]
+            {
+                new SelectListItem("الاسم", "name", sb == "name"),
+                new SelectListItem("المعرّف", "id", sb == "id"),
+                new SelectListItem("الفرع", "branch", sb == "branch"),
+                new SelectListItem("الفعالية", "active", sb == "active"),
+                new SelectListItem("تاريخ الإنشاء", "created", sb == "created"),
+                new SelectListItem("آخر تعديل", "modified", sb == "modified"),
+            };
+
+            ViewBag.SortOptions = new[]
+            {
+                new SelectListItem("الاسم", "name", so == "name"),
+                new SelectListItem("المعرّف", "id", so == "id"),
+                new SelectListItem("الفرع", "branch", so == "branch"),
+                new SelectListItem("الفعالية", "active", so == "active"),
+                new SelectListItem("تاريخ الإنشاء", "created", so == "created"),
+                new SelectListItem("آخر تعديل", "modified", so == "modified"),
+            };
+
+            ViewBag.Search = s;
+            ViewBag.SearchBy = sb;
+            ViewBag.Sort = so;
+            ViewBag.Dir = desc ? "desc" : "asc";
+            ViewBag.Page = page;
+            ViewBag.Total = model.TotalCount;
+            ViewBag.UseDateRange = useDateRange;
+            ViewBag.FromDate = fromDate;
+            ViewBag.ToDate = toDate;
+            ViewBag.FromCode = fromCode;
+            ViewBag.ToCode = toCode;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Branch = filterCol_branch;
+            ViewBag.FilterCol_Active = filterCol_active;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Modified = filterCol_modified;
+
+            return View(model);
+        }
+
+        private static IQueryable<Warehouse> ApplyWarehouseFilters(
+            IQueryable<Warehouse> q,
+            string s,
+            string sb,
+            string sm,
+            bool useDateRange,
+            DateTime? fromDate,
+            DateTime? toDate,
+            int? fromCode,
+            int? toCode,
+            string? filterCol_id,
+            string? filterCol_name,
+            string? filterCol_branch,
+            string? filterCol_active,
+            string? filterCol_created,
+            string? filterCol_modified)
+        {
+            var likeContains = $"%{s}%";
+            var likeStarts = $"{s}%";
+            var likeEnds = $"%{s}";
+            var pattern = sm == "starts" ? likeStarts : sm == "ends" ? likeEnds : likeContains;
+
             if (!string.IsNullOrEmpty(s))
             {
                 switch (sb)
                 {
-                    case "id":   // البحث برقم المخزن (WarehouseId = int)
+                    case "id":
                         if (int.TryParse(s, out var wid))
-                        {
-                            // لو كتب رقم صريح
                             q = q.Where(w => w.WarehouseId == wid);
-                        }
+                        else if (sm == "starts")
+                            q = q.Where(w => w.WarehouseId.ToString().StartsWith(s));
+                        else if (sm == "ends")
+                            q = q.Where(w => w.WarehouseId.ToString().EndsWith(s));
                         else
-                        {
-                            // لو كتب نص وفيه أرقام جزئية
                             q = q.Where(w => w.WarehouseId.ToString().Contains(s));
-                        }
                         break;
 
-                    case "branch":   // البحث باسم الفرع
+                    case "branch":
                         q = q.Where(w =>
                             w.Branch != null &&
-                            w.Branch.BranchName.Contains(s));
+                            w.Branch.BranchName != null &&
+                            EF.Functions.Like(w.Branch.BranchName, pattern));
                         break;
 
-                    case "active":   // البحث بحالة الفعالية
-                        // يسمح بـ "1/0" أو "نعم/لا" أو "true/false"
+                    case "active":
                         var yes = new[] { "1", "نعم", "yes", "true", "فعال" };
                         var no = new[] { "0", "لا", "no", "false", "غير" };
-
                         if (yes.Contains(s, StringComparer.OrdinalIgnoreCase))
-                        {
                             q = q.Where(w => w.IsActive);
-                        }
                         else if (no.Contains(s, StringComparer.OrdinalIgnoreCase))
-                        {
                             q = q.Where(w => !w.IsActive);
-                        }
                         else
-                        {
-                            // لو كتب كلمة مش مفهومة في active => لا نتيجة
                             q = q.Where(w => false);
-                        }
+                        break;
+
+                    case "created":
+                        q = q.Where(w => EF.Functions.Like(w.CreatedAt.ToString("yyyy/MM/dd HH:mm"), pattern));
+                        break;
+
+                    case "modified":
+                        q = q.Where(w =>
+                            EF.Functions.Like((w.UpdatedAt ?? w.CreatedAt).ToString("yyyy/MM/dd HH:mm"), pattern));
                         break;
 
                     case "name":
-                    default:         // البحث باسم المخزن
-                        q = q.Where(w => w.WarehouseName.Contains(s));
+                    default:
+                        q = q.Where(w =>
+                            w.WarehouseName != null &&
+                            EF.Functions.Like(w.WarehouseName, pattern));
                         break;
                 }
             }
 
-            // ===== فلتر كود من/إلى =====
             if (fromCode.HasValue)
                 q = q.Where(w => w.WarehouseId >= fromCode.Value);
             if (toCode.HasValue)
                 q = q.Where(w => w.WarehouseId <= toCode.Value);
 
-            // ===== فلترة بالتاريخ (تاريخ الإنشاء) =====
             if (useDateRange)
             {
                 if (fromDate.HasValue)
-                {
                     q = q.Where(w => w.CreatedAt >= fromDate.Value);
-                }
-
                 if (toDate.HasValue)
-                {
                     q = q.Where(w => w.CreatedAt <= toDate.Value);
-                }
             }
 
-            // ===== فلاتر الأعمدة (بنمط Excel) =====
             var sep = new[] { '|', ',' };
             if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
@@ -185,14 +313,13 @@ namespace ERP.Controllers
                     .ToList();
                 var activeList = new List<string> { "نشط", "active", "1", "نعم", "yes", "true" };
                 var inactiveList = new List<string> { "موقوف", "inactive", "0", "لا", "no", "false" };
-                bool wantActive = vals.Any(v => activeList.Contains(v));
-                bool wantInactive = vals.Any(v => inactiveList.Contains(v));
+                var wantActive = vals.Any(v => activeList.Contains(v));
+                var wantInactive = vals.Any(v => inactiveList.Contains(v));
                 if (wantActive && !wantInactive)
                     q = q.Where(w => w.IsActive);
                 else if (wantInactive && !wantActive)
                     q = q.Where(w => !w.IsActive);
-                else if (wantActive && wantInactive) { /* الكل */ }
-                else
+                else if (!wantActive && !wantInactive)
                     q = q.Where(w => false);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_created))
@@ -218,96 +345,31 @@ namespace ERP.Controllers
                     q = q.Where(w => yearMonthKeys.Contains((w.UpdatedAt ?? w.CreatedAt).Year * 100 + (w.UpdatedAt ?? w.CreatedAt).Month));
             }
 
-            // ===== الترتيب =====
-            q = so switch
-            {
-                "id" => (desc
-                    ? q.OrderByDescending(w => w.WarehouseId)
-                    : q.OrderBy(w => w.WarehouseId)),
-
-                "branch" => (desc
-                    ? q.OrderByDescending(w => w.Branch!.BranchName)
-                    : q.OrderBy(w => w.Branch!.BranchName)),
-
-                "active" => (desc
-                    ? q.OrderByDescending(w => w.IsActive).ThenBy(w => w.WarehouseName)
-                    : q.OrderBy(w => w.IsActive).ThenBy(w => w.WarehouseName)),
-
-                "created" => (desc
-                    ? q.OrderByDescending(w => w.CreatedAt)
-                    : q.OrderBy(w => w.CreatedAt)),
-
-                "modified" => (desc
-                    ? q.OrderByDescending(w => w.UpdatedAt ?? w.CreatedAt)
-                    : q.OrderBy(w => w.UpdatedAt ?? w.CreatedAt)),
-
-                "name" or _ => (desc
-                    ? q.OrderByDescending(w => w.WarehouseName)
-                    : q.OrderBy(w => w.WarehouseName)),
-            };
-
-            // ===== الترقيم =====
-            if (page < 1) page = 1;
-            if (pageSize < 1) pageSize = 25;
-
-            int total = await q.CountAsync();
-            var items = await q.Skip((page - 1) * pageSize)
-                               .Take(pageSize)
-                               .ToListAsync();
-
-            // إنشاء موديل PagedResult مع تخزين بيانات الفلترة/الترتيب
-            var model = new PagedResult<Warehouse>(items, page, pageSize, total)
-            {
-                Search = s,               // نص البحث الحالي
-                SearchBy = sb,              // الحقل الذي نبحث به
-                SortColumn = so,              // عمود الترتيب الحالي
-                SortDescending = desc,            // اتجاه الترتيب
-                UseDateRange = useDateRange,    // هل فلترة التاريخ فعّالة؟
-                FromDate = fromDate,        // من تاريخ
-                ToDate = toDate           // إلى تاريخ
-            };
-
-            // خيارات البارشال (ابحث في / رتب حسب)
-            ViewBag.SearchOptions = new[]
-            {
-                new SelectListItem("الاسم",    "name",   sb == "name"),
-                new SelectListItem("المعرّف",  "id",     sb == "id"),
-                new SelectListItem("الفرع",    "branch", sb == "branch"),
-                new SelectListItem("الفعالية", "active", sb == "active"),
-            };
-
-            ViewBag.SortOptions = new[]
-            {
-                new SelectListItem("الاسم",          "name",     so == "name"),
-                new SelectListItem("المعرّف",        "id",       so == "id"),
-                new SelectListItem("الفرع",          "branch",   so == "branch"),
-                new SelectListItem("الفعالية",       "active",   so == "active"),
-                new SelectListItem("تاريخ الإنشاء", "created",  so == "created"),
-                new SelectListItem("آخر تعديل",     "modified", so == "modified"),
-            };
-
-            // تمرير حالة الفلاتر للواجهة (للرجوع لها من ViewBag إذا احتجنا)
-            ViewBag.Search = s;
-            ViewBag.SearchBy = sb;
-            ViewBag.Sort = so;
-            ViewBag.Dir = desc ? "desc" : "asc";
-            ViewBag.Page = page;
-            ViewBag.PageSize = pageSize;
-            ViewBag.Total = total;
-            ViewBag.UseDateRange = useDateRange;
-            ViewBag.FromDate = fromDate;
-            ViewBag.ToDate = toDate;
-            ViewBag.FromCode = fromCode;
-            ViewBag.ToCode = toCode;
-            ViewBag.FilterCol_Id = filterCol_id;
-            ViewBag.FilterCol_Name = filterCol_name;
-            ViewBag.FilterCol_Branch = filterCol_branch;
-            ViewBag.FilterCol_Active = filterCol_active;
-            ViewBag.FilterCol_Created = filterCol_created;
-            ViewBag.FilterCol_Modified = filterCol_modified;
-
-            return View(model);
+            return q;
         }
+
+        private static IQueryable<Warehouse> ApplyWarehouseSort(IQueryable<Warehouse> q, string so, bool desc) =>
+            so switch
+            {
+                "id" => desc
+                    ? q.OrderByDescending(w => w.WarehouseId)
+                    : q.OrderBy(w => w.WarehouseId),
+                "branch" => desc
+                    ? q.OrderByDescending(w => w.Branch != null ? w.Branch.BranchName ?? "" : "")
+                    : q.OrderBy(w => w.Branch != null ? w.Branch.BranchName ?? "" : ""),
+                "active" => desc
+                    ? q.OrderByDescending(w => w.IsActive).ThenBy(w => w.WarehouseName)
+                    : q.OrderBy(w => w.IsActive).ThenBy(w => w.WarehouseName),
+                "created" => desc
+                    ? q.OrderByDescending(w => w.CreatedAt)
+                    : q.OrderBy(w => w.CreatedAt),
+                "modified" => desc
+                    ? q.OrderByDescending(w => w.UpdatedAt ?? w.CreatedAt)
+                    : q.OrderBy(w => w.UpdatedAt ?? w.CreatedAt),
+                "name" or _ => desc
+                    ? q.OrderByDescending(w => w.WarehouseName)
+                    : q.OrderBy(w => w.WarehouseName),
+            };
 
         // =========================================================
         // API: جلب القيم المميزة لعمود (للفلترة بنمط Excel)
@@ -482,6 +544,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("Warehouses.BulkDelete")]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
         {
             // selectedIds تأتي من الفورم كقائمة "1,3,5,7"
@@ -528,6 +591,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("Warehouses.DeleteAll")]
         public async Task<IActionResult> DeleteAll()
         {
             var all = await _db.Warehouses.ToListAsync();
@@ -554,83 +618,48 @@ namespace ERP.Controllers
         // Export — تصدير قائمة المخازن (Excel أو CSV)
         // =========================
         [HttpGet]
+        [RequirePermission("Warehouses.Export")]
         public async Task<IActionResult> Export(
             string? search,
-            string? searchBy = "name",   // name | id | branch | active
-            string? sort = "name",   // name | id | branch | active
-            string? dir = "asc",    // asc | desc
-            string? format = "excel"   // excel | csv
-        )
+            string? searchBy = "name",
+            string? searchMode = "contains",
+            string? sort = "name",
+            string? dir = "asc",
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_branch = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_modified = null,
+            string? format = "excel")
         {
-            // الاستعلام الأساسي مع جلب الفرع
-            IQueryable<Warehouse> q = _db.Warehouses
-                                         .AsNoTracking()
-                                         .Include(w => w.Branch);
+            var s = (search ?? string.Empty).Trim();
+            var sb = (searchBy ?? "name").Trim().ToLowerInvariant();
+            if (sb == "updated") sb = "modified";
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm == "startswith") sm = "starts";
+            if (sm == "eq" || sm == "equals") sm = "contains";
+            if (sm != "contains" && sm != "starts" && sm != "ends")
+                sm = "contains";
 
-            // ===== تنظيف قيم الفلاتر =====
-            var s = (search ?? string.Empty).Trim();               // متغير: نص البحث
-            var sb = (searchBy ?? "name").Trim().ToLowerInvariant();  // متغير: نوع البحث
-            var so = (sort ?? "name").Trim().ToLowerInvariant();  // متغير: عمود الترتيب
-            bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase); // متغير: هل الترتيب تنازلي؟
+            var so = (sort ?? "name").Trim().ToLowerInvariant();
+            var desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
-            // ===== البحث (نفس منطق Index) =====
-            if (!string.IsNullOrEmpty(s))
-            {
-                switch (sb)
-                {
-                    case "id":
-                        if (int.TryParse(s, out var wid))
-                            q = q.Where(w => w.WarehouseId == wid);
-                        else
-                            q = q.Where(w => w.WarehouseId.ToString().Contains(s));
-                        break;
+            IQueryable<Warehouse> q = _db.Warehouses.AsNoTracking().Include(w => w.Branch);
+            q = ApplyWarehouseFilters(q, s, sb, sm, useDateRange, fromDate, toDate, fromCode, toCode,
+                filterCol_id, filterCol_name, filterCol_branch, filterCol_active, filterCol_created, filterCol_modified);
+            q = ApplyWarehouseSort(q, so, desc);
 
-                    case "branch":
-                        q = q.Where(w => w.Branch != null &&
-                                         w.Branch.BranchName.Contains(s));
-                        break;
-
-                    case "active":
-                        var yes = new[] { "1", "نعم", "yes", "true", "فعال" };
-                        var no = new[] { "0", "لا", "no", "false", "غير" };
-
-                        if (yes.Contains(s, StringComparer.OrdinalIgnoreCase))
-                            q = q.Where(w => w.IsActive);
-                        else if (no.Contains(s, StringComparer.OrdinalIgnoreCase))
-                            q = q.Where(w => !w.IsActive);
-                        else
-                            q = q.Where(w => false); // كلمة غير مفهومة
-                        break;
-
-                    case "name":
-                    default:
-                        q = q.Where(w => w.WarehouseName.Contains(s));
-                        break;
-                }
-            }
-
-            // ===== الترتيب (نفس منطق Index) =====
-            q = so switch
-            {
-                "id" => (desc ? q.OrderByDescending(w => w.WarehouseId)
-                              : q.OrderBy(w => w.WarehouseId)),
-
-                "branch" => (desc ? q.OrderByDescending(w => w.Branch!.BranchName)
-                                  : q.OrderBy(w => w.Branch!.BranchName)),
-
-                "active" => (desc ? q.OrderByDescending(w => w.IsActive)
-                                  : q.OrderBy(w => w.IsActive)),
-
-                "name" or _ => (desc ? q.OrderByDescending(w => w.WarehouseName)
-                                     : q.OrderBy(w => w.WarehouseName)),
-            };
-
-            // ===== جلب كل السجلات (بدون Paging) =====
-            var rows = await q.ToListAsync();   // متغير: كل المخازن بعد الفلترة
+            var rows = await q.ToListAsync();
 
             format = (format ?? "excel").Trim().ToLowerInvariant();
 
-            // ============= CSV =============
+            // ============= CSV (يُحوَّل إلى PDF عبر PdfExportMiddleware عند format=pdf في الطلب الأصلي) =============
             if (format == "csv")
             {
                 var sbCsv = new StringBuilder();    // متغير: بناء نص CSV

@@ -54,6 +54,7 @@ public class GovernoratesExport_Tests
         var result = await controller.Export(
             search: null,
             searchBy: null,
+            searchMode: null,
             sort: null,
             dir: null,
             format: "csv");

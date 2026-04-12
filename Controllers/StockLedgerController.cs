@@ -92,29 +92,51 @@ namespace ERP.Controllers
         }
 
         /// <summary>
-        /// بحث دفتر الحركة — مواءمة مع منطق قائمة الأصناف: حقول نصية بـ LIKE، كلمات متعددة بـ AND،
-        /// ويشمل اسم الصنف والمخزن والمنطقة والكاتب (لا يعتمد على StringFields الضيقة في ApplySearchSort).
+        /// تطبيع وضع البحث (يبدأ / يحتوي / ينتهي) — آخر قيمة في الـ Query إن وُجدت (مثل pageSize).
+        /// </summary>
+        private string ResolveSearchMode(string? searchMode)
+        {
+            var smQuery = Request.Query["searchMode"].LastOrDefault();
+            if (!string.IsNullOrEmpty(smQuery))
+                searchMode = smQuery;
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm == "startswith") sm = "starts";
+            if (sm == "eq" || sm == "equals") sm = "contains";
+            if (sm != "contains" && sm != "starts" && sm != "ends")
+                sm = "contains";
+            return sm;
+        }
+
+        private static string StockLedgerTextLikePattern(string w, string sm) =>
+            sm == "starts" ? $"{w}%" : sm == "ends" ? $"%{w}" : $"%{w}%";
+
+        /// <summary>
+        /// بحث دفتر الحركة — حقول نصية بـ LIKE حسب الوضع (يحتوي / يبدأ / ينتهي)، كلمات متعددة AND،
+        /// وأرقام كـ تطابق تام عند التحليل أو StartsWith/Contains/EndsWith على النص.
         /// </summary>
         private static IQueryable<StockLedger> ApplyStockLedgerSearchFilter(
             IQueryable<StockLedger> q,
             string? search,
-            string? searchBy)
+            string? searchBy,
+            string searchMode)
         {
             if (string.IsNullOrWhiteSpace(search))
                 return q;
 
             var normalized = NormalizeArabicDigitsToLatin(search.Trim());
             var sb = (searchBy ?? "all").Trim().ToLowerInvariant();
+            var sm = searchMode.Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
+
             var words = normalized.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             if (words.Length == 0)
                 return q;
 
-            // ——— بحث «الكل»: كل كلمة يجب أن تُطابق أحد الحقول (OR داخل الكلمة)، والكلمات معاً AND ———
             if (sb == "all")
             {
                 foreach (var w in words)
                 {
-                    var like = $"%{w}%";
+                    var like = StockLedgerTextLikePattern(w, sm);
                     q = q.Where(x =>
                         (x.BatchNo != null && EF.Functions.Like(x.BatchNo, like)) ||
                         (x.SourceType != null && EF.Functions.Like(x.SourceType, like)) ||
@@ -123,13 +145,12 @@ namespace ERP.Controllers
                         (x.Warehouse != null && x.Warehouse.Branch != null && x.Warehouse.Branch.BranchName != null &&
                          EF.Functions.Like(x.Warehouse.Branch.BranchName, like)) ||
                         (x.User != null && x.User.DisplayName != null && EF.Functions.Like(x.User.DisplayName, like)) ||
-                        x.ProdId.ToString().Contains(w) ||
-                        x.SourceId.ToString().Contains(w) ||
-                        x.EntryId.ToString().Contains(w) ||
-                        x.WarehouseId.ToString().Contains(w) ||
-                        x.SourceLine.ToString().Contains(w) ||
-                        x.QtyIn.ToString().Contains(w) ||
-                        x.QtyOut.ToString().Contains(w)
+                        (sm == "contains" && (x.ProdId.ToString().Contains(w) || x.SourceId.ToString().Contains(w) || x.EntryId.ToString().Contains(w) ||
+                            x.WarehouseId.ToString().Contains(w) || x.SourceLine.ToString().Contains(w) || x.QtyIn.ToString().Contains(w) || x.QtyOut.ToString().Contains(w))) ||
+                        (sm == "starts" && (x.ProdId.ToString().StartsWith(w) || x.SourceId.ToString().StartsWith(w) || x.EntryId.ToString().StartsWith(w) ||
+                            x.WarehouseId.ToString().StartsWith(w) || x.SourceLine.ToString().StartsWith(w) || x.QtyIn.ToString().StartsWith(w) || x.QtyOut.ToString().StartsWith(w))) ||
+                        (sm == "ends" && (x.ProdId.ToString().EndsWith(w) || x.SourceId.ToString().EndsWith(w) || x.EntryId.ToString().EndsWith(w) ||
+                            x.WarehouseId.ToString().EndsWith(w) || x.SourceLine.ToString().EndsWith(w) || x.QtyIn.ToString().EndsWith(w) || x.QtyOut.ToString().EndsWith(w)))
                     );
                 }
 
@@ -140,7 +161,7 @@ namespace ERP.Controllers
             {
                 foreach (var w in words)
                 {
-                    var like = $"%{w}%";
+                    var like = StockLedgerTextLikePattern(w, sm);
                     q = q.Where(x => x.Product != null && x.Product.ProdName != null && EF.Functions.Like(x.Product.ProdName, like));
                 }
 
@@ -151,42 +172,47 @@ namespace ERP.Controllers
             {
                 if (int.TryParse(normalized, out var ne))
                     return q.Where(x => x.EntryId == ne);
-                return q.Where(x => x.EntryId.ToString().Contains(normalized));
+                var like = StockLedgerTextLikePattern(normalized, sm);
+                return q.Where(x => EF.Functions.Like(x.EntryId.ToString(), like));
             }
 
             if (sb == "warehouse")
             {
                 if (int.TryParse(normalized, out var nw))
                     return q.Where(x => x.WarehouseId == nw);
-                return q.Where(x => x.WarehouseId.ToString().Contains(normalized));
+                var like = StockLedgerTextLikePattern(normalized, sm);
+                return q.Where(x => EF.Functions.Like(x.WarehouseId.ToString(), like));
             }
 
             if (sb == "product")
             {
                 if (int.TryParse(normalized, out var np))
                     return q.Where(x => x.ProdId == np);
-                return q.Where(x => x.ProdId.ToString().Contains(normalized));
+                var like = StockLedgerTextLikePattern(normalized, sm);
+                return q.Where(x => EF.Functions.Like(x.ProdId.ToString(), like));
             }
 
             if (sb == "sourceid")
             {
                 if (int.TryParse(normalized, out var ns))
                     return q.Where(x => x.SourceId == ns);
-                return q.Where(x => x.SourceId.ToString().Contains(normalized));
+                var like = StockLedgerTextLikePattern(normalized, sm);
+                return q.Where(x => EF.Functions.Like(x.SourceId.ToString(), like));
             }
 
             if (sb == "sourceline")
             {
                 if (int.TryParse(normalized, out var nl))
                     return q.Where(x => x.SourceLine == nl);
-                return q.Where(x => x.SourceLine.ToString().Contains(normalized));
+                var like = StockLedgerTextLikePattern(normalized, sm);
+                return q.Where(x => EF.Functions.Like(x.SourceLine.ToString(), like));
             }
 
             if (sb == "batch")
             {
                 foreach (var w in words)
                 {
-                    var like = $"%{w}%";
+                    var like = StockLedgerTextLikePattern(w, sm);
                     q = q.Where(x => x.BatchNo != null && EF.Functions.Like(x.BatchNo, like));
                 }
 
@@ -197,7 +223,7 @@ namespace ERP.Controllers
             {
                 foreach (var w in words)
                 {
-                    var like = $"%{w}%";
+                    var like = StockLedgerTextLikePattern(w, sm);
                     q = q.Where(x => x.SourceType != null && EF.Functions.Like(x.SourceType, like));
                 }
 
@@ -219,6 +245,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
+            string? searchMode = null,
             string? sort = "TranDate",
             string? dir = "desc",
             int page = 1,
@@ -268,6 +295,8 @@ namespace ERP.Controllers
             if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
                 pageSize = 10;
 
+            var sm = ResolveSearchMode(searchMode);
+
             // الاستعلام الأساسي
             IQueryable<StockLedger> q = context.StockLedger
                 .AsNoTracking()
@@ -277,7 +306,7 @@ namespace ERP.Controllers
                 .Include(x => x.User);
 
             // بحث نصي/متعدد الكلمات (يشمل اسم الصنف) — ثم ترتيب فقط عبر ApplySearchSort بدون تكرار فلترة قديمة
-            q = ApplyStockLedgerSearchFilter(q, search, searchBy);
+            q = ApplyStockLedgerSearchFilter(q, search, searchBy, sm);
             q = q.ApplySearchSort(
                 null, "all",
                 sort, dir,
@@ -460,6 +489,7 @@ namespace ERP.Controllers
 
             ViewBag.Search = s;
             ViewBag.SearchBy = sb;
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = so;
             ViewBag.Dir = desc ? "desc" : "asc";
             ViewBag.PageSize = model.PageSize;
@@ -887,6 +917,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy = "all",
+            string? searchMode = null,
             string? sort = "TranDate",
             string? dir = "desc",
             bool useDateRange = false,
@@ -933,7 +964,8 @@ namespace ERP.Controllers
                 .Include(x => x.Warehouse).ThenInclude(w => w.Branch)
                 .Include(x => x.User);
 
-            q = ApplyStockLedgerSearchFilter(q, search, searchBy);
+            var sm = ResolveSearchMode(searchMode);
+            q = ApplyStockLedgerSearchFilter(q, search, searchBy, sm);
             q = q.ApplySearchSort(
                 null, "all",
                 sort, dir,

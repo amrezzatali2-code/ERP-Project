@@ -150,6 +150,34 @@ namespace ERP.Controllers
                 pageSize = psVal;
             if (print) { pageSize = 0; page = 1; } // وضع الطباعة: كل الأصناف المفلترة، صفحة واحدة
 
+            // عند تكرار searchMode في الـ Query (نماذج متعددة): نطبّع كل القيم؛ إن تعارضت نفضّل «contains» لأنها الافتراضية في الواجهة
+            var smRaw = Request.Query["searchMode"];
+            if (smRaw.Count > 0)
+            {
+                static string NormSm(string? v)
+                {
+                    if (string.IsNullOrWhiteSpace(v)) return "";
+                    var t = v.Trim().ToLowerInvariant();
+                    if (t == "startswith") t = "starts";
+                    if (t == "eq" || t == "equals") t = "contains";
+                    if (t != "contains" && t != "starts" && t != "ends") t = "contains";
+                    return t;
+                }
+                if (smRaw.Count == 1 && !string.IsNullOrEmpty(smRaw[0]))
+                    searchMode = smRaw[0];
+                else
+                {
+                    var norms = smRaw.Select(NormSm).Where(x => x.Length > 0).ToList();
+                    if (norms.Count == 0) { }
+                    else if (norms.Distinct().Count() == 1)
+                        searchMode = norms[0];
+                    else if (norms.Contains("contains"))
+                        searchMode = "contains";
+                    else
+                        searchMode = norms[^1];
+                }
+            }
+
             // =========================================================
             // (1) الاستعلام الأساسي (بدون تتبّع لتحسين الأداء)
             //      + تحميل مجموعة الصنف ومجموعة البونص لعرض أسمائهما في الجدول
@@ -176,17 +204,18 @@ namespace ERP.Controllers
             if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
                 pageSize = 10;
 
-            // توحيد searchMode
-            if (sm == "startswith") sm = "starts";            // متغير: قبول startswith
-            if (sm == "eq") sm = "equals";                    // متغير: قبول eq
-            if (sm != "contains" && sm != "starts" && sm != "equals")
-                sm = "contains";                              // متغير: fallback
+            // توحيد searchMode — «يساوي» أُزيل من الواجهة؛ روابط قديمة تُعامل كـ «يحتوي»
+            if (sm == "startswith") sm = "starts";
+            if (sm == "eq" || sm == "equals") sm = "contains";
+            if (sm != "contains" && sm != "starts" && sm != "ends")
+                sm = "contains";
 
-            bool modeStarts = sm == "starts";                 // متغير: وضع يبدأ بـ
-            bool modeEquals = sm == "equals";                 // متغير: وضع يساوي
+            bool modeStarts = sm == "starts";
+            bool modeEquals = false;
+            bool modeEnds = sm == "ends";
 
             // =========================================================
-            // (3) تطبيق البحث (يدعم: يحتوي/يبدأ بـ/يساوي)
+            // (3) تطبيق البحث (يدعم: يحتوي/يبدأ بـ/ينتهي بـ)
             // =========================================================
             if (!string.IsNullOrWhiteSpace(s))
             {
@@ -195,12 +224,15 @@ namespace ERP.Controllers
 
                 string likeContains = $"%{s}%";   // متغير: LIKE يحتوي
                 string likeStarts = $"{s}%";      // متغير: LIKE يبدأ بـ
+                string likeEnds = $"%{s}";        // متغير: LIKE ينتهي بـ
 
                 switch (sb)
                 {
                     case "id":
                         if (isInt)
                             q = q.Where(p => p.ProdId == intVal);
+                        else if (modeEnds)
+                            q = q.Where(p => p.ProdId.ToString().EndsWith(s));
                         else
                             q = q.Where(p => p.ProdId.ToString().Contains(s));
                         break;
@@ -210,6 +242,8 @@ namespace ERP.Controllers
                             q = q.Where(p => p.Barcode != null && p.Barcode == s);
                         else if (modeStarts)
                             q = q.Where(p => p.Barcode != null && EF.Functions.Like(p.Barcode, likeStarts));
+                        else if (modeEnds)
+                            q = q.Where(p => p.Barcode != null && EF.Functions.Like(p.Barcode, likeEnds));
                         else
                             q = q.Where(p => p.Barcode != null && EF.Functions.Like(p.Barcode, likeContains));
                         break;
@@ -219,6 +253,8 @@ namespace ERP.Controllers
                             q = q.Where(p => p.ProdName != null && p.ProdName == s);
                         else if (modeStarts)
                             q = q.Where(p => p.ProdName != null && EF.Functions.Like(p.ProdName, likeStarts));
+                        else if (modeEnds)
+                            q = q.Where(p => p.ProdName != null && EF.Functions.Like(p.ProdName, likeEnds));
                         else
                             q = q.Where(p => p.ProdName != null && EF.Functions.Like(p.ProdName, likeContains));
                         break;
@@ -228,6 +264,8 @@ namespace ERP.Controllers
                             q = q.Where(p => p.GenericName != null && p.GenericName == s);
                         else if (modeStarts)
                             q = q.Where(p => p.GenericName != null && EF.Functions.Like(p.GenericName, likeStarts));
+                        else if (modeEnds)
+                            q = q.Where(p => p.GenericName != null && EF.Functions.Like(p.GenericName, likeEnds));
                         else
                             q = q.Where(p => p.GenericName != null && EF.Functions.Like(p.GenericName, likeContains));
                         break;
@@ -238,6 +276,8 @@ namespace ERP.Controllers
                             q = q.Where(p => p.ProductGroup != null && p.ProductGroup.Name == s);
                         else if (modeStarts)
                             q = q.Where(p => p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeStarts));
+                        else if (modeEnds)
+                            q = q.Where(p => p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeEnds));
                         else
                             q = q.Where(p => p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeContains));
                         break;
@@ -247,6 +287,8 @@ namespace ERP.Controllers
                             q = q.Where(p => p.ProductBonusGroup != null && p.ProductBonusGroup.Name == s);
                         else if (modeStarts)
                             q = q.Where(p => p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeStarts));
+                        else if (modeEnds)
+                            q = q.Where(p => p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeEnds));
                         else
                             q = q.Where(p => p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeContains));
                         break;
@@ -256,6 +298,8 @@ namespace ERP.Controllers
                             q = q.Where(p => p.Company != null && p.Company == s);
                         else if (modeStarts)
                             q = q.Where(p => p.Company != null && EF.Functions.Like(p.Company, likeStarts));
+                        else if (modeEnds)
+                            q = q.Where(p => p.Company != null && EF.Functions.Like(p.Company, likeEnds));
                         else
                             q = q.Where(p => p.Company != null && EF.Functions.Like(p.Company, likeContains));
                         break;
@@ -263,6 +307,8 @@ namespace ERP.Controllers
                     case "price":
                         if (isDec)
                             q = q.Where(p => p.PriceRetail == decVal);
+                        else if (modeEnds)
+                            q = q.Where(p => p.PriceRetail.ToString().EndsWith(s));
                         else
                             q = q.Where(p => p.PriceRetail.ToString().Contains(s));
                         break;
@@ -305,7 +351,10 @@ namespace ERP.Controllers
 
 
                     case "updated":
-                        q = q.Where(p => p.UpdatedAt.ToString().Contains(s));
+                        if (modeEnds)
+                            q = q.Where(p => p.UpdatedAt.ToString().EndsWith(s));
+                        else
+                            q = q.Where(p => p.UpdatedAt.ToString().Contains(s));
                         break;
 
                     default:
@@ -334,6 +383,20 @@ namespace ERP.Controllers
                                 (p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeStarts)) ||
                                 (p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeStarts)) ||
                                 p.PriceRetail.ToString().StartsWith(s)
+                            );
+                        }
+                        else if (modeEnds)
+                        {
+                            q = q.Where(p =>
+                                (!isInt && p.ProdId.ToString().EndsWith(s)) ||
+                                (isInt && p.ProdId == intVal) ||
+                                (p.Barcode != null && EF.Functions.Like(p.Barcode, likeEnds)) ||
+                                (p.ProdName != null && EF.Functions.Like(p.ProdName, likeEnds)) ||
+                                (p.GenericName != null && EF.Functions.Like(p.GenericName, likeEnds)) ||
+                                (p.Company != null && EF.Functions.Like(p.Company, likeEnds)) ||
+                                (p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeEnds)) ||
+                                (p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeEnds)) ||
+                                p.PriceRetail.ToString().EndsWith(s)
                             );
                         }
                         else
@@ -846,6 +909,7 @@ namespace ERP.Controllers
             // إجمالي الأصناف بدون أي فلتر (للعرض في كارت الإجمالي)
             ViewBag.TotalProductsUnfiltered = await _db.Products.CountAsync();
             ViewBag.SearchMode = sm;
+            ViewBag.SearchBy = sb;
             ViewBag.NumField = nf;
             ViewBag.FromNum = fromNum;
             ViewBag.ToNum = toNum;

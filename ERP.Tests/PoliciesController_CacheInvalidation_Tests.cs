@@ -138,7 +138,7 @@ public class PoliciesController_CacheInvalidation_Tests
 
         var controller = CreateController(db, lookupCache);
 
-        var result = await controller.DeleteAll(null, null, null, null, null, null);
+        var result = await controller.DeleteAll(search: null, searchBy: null, searchMode: null, sort: null, dir: null, fromCode: null, toCode: null);
 
         Assert.IsType<RedirectToActionResult>(result);
         lookupCache.Verify(x => x.ClearPoliciesCache(), Times.Once);

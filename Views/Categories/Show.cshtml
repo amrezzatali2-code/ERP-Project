@@ -1,0 +1,21 @@
+@model ERP.Models.Category
+@{
+    ViewData["Title"] = "عرض فئة";
+}
+<div class="container" dir="rtl">
+    <h2 class="mb-3">عرض فئة</h2>
+    <dl class="row">
+        <dt class="col-sm-2">كود الفئة</dt>
+        <dd class="col-sm-10">@Model.CategoryId</dd>
+        <dt class="col-sm-2">اسم الفئة</dt>
+        <dd class="col-sm-10">@Model.CategoryName</dd>
+        <dt class="col-sm-2">تاريخ الإنشاء</dt>
+        <dd class="col-sm-10">@Model.CreatedAt.ToLocalTime().ToString("g")</dd>
+        <dt class="col-sm-2">آخر تعديل</dt>
+        <dd class="col-sm-10">@(Model.UpdatedAt.HasValue ? Model.UpdatedAt.Value.ToLocalTime().ToString("g") : "—")</dd>
+    </dl>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="Edit" asp-route-id="@Model.CategoryId" class="btn btn-primary">تعديل</a>
+        <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+    </div>
+</div>

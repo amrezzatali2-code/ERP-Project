@@ -313,6 +313,19 @@ body {
     padding: 0.35rem 0.75rem;
 }
 
+/* قائمة Excel/PDF: توسيط النص — السهم (form-select-arrow) عند اليسار فلا يغطي أول الحروف */
+.erp-export-form select[name="format"].form-select.form-select-arrow {
+    text-align: center;
+    text-align-last: center;
+    padding-block: 0.35rem;
+    padding-inline-start: 1.85rem;
+    padding-inline-end: 0.55rem;
+}
+.erp-export-form select[name="format"].form-select:not(.form-select-arrow) {
+    text-align: center;
+    text-align-last: center;
+}
+
 .erp-list-filter-bar .input-group {
     border-radius: var(--erp-radius);
     border: 1px solid var(--erp-secondary);
@@ -641,6 +654,18 @@ main.erp-list-page-layout {
 .erp-list-summary-row {
     margin-top: 1rem;
     margin-bottom: 1rem;
+}
+
+/* دفتر الحركة المخزنية: كروت أعرض قليلاً + رقم بسطر واحد */
+.erp-stockledger-summary-row .erp-list-summary-card {
+    width: 208px;
+    min-width: 208px;
+    max-width: 208px;
+}
+
+.erp-stockledger-summary-row .erp-stockledger-summary-value {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 
 /* دفتر الأستاذ (والشاشات ذات 6 كروت): صف واحد، أعمدة متساوية — بدون العرض الثابت 170px */
@@ -1343,12 +1368,14 @@ button.btn.erp-list-toolbar-action--danger:not(:disabled):hover {
     overflow-y: auto;
     background: #fff;
 }
-.erp-columns-modal-list {
+.erp-columns-modal-list,
+.erp-pb-columns-modal-list {
     display: flex;
     flex-direction: column;
     gap: 2px;
 }
-.erp-columns-modal-list .form-check {
+.erp-columns-modal-list .form-check,
+.erp-pb-columns-modal-list .form-check {
     display: flex;
     align-items: center;
     gap: 0.35rem;
@@ -1357,10 +1384,12 @@ button.btn.erp-list-toolbar-action--danger:not(:disabled):hover {
     border-radius: 6px;
     transition: background 0.15s;
 }
-.erp-columns-modal-list .form-check:hover {
+.erp-columns-modal-list .form-check:hover,
+.erp-pb-columns-modal-list .form-check:hover {
     background: rgba(99, 102, 241, 0.06);
 }
-.erp-columns-modal-list .form-check-input {
+.erp-columns-modal-list .form-check-input,
+.erp-pb-columns-modal-list .form-check-input {
     margin: 0;
     flex-shrink: 0;
     width: 1.05rem;
@@ -1370,21 +1399,25 @@ button.btn.erp-list-toolbar-action--danger:not(:disabled):hover {
     border: 1px solid #cbd5e1;
     cursor: pointer;
 }
-.erp-columns-modal-list .form-check-input:checked {
+.erp-columns-modal-list .form-check-input:checked,
+.erp-pb-columns-modal-list .form-check-input:checked {
     background-color: #2563eb;
     border-color: #2563eb;
 }
-.erp-columns-modal-list .form-check-input:focus {
+.erp-columns-modal-list .form-check-input:focus,
+.erp-pb-columns-modal-list .form-check-input:focus {
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
 }
-.erp-columns-modal-list .form-check-label {
+.erp-columns-modal-list .form-check-label,
+.erp-pb-columns-modal-list .form-check-label {
     flex: 1;
     font-size: 0.9rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.erp-columns-modal-list .erp-columns-select-all-row {
+.erp-columns-modal-list .erp-columns-select-all-row,
+.erp-pb-columns-modal-list .erp-columns-select-all-row {
     border-bottom: 1px solid rgba(99, 102, 241, 0.2);
     padding-bottom: 0.5rem;
     margin-bottom: 2px;

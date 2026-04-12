@@ -10,8 +10,10 @@ using Microsoft.AspNetCore.Mvc.Rendering;          // SelectList و SelectListIt
 using Microsoft.EntityFrameworkCore;               // Include, AsNoTracking, ToListAsync
 using System;                                      // متغيرات التوقيت DateTime
 using System.Collections.Generic;                  // القوائم List
+using System.Globalization;
 using System.IO;                                  // MemoryStream للتصدير
 using System.Linq;                                 // أوامر LINQ مثل Where و OrderBy
+using System.Linq.Expressions;
 using System.Text;                                 // UTF8Encoding للتصدير
 using System.Threading.Tasks;                      // Task و async/await
 
@@ -39,9 +41,93 @@ namespace ERP.Controllers
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
+        private static string NormalizeNumericExpr(string? value)
+        {
+            var text = (value ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            var chars = text.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                chars[i] = chars[i] switch
+                {
+                    '\u0660' => '0',
+                    '\u0661' => '1',
+                    '\u0662' => '2',
+                    '\u0663' => '3',
+                    '\u0664' => '4',
+                    '\u0665' => '5',
+                    '\u0666' => '6',
+                    '\u0667' => '7',
+                    '\u0668' => '8',
+                    '\u0669' => '9',
+                    _ => chars[i]
+                };
+            }
+
+            return new string(chars).Replace(" ", "");
+        }
+
+        private static bool TryParseInt(string text, out int value)
+            => int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+
+        private static IQueryable<T> ApplyIntExpr<T>(IQueryable<T> query, Expression<Func<T, int>> selector, string exprRaw)
+        {
+            var expr = NormalizeNumericExpr(exprRaw);
+            if (string.IsNullOrWhiteSpace(expr))
+                return query;
+
+            var rangeSep = expr.Contains(':') ? ':' : (expr.Contains('-') ? '-' : '\0');
+            if (rangeSep != '\0')
+            {
+                var parts = expr.Split(rangeSep, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (parts.Length == 2)
+                {
+                    var hasMin = TryParseInt(parts[0], out var min);
+                    var hasMax = TryParseInt(parts[1], out var max);
+                    if (hasMin) query = query.Where(BuildComparison(selector, ">=", min));
+                    if (hasMax) query = query.Where(BuildComparison(selector, "<=", max));
+                    return query;
+                }
+            }
+
+            if (expr.StartsWith(">=") && TryParseInt(expr.Substring(2), out var gte))
+                return query.Where(BuildComparison(selector, ">=", gte));
+            if (expr.StartsWith("<=") && TryParseInt(expr.Substring(2), out var lte))
+                return query.Where(BuildComparison(selector, "<=", lte));
+            if (expr.StartsWith(">") && TryParseInt(expr.Substring(1), out var gt))
+                return query.Where(BuildComparison(selector, ">", gt));
+            if (expr.StartsWith("<") && TryParseInt(expr.Substring(1), out var lt))
+                return query.Where(BuildComparison(selector, "<", lt));
+
+            if (TryParseInt(expr, out var eq))
+                return query.Where(BuildComparison(selector, "==", eq));
+
+            return query;
+        }
+
+        private static Expression<Func<T, bool>> BuildComparison<T>(Expression<Func<T, int>> selector, string op, int value)
+        {
+            var param = selector.Parameters[0];
+            var left = selector.Body;
+            var right = Expression.Constant(value, typeof(int));
+            Expression body = op switch
+            {
+                "==" => Expression.Equal(left, right),
+                ">" => Expression.GreaterThan(left, right),
+                "<" => Expression.LessThan(left, right),
+                ">=" => Expression.GreaterThanOrEqual(left, right),
+                "<=" => Expression.LessThanOrEqual(left, right),
+                _ => Expression.Equal(left, right),
+            };
+            return Expression.Lambda<Func<T, bool>>(body, param);
+        }
+
         private static IQueryable<Area> ApplyColumnFilters(
             IQueryable<Area> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_name,
             string? filterCol_dist,
             string? filterCol_gov,
@@ -49,7 +135,11 @@ namespace ERP.Controllers
             string? filterCol_created,
             string? filterCol_updated)
         {
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                query = ApplyIntExpr(query, a => a.AreaId, filterCol_idExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -89,10 +179,32 @@ namespace ERP.Controllers
                     .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
                 if (parts.Count > 0)
                 {
-                    var dates = new List<DateTime?>();
+                    var mins = new List<DateTime>();
                     foreach (var p in parts)
-                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
-                    if (dates.Count > 0) query = query.Where(a => a.CreatedAt.HasValue && dates.Contains(a.CreatedAt));
+                    {
+                        if (DateTime.TryParse(p, out var dt))
+                            mins.Add(new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0));
+                    }
+
+                    if (mins.Count > 0)
+                    {
+                        var param = Expression.Parameter(typeof(Area), "a");
+                        var createdProp = Expression.Property(param, nameof(Area.CreatedAt));
+                        var hasValue = Expression.Property(createdProp, "HasValue");
+                        var value = Expression.Property(createdProp, "Value");
+
+                        Expression body = Expression.Constant(false);
+                        foreach (var m in mins.Distinct())
+                        {
+                            var ge = Expression.GreaterThanOrEqual(value, Expression.Constant(m));
+                            var lt = Expression.LessThan(value, Expression.Constant(m.AddMinutes(1)));
+                            var and = Expression.AndAlso(hasValue, Expression.AndAlso(ge, lt));
+                            body = Expression.OrElse(body, and);
+                        }
+
+                        var pred = Expression.Lambda<Func<Area, bool>>(body, param);
+                        query = query.Where(pred);
+                    }
                 }
             }
             if (!string.IsNullOrWhiteSpace(filterCol_updated))
@@ -101,10 +213,32 @@ namespace ERP.Controllers
                     .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
                 if (parts.Count > 0)
                 {
-                    var dates = new List<DateTime?>();
+                    var mins = new List<DateTime>();
                     foreach (var p in parts)
-                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
-                    if (dates.Count > 0) query = query.Where(a => a.UpdatedAt.HasValue && dates.Contains(a.UpdatedAt));
+                    {
+                        if (DateTime.TryParse(p, out var dt))
+                            mins.Add(new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0));
+                    }
+
+                    if (mins.Count > 0)
+                    {
+                        var param = Expression.Parameter(typeof(Area), "a");
+                        var updatedProp = Expression.Property(param, nameof(Area.UpdatedAt));
+                        var hasValue = Expression.Property(updatedProp, "HasValue");
+                        var value = Expression.Property(updatedProp, "Value");
+
+                        Expression body = Expression.Constant(false);
+                        foreach (var m in mins.Distinct())
+                        {
+                            var ge = Expression.GreaterThanOrEqual(value, Expression.Constant(m));
+                            var lt = Expression.LessThan(value, Expression.Constant(m.AddMinutes(1)));
+                            var and = Expression.AndAlso(hasValue, Expression.AndAlso(ge, lt));
+                            body = Expression.OrElse(body, and);
+                        }
+
+                        var pred = Expression.Lambda<Func<Area, bool>>(body, param);
+                        query = query.Where(pred);
+                    }
                 }
             }
             return query;
@@ -113,9 +247,95 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> GetColumnValues(string column, string? search = null)
         {
-            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var valuesSearch = Request.Query["valuesSearch"].LastOrDefault();
+            var searchTerm = (valuesSearch ?? search ?? "").Trim().ToLowerInvariant();
             var columnLower = (column ?? "").Trim().ToLowerInvariant();
-            var q = _db.Areas.AsNoTracking().Include(a => a.Governorate).Include(a => a.District);
+
+            // تطبيق نفس فلاتر الصفحة الحالية على قائمة القيم
+            var listSearch = Request.Query["listSearch"].LastOrDefault();
+            var listSearchBy = Request.Query["listSearchBy"].LastOrDefault();
+            var listSearchMode = Request.Query["listSearchMode"].LastOrDefault();
+            var sort = Request.Query["sort"].LastOrDefault();
+            var dir = Request.Query["dir"].LastOrDefault();
+            bool useDateRange = string.Equals(Request.Query["useDateRange"].LastOrDefault(), "true", StringComparison.OrdinalIgnoreCase);
+            DateTime? fromDate = null;
+            DateTime? toDate = null;
+            if (DateTime.TryParse(Request.Query["fromDate"].LastOrDefault(), out var fd)) fromDate = fd;
+            if (DateTime.TryParse(Request.Query["toDate"].LastOrDefault(), out var td)) toDate = td;
+
+            int? governorateId = null;
+            if (int.TryParse(Request.Query["governorateId"].LastOrDefault(), out var gid)) governorateId = gid;
+            int? districtId = null;
+            if (int.TryParse(Request.Query["districtId"].LastOrDefault(), out var did)) districtId = did;
+
+            var filterCol_id = Request.Query["filterCol_id"].LastOrDefault();
+            var filterCol_idExpr = Request.Query["filterCol_idExpr"].LastOrDefault();
+            var filterCol_name = Request.Query["filterCol_name"].LastOrDefault();
+            var filterCol_dist = Request.Query["filterCol_dist"].LastOrDefault();
+            var filterCol_gov = Request.Query["filterCol_gov"].LastOrDefault();
+            var filterCol_isactive = Request.Query["filterCol_isactive"].LastOrDefault();
+            var filterCol_created = Request.Query["filterCol_created"].LastOrDefault();
+            var filterCol_updated = Request.Query["filterCol_updated"].LastOrDefault();
+
+            IQueryable<Area> q = _db.Areas.AsNoTracking().Include(a => a.Governorate).Include(a => a.District);
+            if (useDateRange || fromDate.HasValue || toDate.HasValue)
+            {
+                if (fromDate.HasValue) q = q.Where(a => a.CreatedAt.HasValue && a.CreatedAt.Value >= fromDate.Value);
+                if (toDate.HasValue) q = q.Where(a => a.CreatedAt.HasValue && a.CreatedAt.Value <= toDate.Value);
+            }
+            if (governorateId.HasValue) q = q.Where(a => a.GovernorateId == governorateId.Value);
+            if (districtId.HasValue) q = q.Where(a => a.DistrictId == districtId.Value);
+
+            // بحث (بنفس منطق Index)
+            var s = (listSearch ?? string.Empty).Trim();
+            var sb = string.IsNullOrWhiteSpace(listSearchBy) ? "name" : listSearchBy.Trim().ToLowerInvariant();
+            if (sb == "district") sb = "dist";
+            var sm = string.IsNullOrWhiteSpace(listSearchMode) ? "contains" : listSearchMode.Trim().ToLowerInvariant();
+            var isStarts = sm == "starts";
+            var isEnds = sm == "ends";
+            if (!isStarts && !isEnds) sm = "contains";
+
+            if (!string.IsNullOrEmpty(s))
+            {
+                switch (sb)
+                {
+                    case "id":
+                        if (int.TryParse(s, out var idValue))
+                            q = q.Where(a => a.AreaId == idValue);
+                        else
+                            q = q.Where(a => a.AreaId.ToString().Contains(s));
+                        break;
+
+                    case "dist":
+                        if (isStarts)
+                            q = q.Where(a => a.District != null && a.District.DistrictName.StartsWith(s));
+                        else if (isEnds)
+                            q = q.Where(a => a.District != null && a.District.DistrictName.EndsWith(s));
+                        else
+                            q = q.Where(a => a.District != null && a.District.DistrictName.Contains(s));
+                        break;
+
+                    case "gov":
+                        if (isStarts)
+                            q = q.Where(a => a.Governorate != null && a.Governorate.GovernorateName.StartsWith(s));
+                        else if (isEnds)
+                            q = q.Where(a => a.Governorate != null && a.Governorate.GovernorateName.EndsWith(s));
+                        else
+                            q = q.Where(a => a.Governorate != null && a.Governorate.GovernorateName.Contains(s));
+                        break;
+
+                    case "name":
+                    default:
+                        if (isStarts)
+                            q = q.Where(a => a.AreaName.StartsWith(s));
+                        else if (isEnds)
+                            q = q.Where(a => a.AreaName.EndsWith(s));
+                        else
+                            q = q.Where(a => a.AreaName.Contains(s));
+                        break;
+                }
+            }
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_name, filterCol_dist, filterCol_gov, filterCol_isactive, filterCol_created, filterCol_updated);
             if (columnLower == "id" || columnLower == "areaid")
             {
                 var ids = await q.Select(a => a.AreaId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
@@ -162,6 +382,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -169,7 +390,10 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? governorateId = null,
             int? districtId = null,
+            int? fromCode = null,
+            int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_dist = null,
             string? filterCol_gov = null,
@@ -177,13 +401,23 @@ namespace ERP.Controllers
             string? filterCol_created = null,
             string? filterCol_updated = null,
             int page = 1,
-            int pageSize = 25)
+            int pageSize = 10)
         {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+
+            var allowed = new HashSet<int> { 10, 25, 50, 100, 200, 0 };
+            if (!allowed.Contains(pageSize)) pageSize = 10;
+            if (pageSize < 0) pageSize = 10;
+
             // ===== تنظيف القيم الافتراضية =====
             search = (search ?? string.Empty).Trim();                        // نص البحث
-            searchBy = string.IsNullOrWhiteSpace(searchBy) ? "name" : searchBy.ToLower(); // حقل البحث
-            sort = string.IsNullOrWhiteSpace(sort) ? "name" : sort.ToLower();         // عمود الترتيب
-            dir = string.IsNullOrWhiteSpace(dir) ? "asc" : dir.ToLower();           // اتجاه الترتيب
+            searchBy = string.IsNullOrWhiteSpace(searchBy) ? "name" : searchBy.ToLowerInvariant();
+            if (searchBy == "district") searchBy = "dist";
+            searchMode = string.IsNullOrWhiteSpace(searchMode) ? "contains" : searchMode.ToLowerInvariant();
+            sort = string.IsNullOrWhiteSpace(sort) ? "name" : sort.ToLowerInvariant();         // عمود الترتيب
+            dir = string.IsNullOrWhiteSpace(dir) ? "asc" : dir.ToLowerInvariant();           // اتجاه الترتيب
 
             bool desc = dir == "desc";               // هل الترتيب تنازلي؟
 
@@ -197,6 +431,9 @@ namespace ERP.Controllers
             // ===== تطبيق البحث =====
             if (!string.IsNullOrEmpty(search))
             {
+                var isStarts = searchMode == "starts";
+                var isEnds = searchMode == "ends";
+
                 switch (searchBy)
                 {
                     case "id":   // البحث بالمعرّف
@@ -211,30 +448,46 @@ namespace ERP.Controllers
                         break;
 
                     case "dist": // البحث باسم الحي/المركز
-                        query = query.Where(a =>
-                            a.District != null &&
-                            a.District.DistrictName.Contains(search));
+                        if (isStarts)
+                            query = query.Where(a => a.District != null && a.District.DistrictName.StartsWith(search));
+                        else if (isEnds)
+                            query = query.Where(a => a.District != null && a.District.DistrictName.EndsWith(search));
+                        else
+                            query = query.Where(a => a.District != null && a.District.DistrictName.Contains(search));
                         break;
 
                     case "gov":  // البحث باسم المحافظة
-                        query = query.Where(a =>
-                            a.Governorate != null &&
-                            a.Governorate.GovernorateName.Contains(search));
+                        if (isStarts)
+                            query = query.Where(a => a.Governorate != null && a.Governorate.GovernorateName.StartsWith(search));
+                        else if (isEnds)
+                            query = query.Where(a => a.Governorate != null && a.Governorate.GovernorateName.EndsWith(search));
+                        else
+                            query = query.Where(a => a.Governorate != null && a.Governorate.GovernorateName.Contains(search));
                         break;
 
                     case "name":
                     default:     // البحث باسم المنطقة
-                        query = query.Where(a => a.AreaName.Contains(search));
+                        if (isStarts)
+                            query = query.Where(a => a.AreaName.StartsWith(search));
+                        else if (isEnds)
+                            query = query.Where(a => a.AreaName.EndsWith(search));
+                        else
+                            query = query.Where(a => a.AreaName.Contains(search));
                         break;
                 }
             }
 
             // ===== فلتر المحافظة + الحي/المركز =====
-            if (governorateId.HasValue)
+            if (governorateId.HasValue && governorateId.Value > 0)
                 query = query.Where(a => a.GovernorateId == governorateId.Value);
 
-            if (districtId.HasValue)
+            if (districtId.HasValue && districtId.Value > 0)
                 query = query.Where(a => a.DistrictId == districtId.Value);
+
+            if (fromCode.HasValue)
+                query = query.Where(a => a.AreaId >= fromCode.Value);
+            if (toCode.HasValue)
+                query = query.Where(a => a.AreaId <= toCode.Value);
 
             // ===== فلترة بالتاريخ (تاريخ الإنشاء) =====
             if (useDateRange)
@@ -253,6 +506,17 @@ namespace ERP.Controllers
                         a.CreatedAt.Value <= toDate.Value);
                 }
             }
+
+            query = ApplyColumnFilters(
+                query,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_name,
+                filterCol_dist,
+                filterCol_gov,
+                filterCol_isactive,
+                filterCol_created,
+                filterCol_updated);
 
             // ===== الترتيب (كل أعمدة الجدول لها مفتاح) =====
             // المفاتيح:
@@ -296,6 +560,8 @@ namespace ERP.Controllers
                 _ => query.OrderBy(a => a.AreaName),
             };
 
+            if (pageSize == 0) page = 1;
+
             // ===== إنشاء نتيجة PagedResult مع حفظ حالة البحث/الترتيب =====
             var result = await PagedResult<Area>.CreateAsync(
                 query,
@@ -338,11 +604,15 @@ namespace ERP.Controllers
             // تمرير قيم الفلاتر للـ View (تُستخدم في _IndexFilters وفلتر المحافظة)
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy;
+            ViewBag.SearchMode = searchMode;
             ViewBag.Sort = sort;
             ViewBag.Dir = dir;
             ViewBag.GovFilter = governorateId;
             ViewBag.DistrictFilter = districtId;
+            ViewBag.FromCode = fromCode;
+            ViewBag.ToCode = toCode;
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Name = filterCol_name;
             ViewBag.FilterCol_Dist = filterCol_dist;
             ViewBag.FilterCol_Gov = filterCol_gov;
@@ -599,6 +869,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -609,6 +880,7 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_dist = null,
             string? filterCol_gov = null,
@@ -631,40 +903,59 @@ namespace ERP.Controllers
             if (!string.IsNullOrWhiteSpace(search))
             {
                 search = search.Trim();
+                var sb = string.IsNullOrWhiteSpace(searchBy) ? "name" : searchBy.ToLowerInvariant();
+                if (sb == "district") sb = "dist";
+                searchMode = string.IsNullOrWhiteSpace(searchMode) ? "contains" : searchMode.Trim().ToLowerInvariant();
+                var isStarts = searchMode == "starts";
+                var isEnds = searchMode == "ends";
 
-                switch (searchBy?.ToLower())
+                switch (sb)
                 {
                     case "id":
-                        query = query.Where(a => a.AreaId.ToString().Contains(search));
+                        if (int.TryParse(search, out var idVal))
+                            query = query.Where(a => a.AreaId == idVal);
+                        else
+                            query = query.Where(a => false);
                         break;
 
-                    case "district":
-                        query = query.Where(a =>
-                            a.District != null &&
-                            a.District.DistrictName.Contains(search));
+                    case "dist":
+                        if (isStarts)
+                            query = query.Where(a => a.District != null && a.District.DistrictName.StartsWith(search));
+                        else if (isEnds)
+                            query = query.Where(a => a.District != null && a.District.DistrictName.EndsWith(search));
+                        else
+                            query = query.Where(a => a.District != null && a.District.DistrictName.Contains(search));
                         break;
 
-                    case "governorate":
-                        query = query.Where(a =>
-                            a.Governorate != null &&
-                            a.Governorate.GovernorateName.Contains(search));
+                    case "gov":
+                        if (isStarts)
+                            query = query.Where(a => a.Governorate != null && a.Governorate.GovernorateName.StartsWith(search));
+                        else if (isEnds)
+                            query = query.Where(a => a.Governorate != null && a.Governorate.GovernorateName.EndsWith(search));
+                        else
+                            query = query.Where(a => a.Governorate != null && a.Governorate.GovernorateName.Contains(search));
                         break;
 
                     case "name":
                     default:
-                        query = query.Where(a => a.AreaName.Contains(search));
+                        if (isStarts)
+                            query = query.Where(a => a.AreaName.StartsWith(search));
+                        else if (isEnds)
+                            query = query.Where(a => a.AreaName.EndsWith(search));
+                        else
+                            query = query.Where(a => a.AreaName.Contains(search));
                         break;
                 }
             }
 
             // فلتر المحافظة
-            if (governorateId.HasValue)
+            if (governorateId.HasValue && governorateId.Value > 0)
             {
                 query = query.Where(a => a.GovernorateId == governorateId.Value);
             }
 
             // فلتر الحي/المركز
-            if (districtId.HasValue)
+            if (districtId.HasValue && districtId.Value > 0)
             {
                 query = query.Where(a => a.DistrictId == districtId.Value);
             }
@@ -682,12 +973,21 @@ namespace ERP.Controllers
             if (useDateRange)
             {
                 if (fromDate.HasValue)
-                    query = query.Where(a => a.CreatedAt >= fromDate.Value);
+                    query = query.Where(a => a.CreatedAt.HasValue && a.CreatedAt.Value >= fromDate.Value);
                 if (toDate.HasValue)
-                    query = query.Where(a => a.CreatedAt <= toDate.Value);
+                    query = query.Where(a => a.CreatedAt.HasValue && a.CreatedAt.Value <= toDate.Value);
             }
 
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_name, filterCol_dist, filterCol_gov, filterCol_isactive, filterCol_created, filterCol_updated);
+            query = ApplyColumnFilters(
+                query,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_name,
+                filterCol_dist,
+                filterCol_gov,
+                filterCol_isactive,
+                filterCol_created,
+                filterCol_updated);
 
             // ---------- الترتيب (نفس الإندكس) ----------
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -695,9 +995,9 @@ namespace ERP.Controllers
             query = (sort ?? "").ToLower() switch
             {
                 "id" => desc ? query.OrderByDescending(a => a.AreaId) : query.OrderBy(a => a.AreaId),
-                "district" => desc ? query.OrderByDescending(a => a.District!.DistrictName)
+                "dist" => desc ? query.OrderByDescending(a => a.District!.DistrictName)
                                    : query.OrderBy(a => a.District!.DistrictName),
-                "governorate" => desc ? query.OrderByDescending(a => a.Governorate!.GovernorateName)
+                "gov" => desc ? query.OrderByDescending(a => a.Governorate!.GovernorateName)
                                       : query.OrderBy(a => a.Governorate!.GovernorateName),
                 "isactive" => desc ? query.OrderByDescending(a => a.IsActive) : query.OrderBy(a => a.IsActive),
                 "created" => desc ? query.OrderByDescending(a => a.CreatedAt) : query.OrderBy(a => a.CreatedAt),

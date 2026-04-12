@@ -1,9 +1,9 @@
-﻿@model ERP.Models.Warehouse
+@model ERP.Models.Warehouse
 @{
-    ViewData["Title"] = "تفاصيل مخزن";
+    ViewData["Title"] = "عرض مخزن";
 }
 <div class="container" dir="rtl">
-    <h2 class="mb-3">تفاصيل مخزن</h2>
+    <h2 class="mb-3">عرض مخزن</h2>
     <dl class="row">
         <dt class="col-sm-2">المعرّف</dt>
         <dd class="col-sm-10">@Model.WarehouseId</dd>
@@ -20,6 +20,8 @@
         <dt class="col-sm-2">آخر تعديل</dt>
         <dd class="col-sm-10">@(Model.UpdatedAt.HasValue ? Model.UpdatedAt.Value.ToLocalTime().ToString("g") : "—")</dd>
     </dl>
-    <a asp-action="Edit" asp-route-id="@Model.WarehouseId" class="btn btn-primary">تعديل</a>
-    <a asp-action="Index" class="btn btn-secondary">رجوع</a>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="Edit" asp-route-id="@Model.WarehouseId" class="btn btn-primary">تعديل</a>
+        <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+    </div>
 </div>

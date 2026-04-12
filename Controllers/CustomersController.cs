@@ -831,12 +831,52 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> GetColumnValues(string column, string? search = null)
         {
-            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
-            var q = _context.Customers
-                .Include(c => c.Governorate).Include(c => c.District).Include(c => c.Area).Include(c => c.Account)
-                .AsNoTracking();
+            var valuesSearch = Request.Query["valuesSearch"].LastOrDefault();
+            var searchTerm = (valuesSearch ?? search ?? "").Trim().ToLowerInvariant();
 
-            q = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(q);
+            // تطبيق نفس فلاتر الصفحة الحالية على قائمة القيم
+            var listSearch = Request.Query["listSearch"].LastOrDefault();
+            var listSearchBy = Request.Query["listSearchBy"].LastOrDefault();
+            var listSearchMode = Request.Query["listSearchMode"].LastOrDefault();
+            var sort = Request.Query["sort"].LastOrDefault();
+            var dir = Request.Query["dir"].LastOrDefault();
+
+            bool useDateRange = string.Equals(Request.Query["useDateRange"].LastOrDefault(), "true", StringComparison.OrdinalIgnoreCase);
+            DateTime? fromDate = null;
+            DateTime? toDate = null;
+            if (DateTime.TryParse(Request.Query["fromDate"].LastOrDefault(), out var fd)) fromDate = fd;
+            if (DateTime.TryParse(Request.Query["toDate"].LastOrDefault(), out var td)) toDate = td;
+
+            int? fromCode = null;
+            int? toCode = null;
+            if (int.TryParse(Request.Query["fromCode"].LastOrDefault(), out var fc)) fromCode = fc;
+            if (int.TryParse(Request.Query["toCode"].LastOrDefault(), out var tc)) toCode = tc;
+
+            var q = await BuildCustomerListOrderedQueryAsync(
+                listSearch, listSearchBy, listSearchMode, sort, dir,
+                useDateRange, fromDate, toDate, fromCode, toCode,
+                Request.Query["filterCol_id"].LastOrDefault(),
+                Request.Query["filterCol_idExpr"].LastOrDefault(),
+                Request.Query["filterCol_name"].LastOrDefault(),
+                Request.Query["filterCol_type"].LastOrDefault(),
+                Request.Query["filterCol_phone"].LastOrDefault(),
+                Request.Query["filterCol_Address"].LastOrDefault(),
+                Request.Query["filterCol_governorate"].LastOrDefault(),
+                Request.Query["filterCol_district"].LastOrDefault(),
+                Request.Query["filterCol_area"].LastOrDefault(),
+                Request.Query["filterCol_taxid"].LastOrDefault(),
+                Request.Query["filterCol_recordnumber"].LastOrDefault(),
+                Request.Query["filterCol_licensenumber"].LastOrDefault(),
+                Request.Query["filterCol_segment"].LastOrDefault(),
+                Request.Query["filterCol_account"].LastOrDefault(),
+                Request.Query["filterCol_PolicyId"].LastOrDefault(),
+                Request.Query["filterCol_credit"].LastOrDefault(),
+                Request.Query["filterCol_isactive"].LastOrDefault(),
+                Request.Query["filterCol_ordercontact"].LastOrDefault(),
+                Request.Query["filterCol_created"].LastOrDefault(),
+                Request.Query["filterCol_updated"].LastOrDefault(),
+                Request.Query["filterCol_quota"].LastOrDefault()
+            );
 
             List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
             {
@@ -845,7 +885,10 @@ namespace ERP.Controllers
                 "name" => string.IsNullOrEmpty(searchTerm)
                     ? (await q.Where(c => c.CustomerName != null).Select(c => c.CustomerName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
                     : (await q.Where(c => c.CustomerName != null && EF.Functions.Like(c.CustomerName, "%" + searchTerm + "%")).Select(c => c.CustomerName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
-                "type" => PartyCategoryOptions.Select(pc => (pc, pc)).ToList(),
+                "type" =>
+                    PartyCategoryOptions
+                        .Select(pc => (Value: pc, Display: PartyCategoryDisplay.ArabicByKey.TryGetValue(pc, out var ar) ? ar : pc))
+                        .ToList(),
                 "phone" => string.IsNullOrEmpty(searchTerm)
                     ? (await q.Where(c => c.Phone1 != null || c.Phone2 != null || c.Whatsapp != null).Select(c => c.Phone1 ?? c.Phone2 ?? c.Whatsapp ?? "").Distinct().Where(x => x != "").OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
                     : (await q.Where(c => (c.Phone1 != null && EF.Functions.Like(c.Phone1, "%" + searchTerm + "%")) || (c.Phone2 != null && EF.Functions.Like(c.Phone2, "%" + searchTerm + "%")) || (c.Whatsapp != null && EF.Functions.Like(c.Whatsapp, "%" + searchTerm + "%"))).Select(c => c.Phone1 ?? c.Phone2 ?? c.Whatsapp ?? "").Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
@@ -1803,79 +1846,101 @@ namespace ERP.Controllers
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
-            int? codeFrom = null,
-            int? codeTo = null,
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_name = null,
+            string? filterCol_type = null,
+            string? filterCol_phone = null,
+            string? filterCol_Address = null,
+            string? filterCol_governorate = null,
+            string? filterCol_district = null,
+            string? filterCol_area = null,
+            string? filterCol_account = null,
+            string? filterCol_PolicyId = null,
+            string? filterCol_credit = null,
+            string? filterCol_isactive = null,
+            string? filterCol_ordercontact = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
+            string? filterCol_quota = null,
+            string? filterCol_taxid = null,
+            string? filterCol_recordnumber = null,
+            string? filterCol_licensenumber = null,
+            string? filterCol_segment = null,
+            string? visibleCols = null,
             string format = "excel")
         {
-            IQueryable<Customer> query = _context.Customers
-                .Include(c => c.Account)
-                .Include(c => c.Governorate).Include(c => c.District).Include(c => c.Area)
-                .AsNoTracking();
+            // نفس استعلام Index (بحث + تاريخ/كود + فلاتر أعمدة + ترتيب) لضمان أن التصدير = المفلتر
+            var dataQuery = await BuildCustomerListOrderedQueryAsync(
+                search, searchBy, searchMode, sort, dir,
+                useDateRange, fromDate, toDate,
+                fromCode, toCode,
+                filterCol_id, filterCol_idExpr, filterCol_name, filterCol_type, filterCol_phone,
+                filterCol_Address, filterCol_governorate, filterCol_district, filterCol_area,
+                filterCol_taxid, filterCol_recordnumber, filterCol_licensenumber, filterCol_segment,
+                filterCol_account, filterCol_PolicyId, filterCol_credit, filterCol_isactive,
+                filterCol_ordercontact, filterCol_created, filterCol_updated, filterCol_quota
+            );
 
-            query = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(query);
+            var data = await dataQuery.ToListAsync();
 
-            var s = (search ?? string.Empty).Trim();
-            var searchKey = (searchBy ?? "all").Trim().ToLowerInvariant();
-            var so = (sort ?? "name").Trim().ToLowerInvariant();
-            bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
-
-            query = ApplyCustomerListSearch(query, s, searchKey, searchMode);
-
-            if (useDateRange)
+            // الأعمدة الظاهرة فقط (المطلوب تصديرها) — لو لم تُرسل: صدّر الكل
+            var allCols = new[]
             {
-                if (fromDate.HasValue)
-                    query = query.Where(c => c.CreatedAt >= fromDate.Value);
-
-                if (toDate.HasValue)
-                    query = query.Where(c => c.CreatedAt <= toDate.Value);
-            }
-
-            if (codeFrom.HasValue)
-                query = query.Where(c => c.CustomerId >= codeFrom.Value);
-
-            if (codeTo.HasValue)
-                query = query.Where(c => c.CustomerId <= codeTo.Value);
-
-            query = so switch
-            {
-                "id" => desc
-                    ? query.OrderByDescending(c => c.CustomerId)
-                    : query.OrderBy(c => c.CustomerId),
-
-                "type" => desc
-                    ? query.OrderByDescending(c => c.PartyCategory)
-                    : query.OrderBy(c => c.PartyCategory),
-
-                "account" => desc
-                    ? query.OrderByDescending(c => c.Account != null ? c.Account.AccountCode : "")
-                    : query.OrderBy(c => c.Account != null ? c.Account.AccountCode : ""),
-
-                "isactive" => desc
-                    ? query.OrderByDescending(c => c.IsActive)
-                    : query.OrderBy(c => c.IsActive),
-
-                "created" => desc
-                    ? query.OrderByDescending(c => c.CreatedAt)
-                    : query.OrderBy(c => c.CreatedAt),
-
-                "updated" => desc
-                    ? query.OrderByDescending(c => c.UpdatedAt)
-                    : query.OrderBy(c => c.UpdatedAt),
-
-                "name" or _ => desc
-                    ? query.OrderByDescending(c => c.CustomerName)
-                    : query.OrderBy(c => c.CustomerName),
+                "id","external","name","type","phone","Address",
+                "governorate","district","area",
+                "taxid","recordnumber","licensenumber","segment",
+                "account","PolicyId","credit","isactive","ordercontact",
+                "created","updated","quota"
             };
 
-            var data = await query.ToListAsync();
+            var requested = (visibleCols ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrEmpty(x))
+                .ToList();
+
+            var requestedSet = requested.Count > 0
+                ? new HashSet<string>(requested, StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(allCols, StringComparer.OrdinalIgnoreCase);
+
+            var orderedCols = new List<string>();
+            foreach (var k in allCols)
+                if (requestedSet.Contains(k))
+                    orderedCols.Add(k);
+
+            (string Title, Func<Customer, string?> Value) Def(string key) => key.ToLowerInvariant() switch
+            {
+                "id" => ("كود العميل", c => c.CustomerId.ToString()),
+                "external" => ("كود الإكسل", c => c.ExternalCode ?? ""),
+                "name" => ("اسم العميل", c => c.CustomerName),
+                "type" => ("نوع الطرف", c => c.PartyCategory ?? ""),
+                "phone" => ("هاتف", c => c.Phone1 ?? c.Phone2 ?? c.Whatsapp ?? ""),
+                "address" => ("العنوان", c => c.Address),
+                "governorate" => ("المحافظة", c => c.Governorate?.GovernorateName ?? ""),
+                "district" => ("الحي", c => c.District?.DistrictName ?? ""),
+                "area" => ("المنطقة", c => c.RegionName ?? c.Area?.AreaName ?? ""),
+                "taxid" => ("الرقم الضريبي/القومي", c => c.TaxIdOrNationalId ?? ""),
+                "recordnumber" => ("رقم السجل", c => c.RecordNumber ?? ""),
+                "licensenumber" => ("رقم الرخصة", c => c.LicenseNumber ?? ""),
+                "segment" => ("الشريحة", c => c.Segment ?? ""),
+                "account" => ("الحساب المحاسبي", c => c.Account != null ? $"{c.Account.AccountCode} - {c.Account.AccountName}" : ""),
+                "policyid" => ("كود السياسة", c => c.PolicyId?.ToString() ?? ""),
+                "credit" => ("الحد الائتماني", c => c.CreditLimit.ToString("0.00")),
+                "isactive" => ("الحالة", c => c.IsActive ? "نشط" : "موقوف"),
+                "ordercontact" => ("مسئول الطلب", c => c.OrderContactName ?? ""),
+                "created" => ("تاريخ الإنشاء", c => c.CreatedAt.ToString("yyyy-MM-dd HH:mm")),
+                "updated" => ("آخر تعديل", c => c.UpdatedAt.ToString("yyyy-MM-dd HH:mm")),
+                "quota" => ("الكوتة", c => c.IsQuotaMultiplierEnabled ? $"مفعّلة ×{c.QuotaMultiplier}" : "غير مفعّلة"),
+                _ => (key, _ => "")
+            };
 
             // CSV
             if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csvBuilder = new StringBuilder();
-
-                csvBuilder.AppendLine(
-                    "كود العميل,كود الإكسل,اسم العميل,نوع الطرف,الهاتف,العنوان,المحافظة,الحي,المنطقة,الرقم الضريبي/القومي,رقم السجل,رقم الرخصة,الشريحة,الحساب المحاسبي,كود السياسة,كود المستخدم,اسم مسئول الطلب,هاتف مسئول الطلب,مضاعفة الكوتة,مضاعف الكوتة,الحد الائتماني,الحالة,تاريخ الإنشاء,آخر تعديل");
 
                 string CsvEscape(string? value)
                 {
@@ -1884,41 +1949,13 @@ namespace ERP.Controllers
                     return $"\"{value}\"";
                 }
 
+                // الهيدر: الأعمدة الظاهرة فقط
+                csvBuilder.AppendLine(string.Join(",", orderedCols.Select(k => CsvEscape(Def(k).Title))));
+
                 foreach (var c in data)
                 {
-                    var phone = c.Phone1 ?? c.Phone2 ?? c.Whatsapp ?? "";
-                    var account = c.Account != null
-                        ? $"{c.Account.AccountCode} - {c.Account.AccountName}"
-                        : "";
-                    var status = c.IsActive ? "نشط" : "موقوف";
-                    var quotaEnabled = c.IsQuotaMultiplierEnabled ? "نعم" : "لا";
-                    var region = c.RegionName ?? c.Area?.AreaName ?? "";
-
                     csvBuilder.AppendLine(string.Join(",",
-                        c.CustomerId,
-                        CsvEscape(c.ExternalCode ?? ""),
-                        CsvEscape(c.CustomerName),
-                        CsvEscape(c.PartyCategory ?? ""),
-                        CsvEscape(phone),
-                        CsvEscape(c.Address),
-                        CsvEscape(c.Governorate?.GovernorateName ?? ""),
-                        CsvEscape(c.District?.DistrictName ?? ""),
-                        CsvEscape(region),
-                        CsvEscape(c.TaxIdOrNationalId ?? ""),
-                        CsvEscape(c.RecordNumber ?? ""),
-                        CsvEscape(c.LicenseNumber ?? ""),
-                        CsvEscape(c.Segment ?? ""),
-                        CsvEscape(account),
-                        CsvEscape(c.PolicyId?.ToString() ?? ""),
-                        CsvEscape(c.UserId?.ToString() ?? ""),
-                        CsvEscape(c.OrderContactName),
-                        CsvEscape(c.OrderContactPhone),
-                        CsvEscape(quotaEnabled),
-                        CsvEscape(c.QuotaMultiplier.ToString()),
-                        c.CreditLimit.ToString("0.00"),
-                        CsvEscape(status),
-                        c.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
-                        c.UpdatedAt.ToString("yyyy-MM-dd HH:mm")
+                        orderedCols.Select(k => CsvEscape(Def(k).Value(c) ?? ""))
                     ));
                 }
 
@@ -1935,66 +1972,14 @@ namespace ERP.Controllers
                 var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("العملاء والموردين"));
 
                 int row = 1;
-                ws.Cell(row, 1).Value = "كود العميل";
-                ws.Cell(row, 2).Value = "كود الإكسل";
-                ws.Cell(row, 3).Value = "اسم العميل";
-                ws.Cell(row, 4).Value = "نوع الطرف";
-                ws.Cell(row, 5).Value = "الهاتف";
-                ws.Cell(row, 6).Value = "العنوان";
-                ws.Cell(row, 7).Value = "المحافظة";
-                ws.Cell(row, 8).Value = "الحي";
-                ws.Cell(row, 9).Value = "المنطقة";
-                ws.Cell(row, 10).Value = "الرقم الضريبي/القومي";
-                ws.Cell(row, 11).Value = "رقم السجل";
-                ws.Cell(row, 12).Value = "رقم الرخصة";
-                ws.Cell(row, 13).Value = "الشريحة";
-                ws.Cell(row, 14).Value = "الحساب المحاسبي";
-                ws.Cell(row, 15).Value = "كود السياسة";
-                ws.Cell(row, 16).Value = "كود المستخدم";
-                ws.Cell(row, 17).Value = "اسم مسئول الطلب";
-                ws.Cell(row, 18).Value = "هاتف مسئول الطلب";
-                ws.Cell(row, 19).Value = "مضاعفة الكوتة؟";
-                ws.Cell(row, 20).Value = "مضاعِف الكوتة";
-                ws.Cell(row, 21).Value = "الحد الائتماني";
-                ws.Cell(row, 22).Value = "الحالة";
-                ws.Cell(row, 23).Value = "تاريخ الإنشاء";
-                ws.Cell(row, 24).Value = "آخر تعديل";
+                for (int i = 0; i < orderedCols.Count; i++)
+                    ws.Cell(row, i + 1).Value = Def(orderedCols[i]).Title;
 
                 foreach (var c in data)
                 {
                     row++;
-                    var phone = c.Phone1 ?? c.Phone2 ?? c.Whatsapp ?? "";
-                    var account = c.Account != null
-                        ? $"{c.Account.AccountCode} - {c.Account.AccountName}"
-                        : "";
-                    var status = c.IsActive ? "نشط" : "موقوف";
-                    var quotaEnabled = c.IsQuotaMultiplierEnabled ? "نعم" : "لا";
-                    var region = c.RegionName ?? c.Area?.AreaName ?? "";
-
-                    ws.Cell(row, 1).Value = c.CustomerId;
-                    ws.Cell(row, 2).Value = c.ExternalCode ?? "";
-                    ws.Cell(row, 3).Value = c.CustomerName;
-                    ws.Cell(row, 4).Value = c.PartyCategory;
-                    ws.Cell(row, 5).Value = phone;
-                    ws.Cell(row, 6).Value = c.Address;
-                    ws.Cell(row, 7).Value = c.Governorate?.GovernorateName ?? "";
-                    ws.Cell(row, 8).Value = c.District?.DistrictName ?? "";
-                    ws.Cell(row, 9).Value = region;
-                    ws.Cell(row, 10).Value = c.TaxIdOrNationalId ?? "";
-                    ws.Cell(row, 11).Value = c.RecordNumber ?? "";
-                    ws.Cell(row, 12).Value = c.LicenseNumber ?? "";
-                    ws.Cell(row, 13).Value = c.Segment ?? "";
-                    ws.Cell(row, 14).Value = account;
-                    ws.Cell(row, 15).Value = c.PolicyId;
-                    ws.Cell(row, 16).Value = c.UserId;
-                    ws.Cell(row, 17).Value = c.OrderContactName;
-                    ws.Cell(row, 18).Value = c.OrderContactPhone;
-                    ws.Cell(row, 19).Value = quotaEnabled;
-                    ws.Cell(row, 20).Value = c.QuotaMultiplier;
-                    ws.Cell(row, 21).Value = c.CreditLimit;
-                    ws.Cell(row, 22).Value = status;
-                    ws.Cell(row, 23).Value = c.CreatedAt;
-                    ws.Cell(row, 24).Value = c.UpdatedAt;
+                    for (int i = 0; i < orderedCols.Count; i++)
+                        ws.Cell(row, i + 1).Value = Def(orderedCols[i]).Value(c) ?? "";
                 }
 
                 ws.Columns().AdjustToContents();

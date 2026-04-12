@@ -1,5 +1,5 @@
-﻿@using Microsoft.AspNetCore.Html 
-                                        <!-- لاستخدام HtmlString في sortLink -->
+﻿@using System.Globalization
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.Warehouse>
 
@@ -13,17 +13,21 @@
     // قيم البحث/الترتيب الحالية
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "name";
+    var searchMode = (Convert.ToString(ViewBag.SearchMode) ?? "contains").Trim().ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "name";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
-    int ps = Model.PageSize;
+    int ps = (int?)ViewBag.PageSize ?? Model.PageSize;
     int total = Model.TotalCount;
     int page = Model.PageNumber;
     int pages = Model.TotalPages;
+    var activeFiltered = (int)(ViewBag.ActiveFilteredCount ?? 0);
+    var inactiveFiltered = (int)(ViewBag.InactiveFilteredCount ?? 0);
 
     // نطاق العرض السفلي
-    int start = total == 0 ? 0 : ((page - 1) * ps) + 1;
-    int end = Math.Min(total, page * ps);
+    int start = total == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+    int end = (ps == 0 || total == 0) ? total : Math.Min(total, page * ps);
 
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
@@ -49,6 +53,7 @@
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -92,31 +97,36 @@
 
 <div dir="rtl" class="container-fluid">
 
-    @* عنوان الصفحة + إجمالي المخازن *@
     <div class="d-flex justify-content-between align-items-center mb-2 mt-2">
         <h4 class="mb-0">@ViewData["Title"]</h4>
-        <small class="text-muted d-none d-md-inline">إجمالي المخازن: @total</small>
     </div>
 
-    @* ===== شريط الفلاتر الموحد (نفس نظام قائمة الأصناف) ===== *@
+    @* ===== شريط الفلاتر الموحد (مثل الأصناف / الموظفين) ===== *@
     <div class="erp-list-filter-bar d-print-none mt-2">
         <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
             @* --- القسم الأول: البحث العام --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
-                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                <form id="warehousesMainSearchForm" method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في المخازن</label>
-                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
-                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
-                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:150px">
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100" style="overflow-x:auto;">
+                        <select name="searchMode" class="form-select form-select-sm form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
+                        <input type="text" name="search" class="form-control form-control-sm erp-filter-input flex-shrink-1" placeholder="نص أو رقم..." value="@search" style="min-width:100px;max-width:200px;width:180px;" />
+                        <select name="searchBy" class="form-select form-select-sm form-select-arrow erp-filter-input flex-shrink-0" style="max-width:160px;min-width:130px">
                             <option value="name"@Html.Raw(searchBy == "name" ? " selected" : "")>اسم المخزن</option>
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود المخزن</option>
                             <option value="branch"@Html.Raw(searchBy == "branch" ? " selected" : "")>الفرع</option>
                             <option value="active"@Html.Raw(searchBy == "active" ? " selected" : "")>الحالة</option>
                             <option value="created"@Html.Raw(searchBy == "created" ? " selected" : "")>تاريخ الإنشاء</option>
-                            <option value="updated"@Html.Raw(searchBy == "updated" ? " selected" : "")>آخر تعديل</option>
+                            <option value="modified"@Html.Raw(searchBy == "modified" ? " selected" : "")>آخر تعديل</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">بحث</button>
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-2 mt-2 w-100">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
                         <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
@@ -142,65 +152,128 @@
                 </div>
             </div>
 
-            @* --- القسم الثالث: أزرار التحكم --- *@
+            @* --- القسم الثالث: أزرار التحكم (صفان مثل الموظفين) --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
-                        <a class="btn btn-erp btn-erp-success btn-erp-sm" asp-action="Create">+ إضافة مخزن</a>
+                        @if (ViewBag.CanCreate == true)
+                        {
+                            <a class="btn btn-erp btn-erp-success btn-erp-sm" asp-action="Create">+ إضافة مخزن</a>
+                        }
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalWarehouse">اختيار الأعمدة</button>
                         <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
-                        <div class="dropdown d-inline">
-                            <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
-                            <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
-                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteSelected">حذف المحدد</button></li>
-                                <li><hr class="dropdown-divider" /></li>
-                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الجميع</button></li>
-                            </ul>
-                        </div>
-                        <form method="get" asp-action="Export" asp-controller="Warehouses" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
-                            <input type="hidden" name="search" value="@search" />
-                            <input type="hidden" name="searchBy" value="@searchBy" />
-                            <input type="hidden" name="sort" value="@sort" />
-                            <input type="hidden" name="dir" value="@dir" />
-                            <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
-                            @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
-                            @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
-                            @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
-                            @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
-                            @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
-                            @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
-                            @if (!string.IsNullOrWhiteSpace(filterCol_branch)) { <input type="hidden" name="filterCol_branch" value="@filterCol_branch" /> }
-                            @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
-                            @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
-                            @if (!string.IsNullOrWhiteSpace(filterCol_modified)) { <input type="hidden" name="filterCol_modified" value="@filterCol_modified" /> }
-                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
-                                <option value="excel" selected>Excel</option>
-                                <option value="pdf">PDF</option>
-                            </select>
-                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">تصدير</button>
-                        </form>
                     </div>
-                    <form id="bulkDeleteForm" asp-action="BulkDelete" asp-controller="Warehouses" method="post" class="d-none">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="selectedIds" id="selectedIdsInput" />
-                    </form>
-                    <form id="deleteAllForm" asp-action="DeleteAll" asp-controller="Warehouses" method="post" class="d-none">
-                        @Html.AntiForgeryToken()
-                    </form>
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
+                        @if (ViewBag.CanEdit == true)
+                        {
+                            <button type="button" id="btnEditWarehouse" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="اختر مخزناً بالنقر على الصف">تعديل</button>
+                        }
+                        @if (ViewBag.CanBulkDelete == true || ViewBag.CanDeleteAll == true)
+                        {
+                            <div class="dropdown d-inline">
+                                <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
+                                <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
+                                    @if (ViewBag.CanBulkDelete == true)
+                                    {
+                                        <li><button type="button" class="dropdown-item text-danger" id="btnDeleteSelected">حذف المحدد</button></li>
+                                    }
+                                    @if (ViewBag.CanBulkDelete == true && ViewBag.CanDeleteAll == true)
+                                    {
+                                        <li><hr class="dropdown-divider" /></li>
+                                    }
+                                    @if (ViewBag.CanDeleteAll == true)
+                                    {
+                                        <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الجميع</button></li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                        @if (ViewBag.CanExport == true)
+                        {
+                            <form method="get" asp-action="Export" asp-controller="Warehouses" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
+                                <input type="hidden" name="search" value="@search" />
+                                <input type="hidden" name="searchBy" value="@searchBy" />
+                                <input type="hidden" name="searchMode" value="@searchMode" />
+                                <input type="hidden" name="sort" value="@sort" />
+                                <input type="hidden" name="dir" value="@dir" />
+                                <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
+                                @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
+                                @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
+                                @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+                                @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+                                @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                                @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+                                @if (!string.IsNullOrWhiteSpace(filterCol_branch)) { <input type="hidden" name="filterCol_branch" value="@filterCol_branch" /> }
+                                @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
+                                @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+                                @if (!string.IsNullOrWhiteSpace(filterCol_modified)) { <input type="hidden" name="filterCol_modified" value="@filterCol_modified" /> }
+                                <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;" dir="ltr">
+                                    <option value="excel" selected>Excel</option>
+                                    <option value="pdf">PDF</option>
+                                </select>
+                                <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
+                            </form>
+                        }
+                    </div>
+                    @if (ViewBag.CanBulkDelete == true)
+                    {
+                        <form id="bulkDeleteForm" asp-action="BulkDelete" asp-controller="Warehouses" method="post" class="d-none">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="selectedIds" id="selectedIdsInput" />
+                        </form>
+                    }
+                    @if (ViewBag.CanDeleteAll == true)
+                    {
+                        <form id="deleteAllForm" asp-action="DeleteAll" asp-controller="Warehouses" method="post" class="d-none">
+                            @Html.AntiForgeryToken()
+                        </form>
+                    }
                 </div>
             </div>
 
         </div>
     </div>
 
-    @* ===== جدول المخازن (نفس شكل جدول قائمة الأصناف) ===== *@
+    @* كروت إجماليات (بعد الفلترة) *@
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mt-2" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي المخازن (بعد الفلترة)</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", CultureInfo.InvariantCulture)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">نشط</div>
+                    <div class="h4 mb-0 fw-bold" style="color:#15803d;">@activeFiltered.ToString("N0", CultureInfo.InvariantCulture)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #b45309 !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">موقوف</div>
+                    <div class="h4 mb-0 fw-bold" style="color:#b45309;">@inactiveFiltered.ToString("N0", CultureInfo.InvariantCulture)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ===== جدول المخازن ===== *@
     <div class="erp-table-scroll-container erp-list-index-table-section mt-3">
-        <div class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
+        <div id="warehouseTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
+            @* عنوان الطباعة: داخل erp-print-area لأن site.css يخفي body* ويُظهر المنطقة فقط *@
+            <div class="print-only text-center fw-bold pb-2 mb-2 border-bottom">
+                @ViewData["Title"] — إجمالي المعروض: @total — @DateTime.Now.ToString("yyyy/MM/dd HH:mm")
+            </div>
         <table id="warehouseTable"
                class="table table-striped table-hover erp-table erp-table-sortable">
-            <thead class="table-light">
+            <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                 <tr>
                     @* اختيار الصف *@
                     <th class="text-center no-print"
@@ -216,20 +289,13 @@
                     <th data-col="active">@filterableCol("active", "active", "الحالة")</th>
                     <th data-col="created">@filterableCol("created", "created", "تاريخ الإنشاء")</th>
                     <th data-col="modified">@filterableCol("modified", "modified", "آخر تعديل")</th>
-
-                    <th class="text-nowrap no-print"
-                        data-col="actions"
-                        data-col-fixed="true"
-                        style="width:350px;">
-                        إجراءات
-                    </th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-4">
+                        <td colspan="7" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -238,7 +304,11 @@
                 {
                     foreach (var w in Model.Items)
                     {
-                        <tr>
+                        var editUrl = Url.Action("Edit", "Warehouses", new { id = w.WarehouseId }) + "?frame=1";
+                        <tr class="erp-list-selectable-row"
+                            data-warehouse-id="@w.WarehouseId"
+                            @if (ViewBag.CanEdit == true) { <text>data-edit-url="@editUrl"</text> }
+                            data-tab-title="مخزن @w.WarehouseId">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select"
@@ -246,20 +316,30 @@
                             </td>
 
                             <td data-col="id">
-                                <a asp-action="Show"
-                                   asp-route-id="@w.WarehouseId"
-                                   class="text-decoration-none fw-semibold"
-                                   title="عرض تفاصيل المخزن">
+                                @if (ViewBag.CanShow == true)
+                                {
+                                    <a asp-action="Show"
+                                       asp-route-id="@w.WarehouseId"
+                                       class="text-decoration-none fw-semibold"
+                                       title="عرض تفاصيل المخزن">@w.WarehouseId</a>
+                                }
+                                else
+                                {
                                     @w.WarehouseId
-                                </a>
+                                }
                             </td>
                             <td data-col="name">
-                                <a asp-action="Show"
-                                   asp-route-id="@w.WarehouseId"
-                                   class="text-decoration-none fw-semibold"
-                                   title="عرض تفاصيل المخزن">
+                                @if (ViewBag.CanShow == true)
+                                {
+                                    <a asp-action="Show"
+                                       asp-route-id="@w.WarehouseId"
+                                       class="text-decoration-none fw-semibold"
+                                       title="عرض تفاصيل المخزن">@w.WarehouseName</a>
+                                }
+                                else
+                                {
                                     @w.WarehouseName
-                                </a>
+                                }
                             </td>
                             <td data-col="branch">@w.Branch?.BranchName</td>
                             <td data-col="active">@((w.IsActive) ? "نشط" : "موقوف")</td>
@@ -271,88 +351,44 @@
                                                         ? w.UpdatedAt.Value.ToString("yyyy/MM/dd HH:mm")
                                                         : "")
                             </td>
-
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@w.WarehouseId"
-                                   title="تعديل بيانات المخزن">
-                                    تعديل
-                                </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@w.WarehouseId"
-                                   title="حذف المخزن">
-                                    حذف
-                                </a>
-                            </td>
                         </tr>
                     }
-
-                    @* صف الإجمالي في نهاية الجدول *@
-                    <tr class="table-secondary fw-bold">
-                        <td colspan="7" class="text-end">
-                            عدد المخازن (حسب الفلتر الحالي):
-                        </td>
-                        <td class="text-end">
-                            @total
-                        </td>
-                    </tr>
                 }
             </tbody>
         </table>
         </div>
     </div>
 
-    @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة ===== *@
+    @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة (مثل الأصناف) ===== *@
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print">
         <small class="text-muted">
             عرض @start - @end من @total
         </small>
 
-        <form method="get"
-              action="@Url.Action(action, controller)"
-              class="d-flex align-items-center gap-2">
-            <input type="hidden" name="search" value="@search" />
-            <input type="hidden" name="searchBy" value="@searchBy" />
-            <input type="hidden" name="sort" value="@sort" />
-            <input type="hidden" name="dir" value="@dir" />
-            <input type="hidden" name="page" value="1" />
-            <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
-            @if (fromDate.HasValue)
-            {
-                <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" />
-            }
-            @if (toDate.HasValue)
-            {
-                <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" />
-            }
-            @if (fromCode.HasValue)
-            {
-                <input type="hidden" name="fromCode" value="@fromCode" />
-            }
-            @if (toCode.HasValue)
-            {
-                <input type="hidden" name="toCode" value="@toCode" />
-            }
-            @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_branch)) { <input type="hidden" name="filterCol_branch" value="@filterCol_branch" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_modified)) { <input type="hidden" name="filterCol_modified" value="@filterCol_modified" /> }
-
+        <div id="warehousesPageSizeBar" class="d-flex align-items-center gap-2">
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
-            <select name="pageSize"
+            <select id="warehousesPageSizeSelect"
+                    name="pageSize"
                     class="form-select form-select-sm"
-                    onchange="this.form.submit()">
+                    title="حجم الصفحة">
+                <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
-        </form>
+        </div>
     </div>
+    <script>
+        (function () {
+            var params = new URLSearchParams(window.location.search);
+            var all = params.getAll('pageSize');
+            var lastPs = all.length ? all[all.length - 1] : null;
+            var sel = document.getElementById("warehousesPageSizeSelect");
+            if (sel && lastPs !== null && lastPs !== '') sel.value = lastPs;
+        })();
+    </script>
 
     @* ===== الترقيم ===== *@
     <nav aria-label="pagination" class="mt-3 no-print">
@@ -431,6 +467,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -501,7 +538,7 @@
         <div class="modal-content" dir="rtl">
             <div class="modal-header">
                 <h5 class="modal-title flex-grow-1" id="columnsModalWarehouseLabel">
-                    اختيار الأعمدة الظاهرة
+                    اختيار الأعمدة الظاهرة في قائمة المخازن
                 </h5>
                 <button type="button"
                         class="btn-close ms-2"
@@ -528,6 +565,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
         // =========================
         // زر الطباعة — يطبع الجدول فقط
@@ -535,6 +573,54 @@
         document.getElementById("btnPrint")?.addEventListener("click", function () {
             window.print();
         });
+
+        document.getElementById("warehousesPageSizeSelect")?.addEventListener("change", function () {
+            const url = new URL(window.location.href);
+            url.searchParams.set("pageSize", this.value);
+            url.searchParams.set("page", "1");
+            window.location.href = url.toString();
+        });
+
+        (function () {
+            function getWhMainSearch() {
+                const f = document.getElementById("warehousesMainSearchForm");
+                if (!f) return { search: "", searchBy: "name", searchMode: "contains" };
+                return {
+                    search: f.querySelector('[name="search"]')?.value?.trim() ?? "",
+                    searchBy: f.querySelector('[name="searchBy"]')?.value ?? "name",
+                    searchMode: f.querySelector('[name="searchMode"]')?.value ?? "contains"
+                };
+            }
+            document.querySelector(".erp-export-form")?.addEventListener("formdata", function (ev) {
+                const m = getWhMainSearch();
+                try {
+                    ev.formData.delete("search");
+                    ev.formData.delete("searchBy");
+                    ev.formData.delete("searchMode");
+                } catch (ignore) { }
+                if (m.search) ev.formData.set("search", m.search);
+                ev.formData.set("searchBy", m.searchBy);
+                ev.formData.set("searchMode", m.searchMode);
+            });
+        })();
+
+        @if (ViewBag.CanEdit == true)
+        {
+            <text>
+        if (window.ERP && typeof ERP.initListSelection === "function") {
+            ERP.initListSelection({
+                rowSelector: "#warehouseTable tbody tr.erp-list-selectable-row",
+                idAttribute: "data-warehouse-id",
+                editButtonId: "btnEditWarehouse",
+                editUrlAttribute: "data-edit-url",
+                tabTitleAttribute: "data-tab-title",
+                editTabTitleAttribute: "data-tab-title",
+                editTabId: "wh-edit-tab",
+                multiSelectCheckboxes: true
+            });
+        }
+            </text>
+        }
 
         // =========================
         // تحديد الصفوف / حذف المحدد / حذف الكل
@@ -564,6 +650,7 @@
             const selectedInput     = document.getElementById("selectedIdsInput");
 
             btnDeleteSelected?.addEventListener("click", function () {
+                if (!bulkForm || !selectedInput) return;
                 const ids = Array.from(rowsChk())
                     .filter(cb => cb.checked)
                     .map(cb => cb.value);
@@ -583,6 +670,7 @@
             const deleteAllForm = document.getElementById("deleteAllForm");
 
             btnDeleteAll?.addEventListener("click", function () {
+                if (!deleteAllForm) return;
                 if (!confirm("تحذير: سيتم حذف جميع المخازن. هل أنت متأكد؟")) return;
                 deleteAllForm.submit();
             });
@@ -683,6 +771,15 @@
 
             function buildUrl(codeFrom, codeTo) {
                 const url = new URL(window.location.href);
+                const main = document.getElementById("warehousesMainSearchForm");
+                if (main) {
+                    const s = main.querySelector('[name="search"]');
+                    const sb = main.querySelector('[name="searchBy"]');
+                    const sm = main.querySelector('[name="searchMode"]');
+                    if (s && s.value.trim()) url.searchParams.set("search", s.value.trim()); else url.searchParams.delete("search");
+                    if (sb && sb.value) url.searchParams.set("searchBy", sb.value); else url.searchParams.delete("searchBy");
+                    if (sm && sm.value) url.searchParams.set("searchMode", sm.value); else url.searchParams.delete("searchMode");
+                }
 
                 if (codeFrom) url.searchParams.set("fromCode", codeFrom);
                 else          url.searchParams.delete("fromCode");
@@ -823,6 +920,14 @@
             });
             if (searchInp) searchInp.addEventListener("input", function() { if (!currentCol) return; const st = this.value.trim(); const u = "/Warehouses/GetColumnValues?column=" + encodeURIComponent(currentCol) + (st ? "&search=" + encodeURIComponent(st) : ""); fetch(u).then(r => r.json()).then(items => { allItems = items; renderList(st); }); });
             document.addEventListener("click", function(e) { if (panel && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn")) panel.classList.add("d-none"); });
+        })();
+
+        (function () {
+            var table = document.getElementById("warehouseTable");
+            if (!table) return;
+            var wrapper = document.getElementById("warehouseTableScrollWrapper");
+            if (!wrapper) return;
+            wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
         })();
     </script>
 }

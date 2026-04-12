@@ -10,7 +10,9 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using ClosedXML.Excel;
 
@@ -543,6 +545,26 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(ProductBalances), new { loadReport = true });
         }
 
+        /// <summary>أسماء السياسات 1–10 من جدول Policies (للقائمة المنسدلة ورؤوس أعمدة التقرير) — بما فيها غير المفعّلة إن وُجدت.</summary>
+        private async Task<Dictionary<int, string>> GetProductBalancePolicyNamesFromDbAsync()
+        {
+            var rows = await _context.Policies
+                .AsNoTracking()
+                .Where(p => p.PolicyId >= 1 && p.PolicyId <= 10)
+                .Select(p => new { p.PolicyId, p.Name })
+                .ToListAsync();
+            var byId = rows.ToDictionary(r => r.PolicyId, r => r.Name);
+            var result = new Dictionary<int, string>();
+            for (var id = 1; id <= 10; id++)
+            {
+                if (byId.TryGetValue(id, out var nm) && !string.IsNullOrWhiteSpace(nm))
+                    result[id] = nm.Trim();
+                else
+                    result[id] = "سياسة " + id;
+            }
+            return result;
+        }
+
         // =========================================================
         // تقرير: أرصدة الأصناف
         // يعرض الصنف، الكمية الحالية، الخصم المرجح، المبيعات (عند تحديد تاريخ: في المدى)،
@@ -570,19 +592,11 @@ namespace ERP.Controllers
             int pageSize = 10,
             string? searchMode = "contains")
         {
-            // =========================================================
-            // 1) تجهيز القوائم المنسدلة (Categories, Warehouses)
-            // =========================================================
-            var categories = await _context.Categories
-                .AsNoTracking()
-                .OrderBy(c => c.CategoryName)
-                .Select(c => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem
-                {
-                    Value = c.CategoryId.ToString(),
-                    Text = c.CategoryName
-                })
-                .ToListAsync();
+            ViewBag.LoadReport = loadReport;
 
+            // =========================================================
+            // 1) تجهيز القوائم المنسدلة (المخزن فقط — الفئة/مجموعة الصنف أُزيلتا من الواجهة)
+            // =========================================================
             var warehouses = await _context.Warehouses
                 .AsNoTracking()
                 .OrderBy(w => w.WarehouseName)
@@ -593,20 +607,7 @@ namespace ERP.Controllers
                 })
                 .ToListAsync();
 
-            var productGroups = await _context.ProductGroups
-                .AsNoTracking()
-                .Where(g => g.IsActive)
-                .OrderBy(g => g.Name)
-                .Select(g => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem
-                {
-                    Value = g.ProductGroupId.ToString(),
-                    Text = g.Name ?? ""
-                })
-                .ToListAsync();
-
-            ViewBag.Categories = categories;
             ViewBag.Warehouses = warehouses;
-            ViewBag.ProductGroups = productGroups;
 
             // =========================================================
             // 1.1) تحميل قائمة الأصناف للأوتوكومبليت (datalist)
@@ -634,8 +635,6 @@ namespace ERP.Controllers
                 warehouseId = whIdParsed;
 
             ViewBag.Search = search ?? "";
-            ViewBag.CategoryId = categoryId;
-            ViewBag.ProductGroupId = productGroupId;
             ViewBag.HasBonus = hasBonus;
             ViewBag.WarehouseId = warehouseId;
             ViewBag.FromDate = fromDate;
@@ -647,17 +646,26 @@ namespace ERP.Controllers
             ViewBag.SortBy = sortBy;
             ViewBag.SortDir = sortDir;
             ViewBag.SearchMode = string.IsNullOrWhiteSpace(searchMode) ? "contains" : searchMode!.Trim();
+            ViewBag.PolicyNamesById = await GetProductBalancePolicyNamesFromDbAsync();
 
             // =========================================================
             // 3) تحميل البيانات فقط عند الضغط على "تجميع التقرير"
             // =========================================================
             if (!loadReport)
             {
+                ViewBag.ShowPolicyColumns = false;
                 // الصفحة تفتح بدون بيانات - فقط الفلاتر (عرض التشغيلات مفعّل افتراضياً)
                 ViewBag.IncludeZeroQty = false;
                 ViewBag.IncludeBatches = true;
                 ViewBag.ReportData = new List<ProductBalanceReportDto>();
                 ViewBag.TotalCost = 0m;
+                ViewBag.TotalQty = 0;
+                ViewBag.TotalPriceRetail = 0m;
+                ViewBag.TotalSalesQty = 0m;
+                ViewBag.TotalUnitCost = 0m;
+                ViewBag.WeightedAvgDiscount = 0m;
+                ViewBag.AveragePriceRetail = 0m;
+                ViewBag.AverageUnitCost = 0m;
                 ViewBag.Page = 1;
                 ViewBag.PageSize = 10;
                 ViewBag.TotalPages = 1;
@@ -709,18 +717,6 @@ namespace ERP.Controllers
             // فلتر البحث (اسم الصنف أو الكود) — يبدأ بـ / يحتوي / ينتهي بـ
             productsQuery = ApplyProductBalancesSearchFilter(productsQuery, search, searchMode);
 
-            // فلتر الفئة
-            if (categoryId.HasValue && categoryId.Value > 0)
-            {
-                productsQuery = productsQuery.Where(p => p.CategoryId == categoryId.Value);
-            }
-
-            // فلتر مجموعة الصنف
-            if (productGroupId.HasValue && productGroupId.Value > 0)
-            {
-                productsQuery = productsQuery.Where(p => p.ProductGroupId == productGroupId.Value);
-            }
-
             // فلتر أصناف عليها بونص
             if (hasBonus == true)
             {
@@ -741,6 +737,8 @@ namespace ERP.Controllers
 
             if (productIds.Count == 0)
             {
+                ViewBag.LoadReport = true;
+                ViewBag.ShowPolicyColumns = warehouseId.HasValue && warehouseId.Value > 0;
                 ViewBag.ReportData = new List<ProductBalanceReportDto>();
                 ViewBag.TotalCost = 0m;
                 ViewBag.TotalQty = 0;
@@ -1068,6 +1066,12 @@ namespace ERP.Controllers
                 }
                 reportData.Add(dto);
             }
+
+            var whForPolicyRules = warehouseId is int whPb && whPb > 0 ? whPb : 0;
+            var ctxPol = await ProductBalancePolicySaleHelper.LoadWarehousePolicyContextAsync(_context, whForPolicyRules);
+            ProductBalancePolicySaleHelper.ApplyToReport(reportData, ctxPol.Rules, ctxPol.DefaultProfit);
+
+            ViewBag.ShowPolicyColumns = true;
 
             // =========================================================
             // 7) الترتيب
@@ -2210,7 +2214,7 @@ namespace ERP.Controllers
         }
 
         // =========================================================
-        // تصدير Excel: أرصدة العملاء (نفس فلاتر CustomerBalances)
+        // تصدير Excel / CSV (وPDF عبر PdfExportMiddleware): أرصدة العملاء — نفس فلاتر CustomerBalances + الأعمدة الظاهرة
         // =========================================================
         [HttpGet]
         public async Task<IActionResult> ExportCustomerBalances(
@@ -2234,7 +2238,9 @@ namespace ERP.Controllers
             string? filterCol_sales = null,
             string? filterCol_purchases = null,
             string? filterCol_returns = null,
-            string? filterCol_availablecredit = null)
+            string? filterCol_availablecredit = null,
+            string? visibleCols = null,
+            string format = "excel")
         {
             // عند التصدير: إذا لم يتم تحديد includeZeroBalance، اجعله false افتراضياً
             string? includeZeroBalanceStr = Request.Query["includeZeroBalance"].FirstOrDefault();
@@ -2248,65 +2254,180 @@ namespace ERP.Controllers
                 sortBy, sortDir,
                 filterCol_code, filterCol_name, filterCol_category, filterCol_phone, filterCol_account,
                 filterCol_debit, filterCol_credit, filterCol_creditlimit, filterCol_sales, filterCol_purchases, filterCol_returns, filterCol_availablecredit);
-            if (reportData == null)
+            if (reportData == null || reportData.Count == 0)
             {
                 return BadRequest("لا توجد بيانات للتصدير");
             }
 
+            var requested = (visibleCols ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrEmpty(x))
+                .ToList();
 
-            // تصدير Excel (كل البيانات بدون Pagination)
-            using var workbook = new XLWorkbook();
-            var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أرصدة العملاء"));
+            var requestedSet = requested.Count > 0
+                ? new HashSet<string>(requested, StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(CustomerBalancesPrintColumnOrder, StringComparer.OrdinalIgnoreCase);
 
-            int row = 1;
+            var orderedCols = CustomerBalancesPrintColumnOrder.Where(requestedSet.Contains).ToList();
+            if (orderedCols.Count == 0)
+                orderedCols = CustomerBalancesPrintColumnOrder.ToList();
 
-            // عناوين الأعمدة
-            worksheet.Cell(row, 1).Value = "الكود";
-            worksheet.Cell(row, 2).Value = "كود الاكسل";
-            worksheet.Cell(row, 3).Value = "اسم العميل";
-            worksheet.Cell(row, 4).Value = "حساب العميل";
-            worksheet.Cell(row, 5).Value = "فئة العميل";
-            worksheet.Cell(row, 6).Value = "الهاتف";
-            worksheet.Cell(row, 7).Value = "مدين";
-            worksheet.Cell(row, 8).Value = "دائن";
-            worksheet.Cell(row, 9).Value = "الحد الائتماني";
-            worksheet.Cell(row, 10).Value = "المبيعات";
-            worksheet.Cell(row, 11).Value = "المشتريات";
-            worksheet.Cell(row, 12).Value = "المرتجعات";
-            worksheet.Cell(row, 13).Value = "الائتمان المتاح";
+            static decimal DebitOf(CustomerBalanceReportDto item) => item.CurrentBalance > 0 ? item.CurrentBalance : 0m;
+            static decimal CreditOf(CustomerBalanceReportDto item) => item.CurrentBalance < 0 ? Math.Abs(item.CurrentBalance) : 0m;
 
-            worksheet.Range(row, 1, row, 13).Style.Font.Bold = true;
-
-            // البيانات
-            row = 2;
-            foreach (var item in reportData)
+            string ColTitle(string k) => k.ToLowerInvariant() switch
             {
-                decimal debitVal = item.CurrentBalance > 0 ? item.CurrentBalance : 0m;
-                decimal creditVal = item.CurrentBalance < 0 ? Math.Abs(item.CurrentBalance) : 0m;
-                worksheet.Cell(row, 1).Value = item.CustomerCode;
-                worksheet.Cell(row, 2).Value = item.ExternalCode ?? "";
-                worksheet.Cell(row, 3).Value = item.CustomerName;
-                worksheet.Cell(row, 4).Value = string.IsNullOrEmpty(item.AccountDisplay) ? "—" : item.AccountDisplay;
-                worksheet.Cell(row, 5).Value = item.PartyCategory;
-                worksheet.Cell(row, 6).Value = item.Phone1;
-                worksheet.Cell(row, 7).Value = debitVal;
-                worksheet.Cell(row, 8).Value = creditVal;
-                worksheet.Cell(row, 9).Value = item.CreditLimit;
-                worksheet.Cell(row, 10).Value = item.TotalSales;
-                worksheet.Cell(row, 11).Value = item.TotalPurchases;
-                worksheet.Cell(row, 12).Value = item.TotalReturns;
-                worksheet.Cell(row, 13).Value = item.AvailableCredit;
-                row++;
+                "code" => "الكود",
+                "externalcode" => "كود الاكسل",
+                "name" => "اسم العميل",
+                "account" => "حساب العميل",
+                "category" => "فئة العميل",
+                "phone" => "الهاتف",
+                "debit" => "مدين",
+                "credit" => "دائن",
+                "creditlimit" => "الحد الائتماني",
+                "sales" => "المبيعات",
+                "purchases" => "المشتريات",
+                "returns" => "المرتجعات",
+                "availablecredit" => "الائتمان المتاح",
+                _ => k
+            };
+
+            void WriteExcelCell(ClosedXML.Excel.IXLWorksheet ws, int r, int c, CustomerBalanceReportDto item, string k)
+            {
+                switch (k.ToLowerInvariant())
+                {
+                    case "code":
+                        ws.Cell(r, c).Value = item.CustomerCode;
+                        break;
+                    case "externalcode":
+                        ws.Cell(r, c).Value = item.ExternalCode ?? "";
+                        break;
+                    case "name":
+                        ws.Cell(r, c).Value = item.CustomerName ?? "";
+                        break;
+                    case "account":
+                        ws.Cell(r, c).Value = string.IsNullOrEmpty(item.AccountDisplay) ? "—" : item.AccountDisplay;
+                        break;
+                    case "category":
+                        ws.Cell(r, c).Value = string.IsNullOrWhiteSpace(item.PartyCategory)
+                            ? "—"
+                            : PartyCategoryDisplay.ToArabic(item.PartyCategory);
+                        break;
+                    case "phone":
+                        ws.Cell(r, c).Value = item.Phone1 ?? "";
+                        break;
+                    case "debit":
+                        ws.Cell(r, c).Value = DebitOf(item);
+                        break;
+                    case "credit":
+                        ws.Cell(r, c).Value = CreditOf(item);
+                        break;
+                    case "creditlimit":
+                        ws.Cell(r, c).Value = item.CreditLimit;
+                        break;
+                    case "sales":
+                        ws.Cell(r, c).Value = item.TotalSales;
+                        break;
+                    case "purchases":
+                        ws.Cell(r, c).Value = item.TotalPurchases;
+                        break;
+                    case "returns":
+                        ws.Cell(r, c).Value = item.TotalReturns;
+                        break;
+                    case "availablecredit":
+                        ws.Cell(r, c).Value = item.AvailableCredit;
+                        break;
+                    default:
+                        ws.Cell(r, c).Value = "";
+                        break;
+                }
             }
 
-            worksheet.Columns().AdjustToContents();
+            string CsvCellText(CustomerBalanceReportDto item, string k)
+            {
+                switch (k.ToLowerInvariant())
+                {
+                    case "code":
+                        return item.CustomerCode ?? "";
+                    case "externalcode":
+                        return item.ExternalCode ?? "";
+                    case "name":
+                        return item.CustomerName ?? "";
+                    case "account":
+                        return string.IsNullOrEmpty(item.AccountDisplay) ? "—" : item.AccountDisplay;
+                    case "category":
+                        return string.IsNullOrWhiteSpace(item.PartyCategory)
+                            ? "—"
+                            : PartyCategoryDisplay.ToArabic(item.PartyCategory);
+                    case "phone":
+                        return item.Phone1 ?? "";
+                    case "debit":
+                        return DebitOf(item).ToString("0.00", CultureInfo.InvariantCulture);
+                    case "credit":
+                        return CreditOf(item).ToString("0.00", CultureInfo.InvariantCulture);
+                    case "creditlimit":
+                        return item.CreditLimit.ToString("0.00", CultureInfo.InvariantCulture);
+                    case "sales":
+                        return item.TotalSales.ToString("0.00", CultureInfo.InvariantCulture);
+                    case "purchases":
+                        return item.TotalPurchases.ToString("0.00", CultureInfo.InvariantCulture);
+                    case "returns":
+                        return item.TotalReturns.ToString("0.00", CultureInfo.InvariantCulture);
+                    case "availablecredit":
+                        return item.AvailableCredit.ToString("0.00", CultureInfo.InvariantCulture);
+                    default:
+                        return "";
+                }
+            }
 
-            using var stream = new System.IO.MemoryStream();
-            workbook.SaveAs(stream);
-            var fileName = ExcelExportNaming.ArabicTimestampedFileName("أرصدة العملاء", ".xlsx");
-            return File(stream.ToArray(),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                fileName);
+            static string CsvEscape(string? value)
+            {
+                if (string.IsNullOrEmpty(value)) return "\"\"";
+                value = value.Replace("\"", "\"\"");
+                return $"\"{value}\"";
+            }
+
+            if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
+            {
+                using var workbook = new XLWorkbook();
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أرصدة العملاء"));
+                int row = 1;
+                for (int i = 0; i < orderedCols.Count; i++)
+                    worksheet.Cell(row, i + 1).Value = ColTitle(orderedCols[i]);
+                worksheet.Range(row, 1, row, orderedCols.Count).Style.Font.Bold = true;
+
+                foreach (var item in reportData)
+                {
+                    row++;
+                    for (int i = 0; i < orderedCols.Count; i++)
+                        WriteExcelCell(worksheet, row, i + 1, item, orderedCols[i]);
+                }
+
+                worksheet.Columns().AdjustToContents();
+                using var stream = new System.IO.MemoryStream();
+                workbook.SaveAs(stream);
+                var fileName = ExcelExportNaming.ArabicTimestampedFileName("أرصدة العملاء", ".xlsx");
+                return File(stream.ToArray(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    fileName);
+            }
+
+            // CSV — يُحوَّل إلى PDF عند format=pdf عبر PdfExportMiddleware
+            var csvBuilder = new StringBuilder();
+            csvBuilder.AppendLine(string.Join(",", orderedCols.Select(k => CsvEscape(ColTitle(k)))));
+            foreach (var item in reportData)
+            {
+                csvBuilder.AppendLine(string.Join(",",
+                    orderedCols.Select(k => CsvEscape(CsvCellText(item, k)))));
+            }
+
+            var csvBytes = Encoding.UTF8.GetPreamble()
+                .Concat(Encoding.UTF8.GetBytes(csvBuilder.ToString()))
+                .ToArray();
+            var csvName = ExcelExportNaming.ArabicTimestampedFileName("أرصدة العملاء", ".csv");
+            return File(csvBytes, "text/csv; charset=utf-8", csvName);
         }
 
         // =========================================================
@@ -2327,7 +2448,9 @@ namespace ERP.Controllers
             bool includeBatches = true,
             string? sortBy = "name",
             string? sortDir = "asc",
-            string? searchMode = "contains")
+            string? searchMode = "contains",
+            string? visibleCols = null,
+            string format = "excel")
         {
             var pbQtyGtZeroExp = Request.Query["pbQtyGtZero"].FirstOrDefault();
             if (pbQtyGtZeroExp != null)
@@ -2350,16 +2473,6 @@ namespace ERP.Controllers
                 .AsQueryable();
 
             productsQuery = ApplyProductBalancesSearchFilter(productsQuery, search, searchMode);
-
-            if (categoryId.HasValue && categoryId.Value > 0)
-            {
-                productsQuery = productsQuery.Where(p => p.CategoryId == categoryId.Value);
-            }
-
-            if (productGroupId.HasValue && productGroupId.Value > 0)
-            {
-                productsQuery = productsQuery.Where(p => p.ProductGroupId == productGroupId.Value);
-            }
 
             if (hasBonus == true)
             {
@@ -2613,6 +2726,10 @@ namespace ERP.Controllers
                 reportData.Add(dtoExp);
             }
 
+            var whForPolicyRulesExp = warehouseId is int whExp && whExp > 0 ? whExp : 0;
+            var ctxPolExp = await ProductBalancePolicySaleHelper.LoadWarehousePolicyContextAsync(_context, whForPolicyRulesExp);
+            ProductBalancePolicySaleHelper.ApplyToReport(reportData, ctxPolExp.Rules, ctxPolExp.DefaultProfit);
+
             // الترتيب (نفس منطق ProductBalances)
             bool isDesc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
             switch (sortBy?.ToLowerInvariant())
@@ -2644,83 +2761,45 @@ namespace ERP.Controllers
                     break;
             }
 
-            // تصدير Excel (كل البيانات بدون Pagination)
-            using var workbook = new XLWorkbook();
-            var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أرصدة الأصناف"));
-
-            int row = 1;
-
-            // عناوين الأعمدة
-            worksheet.Cell(row, 1).Value = "الكود";
-            worksheet.Cell(row, 2).Value = "اسم الصنف";
-            worksheet.Cell(row, 3).Value = "الفئة";
-            worksheet.Cell(row, 4).Value = "مجموعة الصنف";
-            worksheet.Cell(row, 5).Value = "مجموعة البونص";
-            worksheet.Cell(row, 6).Value = "الكمية الحالية";
-            worksheet.Cell(row, 7).Value = "الخصم المرجح %";
-            worksheet.Cell(row, 8).Value = "الخصم اليدوي للبيع %";
-            worksheet.Cell(row, 9).Value = "الخصم الفعّال %";
-            worksheet.Cell(row, 10).Value = "المبيعات";
-            worksheet.Cell(row, 11).Value = "سعر الجمهور";
-            worksheet.Cell(row, 12).Value = "تكلفة العلبة";
-            worksheet.Cell(row, 13).Value = "التكلفة الإجمالية";
-
-            worksheet.Range(row, 1, row, 13).Style.Font.Bold = true;
-
-            // البيانات (صف الصنف ثم صفوف التشغيلات إن وُجدت)
-            row = 2;
-            foreach (var item in reportData)
+            var exportKind = Request.Query["exportKind"].LastOrDefault();
+            var delegatePolicyStr = Request.Query["delegatePolicyId"].LastOrDefault();
+            if (string.Equals(exportKind, "delegate", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(delegatePolicyStr, out var delPol) && delPol >= 1 && delPol <= 10)
             {
-                worksheet.Cell(row, 1).Value = item.ProdCode;
-                worksheet.Cell(row, 2).Value = item.ProdName;
-                worksheet.Cell(row, 3).Value = item.CategoryName;
-                worksheet.Cell(row, 4).Value = item.ProductGroupName;
-                worksheet.Cell(row, 5).Value = item.ProductBonusGroupName;
-                worksheet.Cell(row, 6).Value = item.CurrentQty;
-                worksheet.Cell(row, 7).Value = item.WeightedDiscount;
-                if (item.ManualDiscountPct.HasValue)
-                    worksheet.Cell(row, 8).Value = item.ManualDiscountPct.Value;
-                else
-                    worksheet.Cell(row, 8).Value = string.Empty;
-                worksheet.Cell(row, 9).Value = item.EffectiveDiscountPct;
-                worksheet.Cell(row, 10).Value = item.SalesQty;
-                worksheet.Cell(row, 11).Value = item.PriceRetail;
-                worksheet.Cell(row, 12).Value = item.UnitCost;
-                worksheet.Cell(row, 13).Value = item.TotalCost;
-                row++;
-                if (item.Batches != null && item.Batches.Count >= 2)
+                var rowsDel = reportData
+                    .Select(r => (
+                        Name: r.ProdName ?? "",
+                        Price: r.PriceRetail,
+                        Disc: r.PolicySaleDiscountPct[delPol - 1] ?? 0m))
+                    .ToList();
+                var polNamesDel = await GetProductBalancePolicyNamesFromDbAsync();
+                var polName = polNamesDel.TryGetValue(delPol, out var pnDel) ? pnDel : ("سياسة " + delPol);
+                if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
                 {
-                    foreach (var batch in item.Batches)
-                    {
-                        worksheet.Cell(row, 1).Value = "";
-                        worksheet.Cell(row, 2).Value = "  └ تشغيلة: " + (batch.BatchNo ?? "-") + (batch.Expiry.HasValue ? " | " + batch.Expiry.Value.ToString("yyyy-MM-dd") : "");
-                        worksheet.Cell(row, 3).Value = "";
-                        worksheet.Cell(row, 4).Value = "";
-                        worksheet.Cell(row, 5).Value = "";
-                        worksheet.Cell(row, 6).Value = batch.CurrentQty;
-                        worksheet.Cell(row, 7).Value = batch.WeightedDiscount;
-                        if (batch.ManualDiscountPct.HasValue)
-                            worksheet.Cell(row, 8).Value = batch.ManualDiscountPct.Value;
-                        else
-                            worksheet.Cell(row, 8).Value = string.Empty;
-                        worksheet.Cell(row, 9).Value = batch.EffectiveDiscountPct;
-                        worksheet.Cell(row, 10).Value = "";
-                        worksheet.Cell(row, 11).Value = "";
-                        worksheet.Cell(row, 12).Value = batch.UnitCost;
-                        worksheet.Cell(row, 13).Value = batch.TotalCost;
-                        row++;
-                    }
+                    var bytesDel = ProductBalancesDelegateListExportHelper.BuildExcel(rowsDel, polName);
+                    var fn = ExcelExportNaming.ArabicTimestampedFileName("قائمة أصناف صيدلية", ".xlsx");
+                    return File(bytesDel, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fn);
                 }
+                var csvDel = ProductBalancesDelegateListExportHelper.BuildCsv(rowsDel, polName);
+                var csvNm = ExcelExportNaming.ArabicTimestampedFileName("قائمة أصناف صيدلية", ".csv");
+                return File(csvDel, "text/csv; charset=utf-8", csvNm);
             }
 
-            worksheet.Columns().AdjustToContents();
+            var exportKeys = ProductBalancesExportHelper.ResolveExportColumnKeys(visibleCols);
 
-            using var stream = new System.IO.MemoryStream();
-            workbook.SaveAs(stream);
-            var fileName = ExcelExportNaming.ArabicTimestampedFileName("أرصدة الأصناف", ".xlsx");
-            return File(stream.ToArray(),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                fileName);
+            if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
+            {
+                var xlsxBytes = ProductBalancesExportHelper.BuildExcelBytes(reportData, exportKeys);
+                var fileName = ExcelExportNaming.ArabicTimestampedFileName("أرصدة الأصناف", ".xlsx");
+                return File(xlsxBytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    fileName);
+            }
+
+            // CSV — يُحوَّل إلى PDF عند format=pdf عبر PdfExportMiddleware
+            var csvBytesPb = ProductBalancesExportHelper.BuildCsvBytes(reportData, exportKeys);
+            var csvNamePb = ExcelExportNaming.ArabicTimestampedFileName("أرصدة الأصناف", ".csv");
+            return File(csvBytesPb, "text/csv; charset=utf-8", csvNamePb);
         }
 
         // =========================================================

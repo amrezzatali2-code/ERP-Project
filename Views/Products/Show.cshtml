@@ -194,43 +194,58 @@
         background: rgba(99, 102, 241, 0.12) !important;
     }
     
-    /* بطاقات الملخص: نفس حجم التعامل */
+    /* تمرير أفقي للملخص بدون قصّ أطراف الكروت (تجنّب row + هوامش سالبة) */
+    .product-summary-cards-scroll {
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+        padding: 2px 8px 4px;
+        margin-inline: -2px;
+    }
+
+    /* بطاقات الملخص — أعراض أصغر قليلاً لتظهر الكل على الشاشات الضيقة */
     .product-summary-cards {
         display: flex;
         flex-wrap: nowrap;
-        justify-content: center;
+        justify-content: flex-start;
         align-items: stretch;
         direction: rtl;
-        gap: 0.5rem;
+        gap: 0.35rem;
+        width: max-content;
+        min-width: 100%;
     }
     .product-summary-cards .customer-stat-card {
-        flex: 0 0 130px;
-        min-width: 130px;
-        max-width: 130px;
+        flex: 0 0 104px;
+        min-width: 104px;
+        max-width: 104px;
     }
     .product-summary-cards .customer-stat-card .card {
         width: 100%;
-        min-width: 130px;
+        min-width: 0;
     }
-    .product-summary-cards .compact-label { font-size: 0.75rem !important; }
-    .product-summary-cards .compact-stat { font-size: 1.05rem !important; }
+    .product-summary-cards .compact-card {
+        padding: 0.4rem 0.2rem !important;
+        margin-bottom: 0 !important;
+    }
+    .product-summary-cards .compact-label { font-size: 0.68rem !important; }
+    .product-summary-cards .compact-stat { font-size: 0.92rem !important; }
 
-    /* بطاقة صافي الكمية: حدود مميزة وأكبر مثل حجم التعامل */
+    /* بطاقة صافي الكمية */
     .product-balance-card {
-        flex: 0 0 160px !important;
-        min-width: 160px !important;
-        max-width: 160px !important;
+        flex: 0 0 112px !important;
+        min-width: 112px !important;
+        max-width: 112px !important;
     }
     .product-balance-card .card {
-        min-width: 160px !important;
+        min-width: 0 !important;
     }
     .customer-balance-card {
         border: 2px solid #0d6efd !important;
         box-shadow: 0 2px 8px rgba(13, 110, 253, 0.25) !important;
         background: linear-gradient(to bottom, #f8fafc 0%, #fff 100%) !important;
     }
-    .customer-balance-value {
-        font-size: 1.25rem !important;
+    .product-summary-cards .customer-balance-value {
+        font-size: 1.05rem !important;
         font-weight: 700 !important;
         letter-spacing: 0.02em;
     }
@@ -410,9 +425,9 @@
                 </div>
 
                 <div class="col-12 col-lg-1 erp-filter-section">
-                    <label class="form-label d-none d-md-block" style="visibility:hidden">عرض</label>
+                    <label class="form-label d-none d-md-block" style="visibility:hidden">تجميع</label>
                     <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm w-100">
-                        عرض
+                        تجميع
                     </button>
                 </div>
             </form>
@@ -425,7 +440,7 @@
     @if (Model == null)
     {
         <div class="alert alert-light border text-muted text-center">
-            برجاء اختيار صنف من أعلى الصفحة ثم اضغط زر <strong>عرض</strong>.
+            برجاء اختيار صنف من أعلى الصفحة ثم اضغط زر <strong>تجميع</strong>.
         </div>
     }
     else
@@ -471,8 +486,9 @@
            ===================================================== *@
         <div class="card product-movement-unified-card mb-2 flex-shrink-0">
             <div class="card-body p-2 p-md-3">
-        <div class="row g-1 flex-nowrap product-summary-cards flex-shrink-0" style="overflow-x: auto; direction: rtl;">
-            <div class="col-auto customer-stat-card">
+        <div class="product-summary-cards-scroll" dir="rtl">
+        <div class="d-flex flex-nowrap align-items-stretch product-summary-cards flex-shrink-0">
+            <div class="customer-stat-card flex-shrink-0">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">كمية أول المدة</div>
@@ -480,7 +496,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-auto customer-stat-card">
+            <div class="customer-stat-card flex-shrink-0">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">كمية المبيعات</div>
@@ -488,7 +504,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-auto customer-stat-card">
+            <div class="customer-stat-card flex-shrink-0">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">مبلغ المبيعات</div>
@@ -496,7 +512,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-auto customer-stat-card">
+            <div class="customer-stat-card flex-shrink-0">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">كمية المشتريات</div>
@@ -504,7 +520,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-auto customer-stat-card">
+            <div class="customer-stat-card flex-shrink-0">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">مبلغ المشتريات</div>
@@ -512,7 +528,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-auto customer-stat-card">
+            <div class="customer-stat-card flex-shrink-0">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات البيع</div>
@@ -520,7 +536,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-auto customer-stat-card">
+            <div class="customer-stat-card flex-shrink-0">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات الشراء</div>
@@ -528,7 +544,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-auto customer-stat-card">
+            <div class="customer-stat-card flex-shrink-0">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">سعر الجمهور</div>
@@ -536,7 +552,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-auto customer-stat-card">
+            <div class="customer-stat-card flex-shrink-0">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">الخصم المرجّح</div>
@@ -544,14 +560,15 @@
                     </div>
                 </div>
             </div>
-            <div class="col-auto product-balance-card">
+            <div class="product-balance-card flex-shrink-0">
                 <div class="card compact-card text-center shadow-sm customer-balance-card">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">صافى الكمية</div>
-                        <div class="compact-stat customer-balance-value" style="font-size: 1.25rem;">@netQty</div>
+                        <div class="compact-stat customer-balance-value">@netQty</div>
                     </div>
                 </div>
             </div>
+        </div>
         </div>
 
             </div>
@@ -1376,7 +1393,7 @@
 
                     if (!hiddenId.value) {
                         e.preventDefault();
-                        alert('من فضلك اختر صنفاً من القائمة أو أدخل كوده الرقمى ثم اضغط عرض.');
+                        alert('من فضلك اختر صنفاً من القائمة أو أدخل كوده الرقمى ثم اضغط تجميع.');
                         input.focus();
                     }
                 });

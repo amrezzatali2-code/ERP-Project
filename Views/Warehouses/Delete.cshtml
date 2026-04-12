@@ -1,17 +1,32 @@
-﻿@model ERP.Models.Branch
+﻿@model ERP.Models.Warehouse
 @{
-    ViewData["Title"] = "حذف فرع";
+    ViewData["Title"] = "حذف مخزن";
 }
+
 <div class="container" dir="rtl">
-    <h2 class="mb-3 text-danger">حذف فرع</h2>
-    <p>هل أنت متأكد من حذف الفرع التالي؟</p>
-    <ul>
-        <li><strong>المعرّف:</strong> @Model.BranchId</li>
-        <li><strong>الاسم:</strong> @Model.BranchName</li>
-    </ul>
-    <form asp-action="Delete" method="post">
-        <input type="hidden" asp-for="BranchId" />
-        <button class="btn btn-danger">حذف</button>
+    <h2 class="mb-3 text-danger">حذف مخزن</h2>
+    <p>هل أنت متأكد من حذف السجل التالي؟ لا يمكن التراجع بعد الإتمام.</p>
+
+    <dl class="row">
+        <dt class="col-sm-2">المعرّف</dt>
+        <dd class="col-sm-10">@Model.WarehouseId</dd>
+
+        <dt class="col-sm-2">الاسم</dt>
+        <dd class="col-sm-10">@Model.WarehouseName</dd>
+
+        <dt class="col-sm-2">الفرع</dt>
+        <dd class="col-sm-10">@Model.Branch?.BranchName</dd>
+
+        <dt class="col-sm-2">فعّال</dt>
+        <dd class="col-sm-10">@(Model.IsActive ? "نعم" : "لا")</dd>
+
+        <dt class="col-sm-2">ملاحظات</dt>
+        <dd class="col-sm-10">@(string.IsNullOrWhiteSpace(Model.Notes) ? "—" : Model.Notes)</dd>
+    </dl>
+
+    <form asp-action="Delete" asp-route-id="@Model.WarehouseId" method="post" class="d-flex gap-2">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
         <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
     </form>
 </div>

@@ -1,4 +1,5 @@
-﻿@using Microsoft.AspNetCore.Html
+﻿@using System.Globalization
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<StockLedger>
@@ -13,6 +14,9 @@
     // قيم البحث/الترتيب الحالية
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = Model.SearchBy ?? (string?)ViewBag.SearchBy ?? "all";
+    var smRaw = ViewBag.SearchMode as string;
+    var searchMode = string.IsNullOrWhiteSpace(smRaw) ? "contains" : smRaw.Trim().ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "TranDate";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "desc");
 
@@ -80,6 +84,7 @@
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -130,6 +135,7 @@
         {
             search,
             searchBy,
+            searchMode,
             sort = col,
             dir = newDir,
             page = 1,
@@ -205,8 +211,8 @@
 
 <div dir="rtl" class="container-fluid">
 
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <h5 class="mb-0 fs-6 text-secondary">@ViewData["Title"]</h5>
+    <div class="d-flex justify-content-between align-items-center mb-2 mt-2">
+        <h4 class="mb-0">@ViewData["Title"]</h4>
     </div>
 
     @* ===== شريط الفلاتر الموحد ===== *@
@@ -214,11 +220,16 @@
         <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
-                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                <form id="stockLedgerMainSearchForm" method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في سجل الحركات</label>
-                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
-                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
-                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px;min-width:100px">
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100" style="overflow-x:auto;">
+                        <select name="searchMode" class="form-select form-select-sm form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px" title="طريقة مطابقة النص">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
+                        <input type="text" name="search" class="form-control form-control-sm erp-filter-input flex-shrink-1" placeholder="نص أو رقم..." value="@search" style="min-width:100px;max-width:200px;width:180px;" />
+                        <select name="searchBy" class="form-select form-select-sm form-select-arrow erp-filter-input flex-shrink-0" style="max-width:160px;min-width:130px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
                             <option value="productname"@Html.Raw(searchBy == "productname" ? " selected" : "")>اسم الصنف</option>
                             <option value="entry"@Html.Raw(searchBy == "entry" ? " selected" : "")>رقم القيد</option>
@@ -229,8 +240,10 @@
                             <option value="sourceid"@Html.Raw(searchBy == "sourceid" ? " selected" : "")>رقم المستند</option>
                             <option value="sourceline"@Html.Raw(searchBy == "sourceline" ? " selected" : "")>سطر المستند</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3 flex-shrink-0">عرض</button>
-                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none flex-shrink-0" href="@Url.Action(action, controller)">إلغاء</a>
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-2 mt-2 w-100">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
@@ -276,7 +289,7 @@
             </div>
 
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
-                <label class="form-label w-100 text-center">رقم القيد من / إلى</label>
+                <label class="form-label w-100 text-center">فلتر رقم القيد</label>
                 <div class="erp-list-code-filter justify-content-center">
                     <input id="codeFromInput" type="number" class="form-control erp-filter-input" placeholder="من" value="@(fromEntry?.ToString() ?? "")" />
                     <input id="codeToInput" type="number" class="form-control erp-filter-input" placeholder="إلى" value="@(toEntry?.ToString() ?? "")" />
@@ -300,6 +313,7 @@
                         <form method="get" asp-action="Export" asp-controller="StockLedger" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                         <input type="hidden" name="search" value="@search" />
                         <input type="hidden" name="searchBy" value="@searchBy" />
+                        <input type="hidden" name="searchMode" value="@searchMode" />
                         <input type="hidden" name="sort" value="@sort" />
                         <input type="hidden" name="dir" value="@dir" />
                         <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
@@ -351,41 +365,37 @@
         </div>
     </div>
 
-    @* ===== كروت التجميعات (بين شريط الفلاتر والجدول — نمط قائمة الأصناف) ===== *@
-    <div class="row g-2 g-md-3 mb-2 no-print">
-        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
-            <div class="card h-100 erp-stockledger-summary-card" style="border: 1px solid #6366f1; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25); overflow: hidden;">
-                <div class="card-body py-3 px-3 d-flex flex-column justify-content-center">
+    @* ===== كروت التجميعات — عرض أوضح للأرقام الطويلة (erp-stockledger-summary-row في site.css) ===== *@
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row erp-stockledger-summary-row mt-2" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
                     <div class="small text-muted mb-1">عدد السجلات</div>
-                    <div class="h4 mb-0 fw-bold" style="color:#6366f1;">@total.ToString("N0")</div>
-                    <div class="small text-muted mt-1">بعد تطبيق الفلاتر الحالية</div>
+                    <div class="h4 mb-0 text-primary fw-bold erp-stockledger-summary-value">@total.ToString("N0", CultureInfo.InvariantCulture)</div>
                 </div>
             </div>
         </div>
-        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
-            <div class="card h-100 erp-stockledger-summary-card" style="border: 1px solid #6366f1; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25); overflow: hidden;">
-                <div class="card-body py-3 px-3 d-flex flex-column justify-content-center">
-                    <div class="small text-muted mb-1">صافي الكمية (رصيد من دفتر الحركة)</div>
-                    <div class="h4 mb-0 fw-bold" style="color:#6366f1;">@reportNetQty.ToString("N2")</div>
-                    <div class="small text-muted mt-1">∑(داخل − خارج) بنفس نطاق الفلاتر — مطابق لتقارير الأصناف</div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">صافي الكمية</div>
+                    <div class="h4 mb-0 fw-bold erp-stockledger-summary-value" style="color:#15803d;">@decimal.Round(reportNetQty, 0, MidpointRounding.AwayFromZero).ToString("N0", CultureInfo.InvariantCulture)</div>
                 </div>
             </div>
         </div>
-        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
-            <div class="card h-100 erp-stockledger-summary-card" style="border: 1px solid #6366f1; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25); overflow: hidden;">
-                <div class="card-body py-3 px-3 d-flex flex-column justify-content-center">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #0369a1 !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
                     <div class="small text-muted mb-1">الخصم المرجّح (%)</div>
-                    <div class="h4 mb-0 fw-bold" style="color:#6366f1;">@(reportWeightedPct.HasValue ? reportWeightedPct.Value.ToString("N2") + "%" : "—")</div>
-                    <div class="small text-muted mt-1">على المتبقي لسطور شراء/افتتاح/تحويل دخول/مزامنة — مطابق لتقارير الأصناف@(reportWeightedRem > 0 ? $" (مجموع متبقي {reportWeightedRem:N0})" : "")</div>
+                    <div class="h4 mb-0 fw-bold erp-stockledger-summary-value" style="color:#0369a1;">@(reportWeightedPct.HasValue ? reportWeightedPct.Value.ToString("N2", CultureInfo.InvariantCulture) + "%" : "—")</div>
                 </div>
             </div>
         </div>
-        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
-            <div class="card h-100 erp-stockledger-summary-card" style="border: 1px solid #6366f1; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25); overflow: hidden;">
-                <div class="card-body py-3 px-3 d-flex flex-column justify-content-center">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #b45309 !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
                     <div class="small text-muted mb-1">إجمالي تكلفة السطور</div>
-                    <div class="h4 mb-0 fw-bold" style="color:#6366f1;">@sumLineCost.ToString("N2")</div>
-                    <div class="small text-muted mt-1">حسب منطق التكلفة في الجدول</div>
+                    <div class="h4 mb-0 fw-bold erp-stockledger-summary-value" style="color:#b45309;">@sumLineCost.ToString("N2", CultureInfo.InvariantCulture)</div>
                 </div>
             </div>
         </div>
@@ -394,6 +404,7 @@
     <form id="ledgerSearchForm" method="get" action="@Url.Action(action, controller)" class="d-none">
         <input type="hidden" name="search" value="@search" />
         <input type="hidden" name="searchBy" value="@searchBy" />
+        <input type="hidden" name="searchMode" value="@searchMode" />
         <input type="hidden" name="sort" value="@sort" />
         <input type="hidden" name="dir" value="@dir" />
         <input type="hidden" name="page" value="1" />
@@ -618,6 +629,7 @@
         <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -723,6 +735,7 @@
                     @* الحفاظ على الفلاتر *@
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />

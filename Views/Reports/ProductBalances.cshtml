@@ -1,8 +1,11 @@
 @using ERP.ViewModels
+@using System.Text.Json
 @{
     ViewData["Title"] = "تقرير: أرصدة الأصناف";
 
+    var loadReport = ViewBag.LoadReport as bool? ?? false;
     var reportData = ViewBag.ReportData as List<ProductBalanceReportDto> ?? new List<ProductBalanceReportDto>();
+    var hasReportData = reportData.Any();
     var totalQty = ViewBag.TotalQty as int? ?? 0;
     var totalPriceRetail = ViewBag.TotalPriceRetail as decimal? ?? 0m;
     var totalSalesQty = ViewBag.TotalSalesQty as decimal? ?? 0m;
@@ -20,8 +23,6 @@
 
     // الفلاتر من ViewBag
     var search = ViewBag.Search as string ?? "";
-    var categoryId = ViewBag.CategoryId as int?;
-    var productGroupId = ViewBag.ProductGroupId as int?;
     var hasBonus = ViewBag.HasBonus as bool?;
     var warehouseId = ViewBag.WarehouseId as int?;
     var whStr = Context.Request.Query["warehouseId"].FirstOrDefault();
@@ -37,10 +38,15 @@
     var sortDir = ViewBag.SortDir as string ?? "asc";
     var searchMode = ViewBag.SearchMode as string ?? "contains";
     var pbQtyGtZeroChecked = !(ViewBag.IncludeZeroQty as bool? ?? false);
+    var showPolicyCols = (ViewBag.ShowPolicyColumns as bool?) == true;
+    var policyNames = ViewBag.PolicyNamesById as Dictionary<int, string> ?? new Dictionary<int, string>();
+    // أعمدة السياسات في الجدول: تظهر دائماً (حتى قبل «تجميع») — القيم تُحسب بعد التجميع وعند اختيار مخزن
+    var showPolicyTableCols = true;
+    // أدوات قائمة الصيدلي: تعتمد على المخزن + تجميع التقرير (وليس على وجود صفوف — حتى لا تُعطّل القوائم عند نتيجة فارغة)
+    // بعد «تجميع» فقط: التصدير/الطباعة تحتاج بيانات؛ خصم السياسة يُحسب عند اختيار مخزن في السيرفر
+    var delegateListUiEnabled = loadReport;
 
     // القوائم المنسدلة
-    var categories = ViewBag.Categories as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
-    var productGroups = ViewBag.ProductGroups as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
     var warehouses = ViewBag.Warehouses as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
 
     // دالة إنشاء رابط الترتيب
@@ -50,8 +56,6 @@
         {
             search,
             searchMode,
-            categoryId,
-            productGroupId,
             hasBonus,
             warehouseId,
             fromDate,
@@ -75,8 +79,6 @@
         {
             search,
             searchMode,
-            categoryId,
-            productGroupId,
             hasBonus,
             warehouseId,
             fromDate,
@@ -92,9 +94,44 @@
             pageSize
         }) ?? "#";
     };
+
+    // مصدر ثابت لنافذة «اختيار الأعمدة» (نفس ترتيب الجدول) — احتياط عندما لا تُقرأ رؤوس thead من الـ DOM (تاب/iframe/ترتيب أحداث المودال)
+    var pbColumnChooserMeta = new List<(string key, string title)>
+    {
+        ("code", "الكود"),
+        ("name", "اسم الصنف"),
+        ("batch", "التشغيلة"),
+        ("date", "التاريخ"),
+        ("category", "الفئة"),
+        ("productGroup", "مجموعة الصنف"),
+        ("bonusGroup", "مجموعة البونص"),
+        ("company", "الشركة"),
+        ("imported", "محلي/مستورد"),
+        ("description", "الوصف"),
+        ("qty", "الكمية الحالية"),
+        ("discount", "الخصم المرجح %"),
+        ("manualDiscount", "الخصم اليدوي للبيع %")
+    };
+    if (showPolicyTableCols)
+    {
+        for (var polMeta = 1; polMeta <= 10; polMeta++)
+        {
+            var polTitleMeta = policyNames.TryGetValue(polMeta, out var pnMeta) && !string.IsNullOrWhiteSpace(pnMeta) ? pnMeta.Trim() : ("سياسة " + polMeta);
+            pbColumnChooserMeta.Add(("policy" + polMeta, polTitleMeta + " — خصم البيع %"));
+        }
+    }
+    pbColumnChooserMeta.Add(("sales", "المبيعات"));
+    pbColumnChooserMeta.Add(("priceRetail", "سعر الجمهور"));
+    pbColumnChooserMeta.Add(("unitCost", "تكلفة العلبة"));
+    pbColumnChooserMeta.Add(("cost", "التكلفة الإجمالية"));
+    var pbChooserJsonList = new List<object>();
+    foreach (var c in pbColumnChooserMeta)
+        pbChooserJsonList.Add(new { key = c.key, title = c.title });
+    var pbColumnChooserJson = JsonSerializer.Serialize(pbChooserJsonList);
 }
 
 <div dir="rtl" class="container-fluid">
+    <script type="application/json" id="erpPbColumnsMeta">@Html.Raw(pbColumnChooserJson)</script>
     @* توكن مكافحة التزوير لطلبات AJAX (حفظ الخصم اليدوي) *@
     <form id="__AntiForgeryFormProductBalances" method="post" style="display:none">@Html.AntiForgeryToken()</form>
     @* ===== شريط الفلاتر الموحد (هادئ للعين) ===== *@
@@ -102,11 +139,12 @@
         <form method="get" asp-action="ProductBalances" asp-controller="Reports" id="filtersForm">
             <input type="hidden" name="loadReport" value="true" />
             <input type="hidden" name="includeBatches" value="true" />
-            @* —— صف 1: بحث مضغوط + فئة + مجموعة + مخزن + كمية أكبر من صفر + إعادة تعيين —— *@
-            <div class="row g-3 g-lg-3 align-items-end erp-pb-filter-row1">
-                <div class="col-12 col-md-5 col-xl-3 col-lg-3 erp-filter-section erp-pb-col-search">
+            @* —— صف 1 (RTL): بحث ← تطبيق/إلغاء ← مخزن ← من/إلى تاريخ ← تجميع ← إعادة تعيين —— *@
+            <div class="d-flex flex-wrap align-items-end erp-pb-filter-row1 gap-1 gap-sm-2" dir="rtl">
+                <div class="erp-filter-section erp-pb-col-search flex-shrink-0">
                     <label class="form-label small mb-1">بحث</label>
-                    <div class="d-flex flex-wrap gap-2 align-items-stretch">
+                    @* نفس السطر: يمين الحقل (في RTL) نوع البحث ثم صندوق النص — بدون flex-wrap حتى لا يُرفع القائمة فوق الحقل *@
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-pb-search-inline" dir="rtl">
                         <select name="searchMode" class="form-select form-select-sm erp-filter-input erp-pb-search-mode" title="نوع البحث في اسم الصنف والباركود">
                             <option value="starts" @(searchMode == "starts" ? "selected" : null)>يبدأ بـ</option>
                             <option value="contains" @(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? "selected" : null)>يحتوي</option>
@@ -114,8 +152,9 @@
                         </select>
                         <input type="text"
                                name="search"
+                               id="erpPbSearchText"
                                list="productsList"
-                               class="form-control form-control-sm erp-filter-input flex-grow-1 erp-pb-search-text"
+                               class="form-control form-control-sm erp-filter-input erp-pb-search-text"
                                placeholder="نص البحث…"
                                autocomplete="off"
                                value="@search" />
@@ -130,27 +169,14 @@
                         }
                     </datalist>
                 </div>
-                <div class="col-6 col-md-4 col-lg-2 col-xl-2 erp-filter-section erp-pb-col-dd">
-                    <label class="form-label small mb-1">الفئة</label>
-                    <select name="categoryId" class="form-select form-select-sm erp-filter-input">
-                        <option value="">الكل</option>
-                        @foreach (var cat in categories)
-                        {
-                            <option value="@cat.Value" @(categoryId?.ToString() == cat.Value ? "selected" : null)>@cat.Text</option>
-                        }
-                    </select>
+                <div class="erp-filter-section erp-pb-col-apply-cancel flex-shrink-0">
+                    <label class="form-label small mb-1 d-block" style="visibility:hidden">—</label>
+                    <div class="d-flex flex-nowrap gap-2 align-items-center">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm flex-shrink-0" title="تطبيق البحث والفلاتر">تطبيق</button>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm flex-shrink-0" id="erpPbSearchCancel" title="مسح نص البحث">إلغاء</button>
+                    </div>
                 </div>
-                <div class="col-6 col-md-4 col-lg-2 col-xl-2 erp-filter-section erp-pb-col-dd">
-                    <label class="form-label small mb-1">مجموعة الصنف</label>
-                    <select name="productGroupId" class="form-select form-select-sm erp-filter-input">
-                        <option value="">الكل</option>
-                        @foreach (var pg in productGroups)
-                        {
-                            <option value="@pg.Value" @(productGroupId?.ToString() == pg.Value ? "selected" : null)>@pg.Text</option>
-                        }
-                    </select>
-                </div>
-                <div class="col-6 col-md-4 col-lg-2 col-xl-2 erp-filter-section erp-pb-col-dd">
+                <div class="erp-filter-section erp-pb-col-dd flex-shrink-0">
                     <label class="form-label small mb-1">المخزن</label>
                     <select name="warehouseId" id="warehouseIdSelect" class="form-select form-select-sm erp-filter-input">
                         <option value="">الكل</option>
@@ -162,19 +188,39 @@
                         }
                     </select>
                 </div>
-                <div class="col-12 col-sm-auto erp-filter-section erp-pb-col-qty">
+                <div class="erp-filter-section erp-pb-col-dates-inline flex-shrink-0">
                     <label class="form-label small mb-1 d-block" style="visibility:hidden">—</label>
-                    <div class="d-flex align-items-center gap-2 erp-pb-qty-checkbox-wrap mb-0 px-2" dir="rtl">
-                        <label class="form-check-label small mb-0" for="pbQtyGtZero">الكمية أكبر من صفر</label>
-                        <input class="form-check-input erp-pb-qty-checkbox m-0 flex-shrink-0" type="checkbox" name="pbQtyGtZero" value="true" id="pbQtyGtZero" @(pbQtyGtZeroChecked ? "checked" : "") />
+                    <div class="d-flex flex-wrap align-items-end gap-2 erp-pb-dates-inline-group" dir="ltr">
+                        <div class="erp-pb-date-from-wrap">
+                            <label class="form-label small mb-0">من تاريخ</label>
+                            <input type="date"
+                                   name="fromDate"
+                                   id="pbFromDate"
+                                   dir="ltr"
+                                   class="form-control form-control-sm erp-filter-input"
+                                   placeholder="yyyy-mm-dd"
+                                   title="سنة-شهر-يوم (مثل حجم التعامل)"
+                                   value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-dd") : "")" />
+                        </div>
+                        <div class="erp-pb-date-to-wrap">
+                            <label class="form-label small mb-0">إلى تاريخ</label>
+                            <input type="date"
+                                   name="toDate"
+                                   id="pbToDate"
+                                   dir="ltr"
+                                   class="form-control form-control-sm erp-filter-input"
+                                   placeholder="yyyy-mm-dd"
+                                   title="سنة-شهر-يوم (مثل حجم التعامل)"
+                                   value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-dd") : "")" />
+                        </div>
                     </div>
                 </div>
-                <div class="col-12 col-sm-auto erp-filter-section erp-pb-col-top-actions d-flex align-items-end">
+                <div class="erp-filter-section erp-pb-col-top-actions d-flex align-items-end flex-shrink-0">
                     <label class="form-label small mb-1 d-block" style="visibility:hidden">—</label>
                     <div class="d-flex align-items-end gap-2 erp-pb-top-actions-group">
                         <div class="d-flex align-items-end erp-pb-top-generate-wrap">
-                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">
-                                <span>📊</span> تجميع التقرير
+                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm" title="تجميع البيانات حسب الفلاتر">
+                                <span>📊</span> تجميع
                             </button>
                         </div>
                         <a href="@Url.Action("ProductBalances", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none">
@@ -182,75 +228,94 @@
                         </a>
                     </div>
                 </div>
+                <div class="erp-filter-section erp-pb-col-qty-row1 flex-shrink-0 align-self-end" title="عند التفعيل يُستبعد رصيد الصفر من التقرير">
+                    <label class="form-label small mb-1 d-block" style="visibility:hidden">—</label>
+                    <div class="d-flex align-items-center gap-2 erp-pb-qty-checkbox-wrap mb-0 px-2 py-1" dir="rtl">
+                        <label class="form-check-label small mb-0" for="pbQtyGtZero">الكمية أكبر من صفر</label>
+                        <input class="form-check-input erp-pb-qty-checkbox m-0 flex-shrink-0" type="checkbox" name="pbQtyGtZero" value="true" id="pbQtyGtZero" @(pbQtyGtZeroChecked ? "checked" : "") />
+                    </div>
+                </div>
             </div>
-            @* —— صف 2: التواريخ + تجميع التقرير + (عند وجود بيانات) تصدير وحفظ وحركة وأعمدة ونقل المرجّح —— *@
+            @* —— صف 2: فواتير المشتريات + أدوات التقرير (بدون مجموعة قائمة الصيدلي) —— *@
             <div class="row g-0 align-items-end mt-3 erp-pb-filter-row2">
                 <div class="col-12 erp-filter-section erp-pb-filter-row2-inner">
-                    <div class="d-flex flex-wrap align-items-end gap-3 justify-content-end w-100 erp-pb-row2-main" dir="rtl">
-                        <div class="d-flex flex-wrap flex-lg-nowrap align-items-end gap-3 erp-pb-dates-group erp-pb-right-fields-group">
-                            <div class="erp-pb-date-from-wrap">
-                                <label class="form-label small mb-0">من تاريخ </label>
-                                <div class="input-group input-group-sm erp-pb-date-input-group" dir="ltr">
-                                    <span class="input-group-text erp-pb-date-icon" aria-hidden="true">
-                                        <svg class="erp-pb-date-icon-svg" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                                            <path d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a3 3 0 0 1 3 3v11a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V7a3 3 0 0 1 3-3h1V3a1 1 0 0 1 1-1Zm13 8H4v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8ZM6 6a1 1 0 0 0-1 1v1h15V7a1 1 0 0 0-1-1H6Z"></path>
-                                        </svg>
-                                    </span>
-                                    <input type="datetime-local" name="fromDate" id="pbFromDate" dir="ltr" autocomplete="off" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" title="بداية المدة (يوم/شهر/سنة ووقت)" />
+                    <div class="d-flex flex-wrap align-items-end gap-2 justify-content-between w-100 erp-pb-row2-main" dir="rtl">
+                        <div class="d-flex flex-wrap align-items-end gap-2 erp-pb-row2-cluster">
+                            <div class="d-flex flex-wrap flex-lg-nowrap align-items-end gap-2 erp-pb-right-fields-group">
+                                <div class="d-flex flex-wrap align-items-end gap-2 erp-pb-pi-range-group" title="رقم فاتورة المشتريات = المعرّف في النظام (نفس رقم الفاتورة في شاشة المشتريات)">
+                                    <div class="erp-pb-pi-from-wrap">
+                                        <label class="form-label small mb-0">من فاتورة مشتريات <span class="text-muted small">(رقم)</span></label>
+                                        <input type="number" name="purchaseInvoiceFrom" dir="ltr" class="form-control form-control-sm erp-filter-input" style="max-width:9rem" min="1" step="1"
+                                               value="@(purchaseInvoiceFrom.HasValue ? purchaseInvoiceFrom.Value.ToString() : "")" />
+                                    </div>
+                                    <div class="erp-pb-pi-to-wrap">
+                                        <label class="form-label small mb-0">إلى فاتورة مشتريات <span class="text-muted small">(رقم)</span></label>
+                                        <input type="number" name="purchaseInvoiceTo" dir="ltr" class="form-control form-control-sm erp-filter-input" style="max-width:9rem" min="1" step="1"
+                                               value="@(purchaseInvoiceTo.HasValue ? purchaseInvoiceTo.Value.ToString() : "")" />
+                                    </div>
                                 </div>
                             </div>
-                            <div class="erp-pb-date-to-wrap">
-                                <label class="form-label small mb-0">إلى تاريخ </label>
-                                <div class="input-group input-group-sm erp-pb-date-input-group" dir="ltr">
-                                    <span class="input-group-text erp-pb-date-icon" aria-hidden="true">
-                                        <svg class="erp-pb-date-icon-svg" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                                            <path d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a3 3 0 0 1 3 3v11a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V7a3 3 0 0 1 3-3h1V3a1 1 0 0 1 1-1Zm13 8H4v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8ZM6 6a1 1 0 0 0-1 1v1h15V7a1 1 0 0 0-1-1H6Z"></path>
-                                        </svg>
-                                    </span>
-                                    <input type="datetime-local" name="toDate" id="pbToDate" dir="ltr" autocomplete="off" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" title="نهاية المدة (يوم/شهر/سنة ووقت)" />
-                                </div>
-                            </div>
-                            <div class="d-flex flex-wrap align-items-end gap-2 erp-pb-pi-range-group" title="رقم فاتورة المشتريات = المعرّف في النظام (نفس رقم الفاتورة في شاشة المشتريات)">
-                                <div class="erp-pb-pi-from-wrap">
-                                    <label class="form-label small mb-0">من فاتورة مشتريات <span class="text-muted small">(رقم)</span></label>
-                                    <input type="number" name="purchaseInvoiceFrom" dir="ltr" class="form-control form-control-sm erp-filter-input" style="max-width:9rem" min="1" step="1" 
-                                           value="@(purchaseInvoiceFrom.HasValue ? purchaseInvoiceFrom.Value.ToString() : "")" />
-                                </div>
-                                <div class="erp-pb-pi-to-wrap">
-                                    <label class="form-label small mb-0">إلى فاتورة مشتريات <span class="text-muted small">(رقم)</span></label>
-                                    <input type="number" name="purchaseInvoiceTo" dir="ltr" class="form-control form-control-sm erp-filter-input" style="max-width:9rem" min="1" step="1" 
-                                           value="@(purchaseInvoiceTo.HasValue ? purchaseInvoiceTo.Value.ToString() : "")" />
-                                </div>
-                            </div>
-                        </div>
-                        @if (reportData.Any())
-                        {
-                            <div class="d-flex flex-wrap gap-3 justify-content-start align-items-center erp-pb-actions-row" dir="rtl">
+                            <div class="d-flex flex-wrap gap-2 justify-content-start align-items-center erp-pb-actions-row" dir="rtl">
                                 <input type="hidden" name="pageSize" value="@pageSize" />
-                                <a href="@Url.Action("ExportProductBalances", "Reports", new { search, searchMode, categoryId, productGroupId, hasBonus, warehouseId, fromDate, toDate, purchaseInvoiceFrom, purchaseInvoiceTo, pbQtyGtZero = pbQtyGtZeroChecked ? "true" : "false", includeBatches, sortBy, sortDir })"
-                                   class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none">
-                                    <span>📥</span> تصدير Excel
-                                </a>
-                                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm d-print-none" id="erpPbSaveAllManualDiscount" title="حفظ كل تعديلات الخصم اليدوي للبيع (يشمل الخصومات في صفوف التشغيلات)">
+                                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm d-print-none" id="erpPbSaveAllManualDiscount" title="حفظ كل تعديلات الخصم اليدوي للبيع (يشمل الخصومات في صفوف التشغيلات)" @(!hasReportData ? "disabled=\"disabled\"" : "")>
                                     <span>💾</span> حفظ الخصم اليدوي
                                 </button>
-                                <span id="erpPbSaveSuccessMessage" class="d-none text-success fw-bold me-2 small align-middle" style="vertical-align: middle;">تم الحفظ</span>
-                                @* ترتيب DOM: في RTL يظهر «نقل المرجّح» يمين الحزمة، ثم «حركة» و«الأعمدة» إلى يساره *@
-                                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" id="erpPbCopyWeightedToManual" title="ينقل الخصم المرجّح (بعد التقريب لأقرب عدد صحيح) إلى خانة الخصم اليدوي لكل صف ظاهر ثم يحفظ">
-                                    <span>📋</span> نقل المرجّح يدوي بعد التقريب)
+                                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" id="erpPbCopyWeightedToManual" title="ينقل الخصم المرجّح (بعد التقريب لأقرب عدد صحيح) إلى خانة الخصم اليدوي لكل صف ظاهر ثم يحفظ" @(!hasReportData ? "disabled=\"disabled\"" : "")>
+                                    <span>📋</span> نقل المرجّح يدوي بعد التقريب
                                 </button>
                                 <button type="button" id="erpPbToolbarMovement" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="اختر صفاً في الجدول أولاً">حركة الصنف</button>
                                 <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" data-bs-toggle="modal" data-bs-target="#columnsModalProductBalances" title="إظهار/إخفاء أعمدة التقرير">اختيار الأعمدة</button>
+                                <div class="d-inline-flex flex-wrap align-items-center erp-export-form erp-pb-export-split" dir="ltr">
+                                    <input type="hidden" name="visibleCols" id="erpPbExportVisibleCols" value="" />
+                                    <button type="submit"
+                                            class="btn btn-erp btn-erp-success btn-erp-sm erp-pb-export-btn"
+                                            formaction="@Url.Action("ExportProductBalances", "Reports")"
+                                            formmethod="get"
+                                            title="@(hasReportData ? "تصدير حسب الفلاتر الحالية" : "اضغط تجميع أولاً حتى يتوفر التصدير")"
+                                            @(!hasReportData ? "disabled=\"disabled\"" : "")>
+                                        تصدير
+                                    </button>
+                                    <select name="format" class="form-select form-select-sm form-select-arrow erp-filter-input erp-pb-export-format-select" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="صيغة التصدير" @(!hasReportData ? "disabled=\"disabled\"" : "")>
+                                        <option value="excel" selected>Excel</option>
+                                        <option value="pdf">PDF</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" id="erpPbPrintPage" @(!hasReportData ? "disabled=\"disabled\"" : "") title="طباعة الصفحة الحالية (الجدول)">طباعة</button>
                             </div>
-                        }
+                        </div>
                     </div>
+                </div>
+            </div>
+            @* —— صف 3: قائمة الصيدلي (يظهر دائماً؛ التفعيل بعد تجميع + مخزن) —— *@
+            <div class="w-100 mt-2 pt-2 border-top border-light-subtle erp-pb-delegate-toolbar-wrap d-print-none" dir="rtl">
+                <div class="small text-muted mb-1">قائمة للصيدلي — تصدير أو طباعة مختصرة (صنف + سعر الجمهور + خصم بيع السياسة)</div>
+                <div class="d-flex flex-wrap align-items-end gap-2 erp-pb-delegate-toolbar" title="التصدير: كل الأصناف المطابقة للفلاتر. الطباعة: الصفوف الظاهرة في الجدول فقط.">
+                    <button type="button" class="btn btn-erp btn-erp-success btn-erp-sm" id="erpPbExportListRun" @(!delegateListUiEnabled ? "disabled=\"disabled\"" : "") title="تصدير قائمة حسب الفلاتر (Excel أو PDF)">تصدير قائمة</button>
+                    <div class="d-flex flex-column align-items-stretch flex-shrink-0">
+                        <label class="form-label small mb-0 text-nowrap" for="erpPbDelegateListFormat">صيغة الملف</label>
+                        <select id="erpPbDelegateListFormat" class="form-select form-select-sm form-select-arrow erp-filter-input" style="width:100px;min-width:100px;font-size:0.95rem;font-weight:500;" @(!loadReport ? "disabled=\"disabled\"" : "")>
+                            <option value="excel" selected>Excel</option>
+                            <option value="pdf">PDF</option>
+                        </select>
+                    </div>
+                    <div class="d-flex flex-column align-items-stretch flex-shrink-0">
+                        <label class="form-label small mb-0" for="erpPbDelegatePolicy">السياسة</label>
+                        <select class="form-select form-select-sm form-select-arrow erp-filter-input" id="erpPbDelegatePolicy" style="min-width:12rem;max-width:22rem">
+                            @for (var pol = 1; pol <= 10; pol++)
+                            {
+                                var polLabel = policyNames.TryGetValue(pol, out var pnm) && !string.IsNullOrWhiteSpace(pnm) ? pnm.Trim() : ("سياسة " + pol);
+                                <option value="@pol">@polLabel</option>
+                            }
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpPbPrintListOpen" @(!delegateListUiEnabled ? "disabled=\"disabled\"" : "") title="طباعة قائمة للصفوف الظاهرة — نفس السياسة أعلاه">طباعة قائمة</button>
                 </div>
             </div>
         </form>
     </div>
 
     @* ===== كروت الإجماليات (بين شريط الفلاتر والجدول) ===== *@
-    @if (reportData.Any())
+    @if (hasReportData)
     {
         var n2 = System.Globalization.CultureInfo.InvariantCulture;
         <div class="row g-2 g-md-3 mb-2 mt-3 no-print erp-list-summary-row" id="productBalancesSummaryCards">
@@ -306,7 +371,7 @@
     }
 
     @* تحديث عدد الصفوف المرئية (فلترة أعمدة) — مخفي عن العرض *@
-    @if (reportData.Any())
+    @if (hasReportData)
     {
         <span id="productBalancesItemCount" class="d-none" aria-hidden="true">@totalCount</span>
     }
@@ -356,6 +421,22 @@
                         <th class="text-end d-print-none" style="min-width: 140px;" data-col="manualDiscount" title="لو الصنف ليس له خصم يدوي يُستخدم الخصم المرجّح (عمود الخصم المرجح %).">
                             <span>الخصم اليدوي للبيع %</span>
                         </th>
+                        @if (showPolicyTableCols)
+                        {
+                            for (var pol = 1; pol <= 10; pol++)
+                            {
+                                var polTitle = policyNames.TryGetValue(pol, out var pn) ? pn : ("سياسة " + pol);
+                                <th class="text-end" style="min-width: 96px;" data-col="policy@(pol)" data-policy-display-name="@polTitle" title="@(showPolicyCols ? "خصم بيع % — " + polTitle + " (سياسة " + pol + " في المخزن)" : "خصم بيع % — " + polTitle + " — اختر مخزناً في الفلتر لحساب النسب")">
+                                    <div class="d-flex flex-column align-items-end gap-0 lh-sm">
+                                        <div class="d-flex align-items-center justify-content-end gap-1">
+                                            <span class="small fw-semibold text-break" style="max-width: 8.5rem;">@polTitle</span>
+                                            <button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="policy@(pol)" data-col-title="@polTitle — خصم البيع %" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                        </div>
+                                        <span class="text-muted small">خصم البيع %</span>
+                                    </div>
+                                </th>
+                            }
+                        }
                         <th class="text-end" style="min-width: 100px;" data-col="sales">
                             <div class="d-flex align-items-center justify-content-end gap-1">
                                 <span>المبيعات</span>
@@ -380,7 +461,7 @@
                     @if (!reportData.Any())
                     {
                         <tr>
-                            <td colspan="18" class="text-center text-muted py-4">لا توجد بيانات.</td>
+                            <td colspan="28" class="text-center text-muted py-4">لا توجد بيانات.</td>
                         </tr>
                     }
                     else
@@ -427,6 +508,14 @@
                                         <input type="number" step="0.01" min="0" max="100" class="form-control form-control-sm text-end erp-pb-manual-discount-inp" style="width:70px;min-width:70px;margin-left:auto;" value="@(item.ManualDiscountPct?.ToString("N2", System.Globalization.CultureInfo.InvariantCulture) ?? "")" title="الخصم اليدوي للبيع % — Enter: حفظ والانتقال للصف التالي" data-prod-id="@item.ProdId" data-warehouse-id="@(warehouseId?.ToString() ?? "")" data-batch-id="" />
                                     }
                                 </td>
+                                @if (showPolicyTableCols)
+                                {
+                                    for (var pol = 1; pol <= 10; pol++)
+                                    {
+                                        var pv = item.PolicySaleDiscountPct != null && pol - 1 < item.PolicySaleDiscountPct.Length ? item.PolicySaleDiscountPct[pol - 1] : null;
+                                        <td data-col="policy@(pol)" class="text-end">@(pv.HasValue ? pv.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) : "—")</td>
+                                    }
+                                }
                                 <td data-col="sales" class="text-end">@item.SalesQty.ToString("N2")</td>
                                 <td data-col="priceRetail" class="text-end">@item.PriceRetail.ToString("N2")</td>
                                 <td data-col="unitCost" class="text-end">@item.UnitCost.ToString("N2")</td>
@@ -453,6 +542,14 @@
                                         <td data-col="manualDiscount" class="text-end d-print-none">
                                             <input type="number" step="0.01" min="0" max="100" class="form-control form-control-sm text-end erp-pb-manual-discount-inp" style="width:70px;min-width:70px;margin-left:auto;" value="@(batch.ManualDiscountPct?.ToString("N2", System.Globalization.CultureInfo.InvariantCulture) ?? "")" data-prod-id="@item.ProdId" data-warehouse-id="@(warehouseId?.ToString() ?? "")" data-batch-id="@(batch.BatchId?.ToString() ?? "")" />
                                         </td>
+                                        @if (showPolicyTableCols)
+                                        {
+                                            for (var pol = 1; pol <= 10; pol++)
+                                            {
+                                                var pvB = batch.PolicySaleDiscountPct != null && pol - 1 < batch.PolicySaleDiscountPct.Length ? batch.PolicySaleDiscountPct[pol - 1] : null;
+                                                <td data-col="policy@(pol)" class="text-end">@(pvB.HasValue ? pvB.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) : "—")</td>
+                                            }
+                                        }
                                         <td data-col="sales" class="text-end">@batch.SalesQty.ToString("N2")</td>
                                         <td data-col="priceRetail" class="text-end">@batch.PriceRetail.ToString("N2")</td>
                                         <td data-col="unitCost" class="text-end">@batch.UnitCost.ToString("N2")</td>
@@ -463,9 +560,9 @@
                         }
                     }
                 </tbody>
-                @if (reportData.Any())
+                @if (loadReport)
                 {
-                    <tfoot class="table-secondary fw-bold erp-list-summary-tfoot" id="productBalancesFooter" data-total-qty="@totalQty" data-total-sales="@totalSalesQty.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-priceretail="@totalPriceRetail.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-unitcost="@totalUnitCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-cost="@totalCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)">
+                    <tfoot class="table-secondary fw-bold erp-list-summary-tfoot text-start" id="productBalancesFooter" data-total-qty="@totalQty" data-total-sales="@totalSalesQty.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-priceretail="@totalPriceRetail.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-unitcost="@totalUnitCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-cost="@totalCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)">
                         <tr>
                             <td data-col="select" class="no-print"></td>
                             <td data-col="code" class="text-end"><strong>المجموع الإجمالي</strong></td>
@@ -481,6 +578,13 @@
                             <td data-col="qty" id="productBalancesFooterQty" class="text-end"><strong>@totalQty.ToString("N0")</strong></td>
                             <td data-col="discount" class="text-end text-muted"><small>—</small></td>
                             <td data-col="manualDiscount" class="d-print-none text-muted"><small>—</small></td>
+                            @if (showPolicyTableCols)
+                            {
+                                for (var pol = 1; pol <= 10; pol++)
+                                {
+                                    <td data-col="policy@(pol)" class="text-end text-muted"><small>—</small></td>
+                                }
+                            }
                             <td data-col="sales" id="productBalancesFooterSales" class="text-end"><strong>@totalSalesQty.ToString("N2")</strong></td>
                             <td data-col="priceRetail" id="productBalancesFooterPriceRetail" class="text-end"><strong>@totalPriceRetail.ToString("N2")</strong></td>
                             <td data-col="unitCost" id="productBalancesFooterUnitCost" class="text-end"><strong>@totalUnitCost.ToString("N2")</strong></td>
@@ -493,12 +597,12 @@
     </div>
 
     @* ===== شريط الترقيم تحت الجدول (حجم الصفحة + عرض من-إلى + تنقل) — محاذاة لليمين ===== *@
-    @if (reportData.Any())
+    @if (loadReport)
     {
         var ps = pageSize;
         var startRow = totalCount == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
         var endRow = (ps == 0 || totalCount == 0) ? totalCount : Math.Min(totalCount, page * ps);
-        <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" id="productBalancesPaginationBar" dir="rtl">
+        <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-3 mb-2 pb-2 border-top border-light-subtle no-print" id="productBalancesPaginationBar" dir="rtl">
             <small class="text-muted" id="productBalancesPaginationText">
                 عرض @startRow - @endRow من @totalCount
             </small>
@@ -506,12 +610,10 @@
                 <input type="hidden" name="loadReport" value="true" />
                 <input type="hidden" name="search" value="@search" />
                 <input type="hidden" name="searchMode" value="@searchMode" />
-                <input type="hidden" name="categoryId" value="@(categoryId?.ToString() ?? "")" />
-                <input type="hidden" name="productGroupId" value="@(productGroupId?.ToString() ?? "")" />
                 <input type="hidden" name="hasBonus" value="@(hasBonus == true ? "true" : "false")" />
                 <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
-                <input type="hidden" name="fromDate" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
-                <input type="hidden" name="toDate" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                <input type="hidden" name="fromDate" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-dd") : "")" />
+                <input type="hidden" name="toDate" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-dd") : "")" />
                 <input type="hidden" name="purchaseInvoiceFrom" value="@(purchaseInvoiceFrom?.ToString() ?? "")" />
                 <input type="hidden" name="purchaseInvoiceTo" value="@(purchaseInvoiceTo?.ToString() ?? "")" />
                 <input type="hidden" name="pbQtyGtZero" value="@(pbQtyGtZeroChecked ? "true" : "false")" />
@@ -552,17 +654,28 @@
     }
 </div>
 
-@* مودال اختيار الأعمدة (نفس فكرة قائمة الأصناف) *@
-<div class="modal fade no-print" id="columnsModalProductBalances" tabindex="-1" aria-labelledby="columnsModalProductBalancesLabel" aria-hidden="true">
+<div id="erpPbCenterToast" class="erp-pb-center-toast d-none" role="status" aria-live="polite" dir="rtl"></div>
+
+@* مودال اختيار الأعمدة — نمط erp-columns-modal (قائمة العملاء / الأصناف) *@
+<div class="modal fade no-print erp-columns-modal"
+     id="columnsModalProductBalances"
+     tabindex="-1"
+     aria-labelledby="columnsModalProductBalancesLabel"
+     aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content" dir="rtl">
-            <div class="modal-header text-white" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border-bottom: none;">
-                <h5 class="modal-title flex-grow-1" id="columnsModalProductBalancesLabel">اختيار الأعمدة الظاهرة في تقرير أرصدة الأصناف</h5>
-                <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            <div class="modal-header">
+                <h5 class="modal-title flex-grow-1" id="columnsModalProductBalancesLabel">
+                    اختيار الأعمدة الظاهرة في تقرير أرصدة الأصناف
+                </h5>
+                <button type="button"
+                        class="btn-close ms-2"
+                        data-bs-dismiss="modal"
+                        aria-label="إغلاق"></button>
             </div>
             <div class="modal-body">
-                <div class="small text-muted mb-2">ضع علامة ✓ أمام الأعمدة التي تريد ظهورها في الجدول.</div>
-                <div id="columnsListProductBalances"></div>
+                @* بدون erp-columns-modal-list حتى لا يحقن erp-columns-modal.js صف «اختيار الكل» وحده دون أعمدة *@
+                <div id="columnsListProductBalances" class="erp-pb-columns-modal-list"></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-erp btn-erp-secondary" data-bs-dismiss="modal">إغلاق</button>
@@ -572,11 +685,37 @@
     </div>
 </div>
 
+@* مودال طباعة قائمة (صيدلية): سياسة + عدد أعمدة في الصف *@
+<div class="modal fade no-print erp-columns-modal" id="pbDelegatePrintModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" dir="rtl">
+            <div class="modal-header">
+                <h5 class="modal-title flex-grow-1">طباعة قائمة (صنف + سعر + خصم بيع سياسة)</h5>
+                <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2">يُطبع الصفوف <strong>الظاهرة حالياً</strong> في الجدول (بعد فلترة الأعمدة في المتصفح). <strong>السياسة</strong> تُؤخذ من القائمة المنسدلة «السياسة» في شريط الأدوات أعلاه.</p>
+                <div class="mb-0">
+                    <label class="form-label small mb-1">عدد الأعمدة في الصف</label>
+                    <select class="form-select form-select-sm" id="pbDelegatePrintCols">
+                        <option value="2" selected>2 (عرض أكبر)</option>
+                        <option value="3">3</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-erp btn-erp-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn btn-erp btn-erp-primary" id="pbDelegatePrintRun">طباعة</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @* لوحة ترتيب وفلتر العمود (مثل قائمة الأصناف — زر واحد: ترتيب + فلترة نصية أو رقمية) *@
 <div id="erpPbColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
-    <div class="erp-column-filter-header">
-        <span id="erpPbColumnFilterTitle">ترتيب وفلتر</span>
-        <button type="button" class="btn-close btn-sm" id="erpPbColumnFilterClose" aria-label="إغلاق"></button>
+    <div class="erp-column-filter-header erp-pb-col-filter-panel-header d-flex align-items-center justify-content-between gap-2 flex-wrap">
+        <span id="erpPbColumnFilterTitle" class="erp-pb-col-filter-panel-title flex-grow-1">ترتيب وفلتر</span>
+        <button type="button" class="btn-close btn-close-white" id="erpPbColumnFilterClose" aria-label="إغلاق"></button>
     </div>
     <div class="erp-column-filter-body">
         <div id="erpPbSortSection" class="erp-filter-sort-section mb-3 pb-2 border-bottom">
@@ -621,20 +760,49 @@
             min-width: fit-content;
             flex-wrap: nowrap;
         }
-        .erp-pb-date-input-group .input-group-text {
-            min-height: 38px;
-            border-color: #94a3b8 !important;
-            background: #f7faff;
-            color: #4f46e5;
+        .erp-pb-delegate-toolbar {
+            align-items: flex-end !important;
         }
-        .erp-pb-date-input-group .form-control {
-            border-inline-start: 0;
+        /* قوائم select داخل الشريط: منع قصّ القائمة المنسدلة الأصلية */
+        .product-balances-report.erp-list-filter-bar {
+            overflow: visible !important;
         }
-        .erp-pb-date-icon-svg {
-            width: 15px;
-            height: 15px;
-            display: block;
-            fill: currentColor;
+        .erp-pb-delegate-toolbar-wrap,
+        .erp-pb-filter-row2,
+        .erp-pb-filter-row2-inner,
+        .erp-pb-row2-main,
+        .erp-pb-actions-row {
+            overflow: visible !important;
+        }
+        .erp-pb-delegate-toolbar-wrap {
+            position: relative;
+            z-index: 6;
+        }
+        #erpPbDelegateListFormat {
+            text-align: center;
+            text-align-last: center;
+        }
+        .erp-pb-center-toast {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2000;
+            min-width: 220px;
+            max-width: 90vw;
+            padding: 0.85rem 1.25rem;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #0f172a;
+            background: #fff;
+            border: 1px solid #6366f1;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+        }
+        .erp-pb-center-toast.erp-pb-center-toast--success {
+            border-color: #16a34a;
+            color: #14532d;
         }
         .erp-pb-qty-checkbox {
             width: 1.15rem;
@@ -661,16 +829,22 @@
             flex: 0 0 auto;
         }
         .erp-pb-filter-row1 .erp-pb-col-search .erp-pb-search-text {
+            flex: 1 1 auto;
+            min-width: 7rem;
+            max-width: 14rem;
+            width: auto;
+        }
+        .erp-pb-filter-row1 .erp-pb-col-search {
+            max-width: none;
+            width: auto;
+        }
+        .erp-pb-search-inline {
             min-width: 0;
-            max-width: 200px;
         }
-        @@media (min-width: 1200px) {
-            .erp-pb-filter-row1 .erp-pb-col-search {
-                max-width: 22rem;
-            }
-        }
+        /* تجميع العناصر بدون فراغات أفقية بين المجموعات */
         .erp-pb-filter-row1 {
-            justify-content: space-between;
+            justify-content: flex-start;
+            align-items: flex-end;
         }
         .erp-pb-right-fields-group {
             justify-content: flex-end;
@@ -686,7 +860,23 @@
         }
         .erp-pb-actions-row {
             flex-wrap: wrap;
-            margin-inline-start: auto;
+        }
+        .erp-pb-export-split {
+            gap: 0 !important;
+        }
+        /* تصدير يسار Excel (LTR): زر أخضر ملاصق للقائمة */
+        .erp-pb-export-split .erp-pb-export-btn {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        .erp-pb-export-split .erp-pb-export-format-select {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+            margin-inline-start: -1px;
+        }
+        /* مودال الأعمدة: عرض أوحى مع أعمدة كثيرة (فوق حد erp-columns-modal الافتراضي) */
+        #columnsModalProductBalances.erp-columns-modal .modal-dialog {
+            max-width: min(560px, 96vw);
         }
         @@media (max-width: 991.98px) {
             .erp-pb-top-actions-group {
@@ -702,14 +892,14 @@
         #productBalancesTable tbody tr.erp-list-selectable-row {
             cursor: pointer;
         }
-        /* حقول التاريخ والوقت أصغر حجماً ومنع التداخل */
-        .erp-datetime-input {
-            min-width: 165px;
-            max-width: 180px;
-            width: 100%;
-            padding-inline-end: 2rem;
-            font-size: 0.875rem;
-            box-sizing: border-box;
+        .erp-pb-dates-inline-group input[type="date"],
+        .erp-pb-dates-group input[type="date"] {
+            min-width: 9rem;
+            max-width: 10.5rem;
+        }
+        .erp-pb-col-dates-inline .erp-pb-date-from-wrap,
+        .erp-pb-col-dates-inline .erp-pb-date-to-wrap {
+            min-width: 0;
         }
 
         /* ألوان التقرير مثل قائمة الأصناف بالضبط (نفس erp-table و table-light) */
@@ -756,12 +946,27 @@
             -webkit-overflow-scrolling: touch;
         }
         /* حدود ظاهرة للمحتويات الداخلية */
-        #erpPbColumnFilterPanel .erp-column-filter-header {
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            padding: 0.5rem 0.75rem;
-            margin: -0.25rem 0 0.5rem 0;
-            background: #f8f9fa;
+        /* رأس لوحة ترتيب/فلتر العمود — واضح مثل مودال اختيار الأعمدة */
+        #erpPbColumnFilterPanel .erp-pb-col-filter-panel-header {
+            border: none;
+            border-radius: 8px;
+            padding: 0.55rem 0.85rem;
+            margin: -0.15rem -0.15rem 0.65rem -0.15rem;
+            background: linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #818cf8 100%);
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+        }
+        #erpPbColumnFilterPanel .erp-pb-col-filter-panel-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #fff !important;
+            line-height: 1.35;
+        }
+        #erpPbColumnFilterPanel .erp-pb-col-filter-panel-header .btn-close {
+            flex-shrink: 0;
+            opacity: 0.95;
+        }
+        #erpPbColumnFilterPanel .erp-pb-col-filter-panel-header .btn-close:hover {
+            opacity: 1;
         }
         #erpPbColumnFilterPanel #erpPbSortSection {
             border: 1px solid #dee2e6 !important;
@@ -870,6 +1075,17 @@
                 });
             }
 
+            var searchInpPb = document.getElementById('erpPbSearchText');
+            var searchModeSel = form ? form.querySelector('select[name="searchMode"]') : null;
+            var btnSearchCancel = document.getElementById('erpPbSearchCancel');
+            if (btnSearchCancel && searchInpPb) {
+                btnSearchCancel.addEventListener('click', function () {
+                    searchInpPb.value = '';
+                    if (searchModeSel) searchModeSel.value = 'contains';
+                    searchInpPb.focus();
+                });
+            }
+
             // فتح/إغلاق صفوف التشغيلات عند النقر على السهم؛ Enter على السهم المغلق يفتح التشغيلات وينقل الفوكس لأول حقل خصم
             document.querySelectorAll('.erp-pb-toggle-batches').forEach(function (btn) {
                 btn.addEventListener('click', function () {
@@ -940,18 +1156,22 @@
                     return list;
                 }
 
-                function showSaveSuccessMessage() {
-                    var msg = document.getElementById('erpPbSaveSuccessMessage');
-                    if (msg) {
-                        msg.classList.remove('d-none');
-                        msg.textContent = 'تم الحفظ';
-                        window.clearTimeout(window._erpPbSaveSuccessTimeout);
-                        window._erpPbSaveSuccessTimeout = window.setTimeout(function () {
-                            msg.classList.add('d-none');
-                        }, 2500);
-                    } else {
-                        alert('تم الحفظ');
+                function showSaveSuccessMessage(text) {
+                    var toast = document.getElementById('erpPbCenterToast');
+                    var t = (text || 'تم الحفظ').trim();
+                    if (!toast) {
+                        alert(t);
+                        return;
                     }
+                    toast.textContent = t;
+                    toast.classList.remove('d-none');
+                    toast.classList.add('erp-pb-center-toast--success');
+                    window.clearTimeout(window._erpPbCenterToastTimeout);
+                    window._erpPbCenterToastTimeout = window.setTimeout(function () {
+                        toast.classList.add('d-none');
+                        toast.classList.remove('erp-pb-center-toast--success');
+                        toast.textContent = '';
+                    }, 1000);
                 }
 
                 // Enter: حفظ الصف الحالي ثم نقل الفوكس للصف التالي (بدون رسالة)
@@ -1036,7 +1256,151 @@
 
         // ترتيب وفلتر الأعمدة (زر واحد: ترتيب + فلترة نصية أو رقمية — مثل قائمة الأصناف)
         (function () {
-            const table = document.getElementById('productBalancesTable');
+            function initPbTableColumnTools() {
+                const table = document.getElementById('productBalancesTable');
+                if (!table) return;
+
+            // اختيار الأعمدة — منفصل عن لوحة الفلتر حتى لا يُلغى عند غياب عنصر من عناصر اللوحة
+            (function initProductBalancesColumnModal() {
+                var storageKeyPb = 'product-balances-columns-visibility';
+                var listContainerPb = document.getElementById('columnsListProductBalances');
+                if (!listContainerPb) return;
+
+                /** أولاً: JSON من السيرفر؛ ثم DOM — حتى تعمل النافذة داخل تاب/iframe ومع تعارض أحداث المودال */
+                function readColumnsPb() {
+                    var meta = document.getElementById('erpPbColumnsMeta');
+                    if (meta) {
+                        var raw = (meta.textContent || '').trim();
+                        if (raw) {
+                            try {
+                                var parsed = JSON.parse(raw);
+                                if (Array.isArray(parsed) && parsed.length) {
+                                    var fromJson = [];
+                                    for (var ji = 0; ji < parsed.length; ji++) {
+                                        var it = parsed[ji];
+                                        if (it && it.key)
+                                            fromJson.push({ key: String(it.key), title: String(it.title || it.key) });
+                                    }
+                                    if (fromJson.length) return fromJson;
+                                }
+                            } catch (eMeta) { /* تجاهل */ }
+                        }
+                    }
+                    var tr = table.querySelector('thead tr');
+                    if (!tr) return [];
+                    return Array.from(tr.querySelectorAll('th[data-col]'))
+                        .filter(function (th) { return !th.hasAttribute('data-col-fixed'); })
+                        .map(function (th) {
+                            var col = th.getAttribute('data-col');
+                            var ft = th.querySelector('.erp-pb-col-filter-btn');
+                            var title = (ft && ft.getAttribute('data-col-title')) ? String(ft.getAttribute('data-col-title')).trim() : '';
+                            if (!title) title = (th.innerText || '').replace(/\s+/g, ' ').trim();
+                            if (!title) title = col || '';
+                            return { key: col, title: title };
+                        })
+                        .filter(function (c) { return c.key; });
+                }
+
+                var hiddenPb = [];
+                try {
+                    var savedPb = localStorage.getItem(storageKeyPb);
+                    if (savedPb) hiddenPb = JSON.parse(savedPb);
+                } catch (e) { hiddenPb = []; }
+                if (!Array.isArray(hiddenPb)) hiddenPb = [];
+
+                function applyVisibilityPb() {
+                    readColumnsPb().forEach(function (col) {
+                        var isHidden = hiddenPb.indexOf(col.key) !== -1;
+                        table.querySelectorAll('[data-col="' + col.key + '"]').forEach(function (cell) {
+                            cell.classList.toggle('d-none', isHidden);
+                        });
+                    });
+                }
+                applyVisibilityPb();
+
+                function rebuildColumnModalList() {
+                    var columnsPb = readColumnsPb();
+                    listContainerPb.innerHTML = '';
+                    if (!columnsPb.length) {
+                        var emptyMsg = document.createElement('p');
+                        emptyMsg.className = 'text-muted small mb-0';
+                        emptyMsg.textContent = 'لم يُعثر على أعمدة في الجدول. أعد تحميل الصفحة أو اضغط «تجميع» ثم افتح النافذة مرة أخرى.';
+                        listContainerPb.appendChild(emptyMsg);
+                        return;
+                    }
+                    var allWrap = document.createElement('div');
+                    allWrap.className = 'form-check mb-2 pb-2 border-bottom erp-columns-select-all-row';
+                    var allCb = document.createElement('input');
+                    allCb.type = 'checkbox';
+                    allCb.className = 'form-check-input ms-2';
+                    allCb.id = 'col_pb_select_all';
+                    allCb.checked = columnsPb.every(function (c) { return hiddenPb.indexOf(c.key) === -1; });
+                    var allLab = document.createElement('label');
+                    allLab.className = 'form-check-label fw-semibold';
+                    allLab.setAttribute('for', 'col_pb_select_all');
+                    allLab.textContent = 'اختيار الكل';
+                    allWrap.appendChild(allCb);
+                    allWrap.appendChild(allLab);
+                    listContainerPb.appendChild(allWrap);
+                    allCb.addEventListener('change', function () {
+                        var on = this.checked;
+                        listContainerPb.querySelectorAll('input[type="checkbox"][data-col-key]').forEach(function (cb) { cb.checked = on; });
+                    });
+
+                    columnsPb.forEach(function (col) {
+                        var wrap = document.createElement('div');
+                        wrap.className = 'form-check mb-1';
+                        var cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.className = 'form-check-input ms-2';
+                        cb.id = 'col_pb_' + col.key;
+                        cb.checked = hiddenPb.indexOf(col.key) === -1;
+                        cb.dataset.colKey = col.key;
+                        var label = document.createElement('label');
+                        label.className = 'form-check-label';
+                        label.setAttribute('for', cb.id);
+                        label.innerText = col.title;
+                        wrap.appendChild(cb);
+                        wrap.appendChild(label);
+                        listContainerPb.appendChild(wrap);
+                    });
+                    listContainerPb.querySelectorAll('input[type="checkbox"][data-col-key]').forEach(function (cb) {
+                        cb.addEventListener('change', function () {
+                            var list = listContainerPb.querySelectorAll('input[type="checkbox"][data-col-key]');
+                            var n = list.length, on = 0;
+                            list.forEach(function (x) { if (x.checked) on++; });
+                            allCb.checked = on === n;
+                            allCb.indeterminate = on > 0 && on < n;
+                        });
+                    });
+                }
+                rebuildColumnModalList();
+
+                var colModalEl = document.getElementById('columnsModalProductBalances');
+                if (colModalEl) {
+                    colModalEl.addEventListener('show.bs.modal', function () {
+                        try {
+                            var s = localStorage.getItem(storageKeyPb);
+                            hiddenPb = s ? JSON.parse(s) : [];
+                        } catch (e) { hiddenPb = []; }
+                        if (!Array.isArray(hiddenPb)) hiddenPb = [];
+                        rebuildColumnModalList();
+                    });
+                }
+
+                document.getElementById('btnApplyColumnsProductBalances')?.addEventListener('click', function () {
+                    var checks = listContainerPb.querySelectorAll('input[type="checkbox"][data-col-key]');
+                    hiddenPb = [];
+                    checks.forEach(function (cb) {
+                        if (!cb.checked) hiddenPb.push(cb.dataset.colKey);
+                    });
+                    try { localStorage.setItem(storageKeyPb, JSON.stringify(hiddenPb)); } catch (e) {}
+                    applyVisibilityPb();
+                    var modal = bootstrap.Modal.getInstance(document.getElementById('columnsModalProductBalances'));
+                    if (modal) modal.hide();
+                });
+            })();
+
             const panel = document.getElementById('erpPbColumnFilterPanel');
             const titleEl = document.getElementById('erpPbColumnFilterTitle');
             const sortSection = document.getElementById('erpPbSortSection');
@@ -1046,9 +1410,9 @@
             const btnOk = document.getElementById('erpPbColumnFilterOk');
             const btnClear = document.getElementById('erpPbColumnFilterClear');
             const btnClose = document.getElementById('erpPbColumnFilterClose');
-            if (!table || !panel || !listEl) return;
+            if (!panel || !listEl) return;
 
-            const numericColumns = ['code', 'qty', 'discount', 'manualDiscount', 'sales', 'priceRetail', 'unitCost', 'cost'];
+            const numericColumns = ['code', 'qty', 'discount', 'manualDiscount', 'sales', 'priceRetail', 'unitCost', 'cost', 'policy1', 'policy2', 'policy3', 'policy4', 'policy5', 'policy6', 'policy7', 'policy8', 'policy9', 'policy10'];
             let currentCol = null;
             let currentSortKey = null;
             let currentFilterBtn = null;
@@ -1351,66 +1715,130 @@
                 if (panel && !panel.classList.contains('d-none') && !panel.contains(e.target) && !e.target.closest('.erp-pb-col-filter-btn'))
                     panel.classList.add('d-none');
             });
-
-            // اختيار الأعمدة (حفظ في localStorage مثل قائمة الأصناف)
-            var pbTable = document.getElementById('productBalancesTable');
-            if (pbTable) {
-                var storageKeyPb = 'product-balances-columns-visibility';
-                var headerCellsPb = Array.from(pbTable.querySelectorAll('thead th[data-col]'));
-                var columnsPb = headerCellsPb
-                    .filter(function (th) { return !th.hasAttribute('data-col-fixed'); })
-                    .map(function (th) {
-                        var title = th.innerText.trim();
-                        var col = th.getAttribute('data-col');
-                        return { key: col, title: title };
-                    });
-                var hiddenPb = [];
-                try {
-                    var savedPb = localStorage.getItem(storageKeyPb);
-                    if (savedPb) hiddenPb = JSON.parse(savedPb);
-                } catch (e) { hiddenPb = []; }
-                function applyVisibilityPb() {
-                    columnsPb.forEach(function (col) {
-                        var isHidden = hiddenPb.indexOf(col.key) !== -1;
-                        pbTable.querySelectorAll('[data-col="' + col.key + '"]').forEach(function (cell) {
-                            cell.classList.toggle('d-none', isHidden);
-                        });
-                    });
-                }
-                applyVisibilityPb();
-                var listContainerPb = document.getElementById('columnsListProductBalances');
-                if (listContainerPb) {
-                    listContainerPb.innerHTML = '';
-                    columnsPb.forEach(function (col) {
-                        var wrap = document.createElement('div');
-                        wrap.className = 'form-check mb-1';
-                        var cb = document.createElement('input');
-                        cb.type = 'checkbox';
-                        cb.className = 'form-check-input ms-2';
-                        cb.id = 'col_pb_' + col.key;
-                        cb.checked = hiddenPb.indexOf(col.key) === -1;
-                        cb.dataset.colKey = col.key;
-                        var label = document.createElement('label');
-                        label.className = 'form-check-label';
-                        label.setAttribute('for', cb.id);
-                        label.innerText = col.title;
-                        wrap.appendChild(cb);
-                        wrap.appendChild(label);
-                        listContainerPb.appendChild(wrap);
-                    });
-                }
-                document.getElementById('btnApplyColumnsProductBalances')?.addEventListener('click', function () {
-                    var checks = listContainerPb ? listContainerPb.querySelectorAll('input[type="checkbox"][data-col-key]') : [];
-                    hiddenPb = [];
-                    checks.forEach(function (cb) {
-                        if (!cb.checked) hiddenPb.push(cb.dataset.colKey);
-                    });
-                    try { localStorage.setItem(storageKeyPb, JSON.stringify(hiddenPb)); } catch (e) {}
-                    applyVisibilityPb();
-                    var modal = bootstrap.Modal.getInstance(document.getElementById('columnsModalProductBalances'));
-                    if (modal) modal.hide();
-                });
             }
+
+            if (document.readyState === 'loading')
+                document.addEventListener('DOMContentLoaded', initPbTableColumnTools);
+            else
+                initPbTableColumnTools();
+        })();
+
+        // قبل تصدير أرصدة الأصناف: الأعمدة الظاهرة فقط وبترتيب الجدول (نمط قائمة العملاء)
+        (function () {
+            var form = document.getElementById('filtersForm');
+            if (!form) return;
+            var table = document.getElementById('productBalancesTable');
+            var storageKeyPb = 'product-balances-columns-visibility';
+            function getVisibleColsInTableOrderPb() {
+                if (!table) return [];
+                var headerCells = Array.from(table.querySelectorAll('thead th[data-col]'));
+                var ordered = headerCells
+                    .filter(function (th) { return !th.hasAttribute('data-col-fixed'); })
+                    .map(function (th) { return th.getAttribute('data-col'); })
+                    .filter(Boolean);
+                var hiddenCols = [];
+                try {
+                    var saved = localStorage.getItem(storageKeyPb);
+                    if (saved) hiddenCols = JSON.parse(saved) || [];
+                } catch (e) { hiddenCols = []; }
+                var hiddenSet = new Set(hiddenCols.map(function (x) { return String(x); }));
+                return ordered.filter(function (k) { return !hiddenSet.has(String(k)); });
+            }
+            form.addEventListener('submit', function (e) {
+                var sub = e.submitter;
+                if (!sub || sub.tagName !== 'BUTTON') return;
+                var fa = sub.getAttribute('formaction') || '';
+                if (fa.indexOf('ExportProductBalances') === -1) return;
+                var inp = document.getElementById('erpPbExportVisibleCols');
+                if (inp) inp.value = getVisibleColsInTableOrderPb().join(',');
+            });
+        })();
+
+        // طباعة الصفحة + طباعة قائمة صيدلية + تصدير قائمة (Excel/PDF) — نفس فلاتر الفورم
+        (function () {
+            var exportPbPath = @Html.Raw(JsonSerializer.Serialize(Url.Action("ExportProductBalances", "Reports")));
+            function buildExportUrl(format, extra) {
+                var form = document.getElementById('filtersForm');
+                if (!form || !exportPbPath) return '';
+                var u = new URL(exportPbPath, window.location.origin);
+                var fd = new FormData(form);
+                fd.forEach(function (v, k) {
+                    if (typeof v === 'string' && v !== '') u.searchParams.set(k, v);
+                });
+                if (format) u.searchParams.set('format', format);
+                if (extra) {
+                    Object.keys(extra).forEach(function (k) {
+                        if (extra[k] !== null && extra[k] !== undefined && extra[k] !== '')
+                            u.searchParams.set(k, extra[k]);
+                    });
+                }
+                return u.toString();
+            }
+            document.getElementById('erpPbPrintPage')?.addEventListener('click', function () { window.print(); });
+            function escapePbHtml(s) {
+                if (!s) return '';
+                return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\"/g, '&quot;');
+            }
+            function runPbDelegatePrintWithCols(cols) {
+                var polSel = document.getElementById('erpPbDelegatePolicy');
+                var pol = polSel ? parseInt(polSel.value, 10) : 1;
+                if (isNaN(pol) || pol < 1 || pol > 10) pol = 1;
+                if (cols !== 3) cols = 2;
+                var dataCol = 'policy' + pol;
+                var rows = Array.from(document.querySelectorAll('#productBalancesTable tbody tr[data-pb-row]')).filter(function (tr) {
+                    return tr.style.display !== 'none';
+                });
+                var policyTh = document.querySelector('#productBalancesTable thead th[data-col="' + dataCol + '"]');
+                var policyDisplayName = (policyTh && policyTh.getAttribute('data-policy-display-name')) ? policyTh.getAttribute('data-policy-display-name').trim() : '';
+                if (!policyDisplayName && polSel && polSel.options[polSel.selectedIndex])
+                    policyDisplayName = (polSel.options[polSel.selectedIndex].text || '').trim();
+                if (!policyDisplayName) policyDisplayName = 'سياسة ' + pol;
+                var html = '<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"/><title>قائمة أصناف</title><style>body{font-family:Segoe UI,Tahoma,sans-serif;padding:12px;} .g{display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:10px;} .card{border:1px solid #6366f1;border-radius:10px;padding:8px;font-size:13px;} .nm{font-weight:600;} .muted{color:#64748b;font-size:12px;} .polname{font-weight:600;font-size:12px;margin-top:2px;}</style></head><body><h5 style="margin:0 0 10px 0;">قائمة أصناف — ' + escapePbHtml(policyDisplayName) + '</h5><div class="g">';
+                rows.forEach(function (tr) {
+                    var nameTd = tr.querySelector('td[data-col="name"]');
+                    var prTd = tr.querySelector('td[data-col="priceRetail"]');
+                    var dTd = tr.querySelector('td[data-col="' + dataCol + '"]');
+                    var nm = nameTd ? nameTd.textContent.trim() : '';
+                    var pr = prTd ? prTd.textContent.trim() : '';
+                    var dc = dTd ? dTd.textContent.trim() : '';
+                    html += '<div class="card"><div class="nm">' + escapePbHtml(nm) + '</div><div class="muted">سعر الجمهور: ' + escapePbHtml(pr) + '</div><div class="muted">خصم البيع</div><div class="polname">' + escapePbHtml(policyDisplayName) + '</div><div class="nm">' + escapePbHtml(dc) + '</div></div>';
+                });
+                html += '</div><script>window.onload=function(){window.print();}<\/script></body></html>';
+                var w = window.open('', '_blank');
+                if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+                else { window.alert('تعذر فتح نافذة الطباعة (المنع المنبثقات؟).'); }
+            }
+            document.getElementById('erpPbPrintListOpen')?.addEventListener('click', function () {
+                var m = document.getElementById('pbDelegatePrintModal');
+                if (m && window.bootstrap && typeof bootstrap.Modal === 'function') {
+                    (bootstrap.Modal.getInstance(m) || new bootstrap.Modal(m)).show();
+                    return;
+                }
+                var use3 = window.confirm ? window.confirm('عدد أعمدة الصف في الطباعة: موافق = 3، إلغاء = 2') : false;
+                runPbDelegatePrintWithCols(use3 ? 3 : 2);
+            });
+            document.getElementById('pbDelegatePrintRun')?.addEventListener('click', function () {
+                var colSel = document.getElementById('pbDelegatePrintCols');
+                var cols = colSel ? parseInt(colSel.value, 10) : 2;
+                if (cols !== 3) cols = 2;
+                runPbDelegatePrintWithCols(cols);
+                var modalEl = document.getElementById('pbDelegatePrintModal');
+                if (modalEl && window.bootstrap && typeof bootstrap.Modal === 'function')
+                    bootstrap.Modal.getInstance(modalEl)?.hide();
+            });
+            function runDelegateExport(format) {
+                var polEl = document.getElementById('erpPbDelegatePolicy');
+                var pol = polEl ? parseInt(polEl.value, 10) : 1;
+                if (isNaN(pol) || pol < 1 || pol > 10) pol = 1;
+                var url = buildExportUrl(format, { exportKind: 'delegate', delegatePolicyId: String(pol) });
+                if (url) window.location.href = url;
+            }
+            document.getElementById('erpPbExportListRun')?.addEventListener('click', function () {
+                var fmtEl = document.getElementById('erpPbDelegateListFormat');
+                var fmt = fmtEl ? (fmtEl.value || 'excel') : 'excel';
+                if (fmt !== 'pdf') fmt = 'excel';
+                runDelegateExport(fmt);
+            });
         })();
     </script>
     <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>

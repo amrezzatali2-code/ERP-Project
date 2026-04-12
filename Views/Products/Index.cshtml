@@ -1,4 +1,5 @@
-﻿@using Microsoft.AspNetCore.Html
+﻿@using System.Globalization
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<Product>
@@ -12,7 +13,12 @@
 
     // القيم القادمة من الموديل / ViewBag (نفس نمط المحافظات / العملاء)
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
-    var searchBy = (string?)ViewBag.SearchBy ?? "all";
+    var searchBy = Model.SearchBy ?? (string?)ViewBag.SearchBy ?? "all";
+    // طريقة البحث — نفس منطق قائمة العملاء (أي قيمة غير starts/ends تُعامل كـ contains)
+    var searchMode = (Convert.ToString(ViewBag.SearchMode) ?? "contains").Trim();
+    if (string.IsNullOrEmpty(searchMode)) searchMode = "contains";
+    searchMode = searchMode.ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "name";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
@@ -73,6 +79,7 @@
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -122,6 +129,7 @@
         {
             search,
             searchBy,
+            searchMode,
             sort = col,
             dir = newDir,
             page = 1,
@@ -270,28 +278,35 @@
     <div class="erp-list-filter-bar d-print-none mt-2">
         <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
-            @* --- القسم الأول: البحث العام --- *@
+            @* --- القسم الأول: البحث العام (نفس قائمة العملاء) --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
-                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                <form id="productsMainSearchForm" method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في الأصناف</label>
-                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
-                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
-                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:150px">
-                            <option value="all" selected="@(searchBy == "all")">البحث في الكل</option>
-                            <option value="name" selected="@(searchBy == "name")">اسم الصنف</option>
-                            <option value="id" selected="@(searchBy == "id")">كود الصنف</option>
-                            <option value="code" selected="@(searchBy == "code")">الباركود</option>
-                            <option value="gen" selected="@(searchBy == "gen")">الاسم العلمي</option>
-                            <option value="comp" selected="@(searchBy == "comp")">الشركة</option>
-                            <option value="category" selected="@(searchBy == "category")">الفئة</option>
-                            <option value="productgroup" selected="@(searchBy == "productgroup")">مجموعة الصنف</option>
-                            <option value="bonusgroup" selected="@(searchBy == "bonusgroup")">مجموعة البونص</option>
-                            <option value="price" selected="@(searchBy == "price")">سعر الجمهور</option>
-                            <option value="imported" selected="@(searchBy == "imported")">محلي/مستورد</option>
-                            <option value="active" selected="@(searchBy == "active")">نشط/موقوف</option>
-                            <option value="updated" selected="@(searchBy == "updated")">آخر تعديل</option>
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100" style="overflow-x:auto;">
+                        <select name="searchMode" class="form-select form-select-sm form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">بحث</button>
+                        <input type="text" name="search" class="form-control form-control-sm erp-filter-input flex-shrink-1" placeholder="نص أو رقم..." value="@search" style="min-width:100px;max-width:200px;width:180px;" />
+                        <select name="searchBy" class="form-select form-select-sm form-select-arrow erp-filter-input flex-shrink-0" style="max-width:160px;min-width:130px">
+                            <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>البحث في الكل</option>
+                            <option value="name"@Html.Raw(searchBy == "name" ? " selected" : "")>اسم الصنف</option>
+                            <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود الصنف</option>
+                            <option value="code"@Html.Raw(searchBy == "code" ? " selected" : "")>الباركود</option>
+                            <option value="gen"@Html.Raw(searchBy == "gen" ? " selected" : "")>الاسم العلمي</option>
+                            <option value="comp"@Html.Raw(searchBy == "comp" ? " selected" : "")>الشركة</option>
+                            <option value="category"@Html.Raw(searchBy == "category" ? " selected" : "")>الفئة</option>
+                            <option value="productgroup"@Html.Raw(searchBy == "productgroup" ? " selected" : "")>مجموعة الصنف</option>
+                            <option value="bonusgroup"@Html.Raw(searchBy == "bonusgroup" ? " selected" : "")>مجموعة البونص</option>
+                            <option value="price"@Html.Raw(searchBy == "price" ? " selected" : "")>سعر الجمهور</option>
+                            <option value="imported"@Html.Raw(searchBy == "imported" ? " selected" : "")>محلي/مستورد</option>
+                            <option value="active"@Html.Raw(searchBy == "active" ? " selected" : "")>نشط/موقوف</option>
+                            <option value="updated"@Html.Raw(searchBy == "updated" ? " selected" : "")>آخر تعديل</option>
+                        </select>
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-2 mt-2 w-100">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
                         <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
@@ -344,6 +359,7 @@
                         <form method="get" asp-action="Export" asp-controller="Products" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
@@ -398,14 +414,13 @@
         </div>
     </div>
 
-    @* ===== كارت إجمالي الأصناف (بعد الفلترة) ===== *@
-    <div class="row g-2 g-md-3 mb-2 no-print erp-list-summary-row">
-        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
-            <div class="card h-100 erp-products-summary-card" style="border: 1px solid #0d6efd; border-radius: 12px; box-shadow: 0 1px 3px rgba(13,110,253,.25); overflow: hidden;">
-                <div class="card-body py-3 px-3 d-flex flex-column justify-content-center">
+    @* ===== كارت إجمالي الأصناف — حجم كقائمة العملاء ===== *@
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mt-2" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
                     <div class="small text-muted mb-1">إجمالي الأصناف</div>
-                    <div class="h4 mb-0 text-info fw-bold">@total</div>
-                    <div class="small text-muted mt-1">عدد النتائج المطابقة للفلاتر الحالية</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", CultureInfo.InvariantCulture)</div>
                 </div>
             </div>
         </div>
@@ -415,6 +430,7 @@
     <form id="productsSearchForm" method="get" action="@Url.Action(action, controller)" class="d-none">
         <input type="hidden" name="search" value="@search" />
         <input type="hidden" name="searchBy" value="@searchBy" />
+        <input type="hidden" name="searchMode" value="@searchMode" />
         <input type="hidden" name="sort" value="@sort" />
         <input type="hidden" name="dir" value="@dir" />
         <input type="hidden" name="page" value="1" />
@@ -582,53 +598,13 @@
             عرض @start - @end من @total
         </small>
 
-        <form method="get"
-              asp-action="@action"
-              asp-controller="@controller"
-              class="d-flex align-items-center gap-2">
-
-            <input type="hidden" name="search" value="@search" />
-            <input type="hidden" name="searchBy" value="@searchBy" />
-            <input type="hidden" name="sort" value="@sort" />
-            <input type="hidden" name="dir" value="@dir" />
-            <input type="hidden" name="page" value="1" />
-            <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
-            @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
-            @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
-            @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
-            @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_productGroup)) { <input type="hidden" name="filterCol_productGroup" value="@filterCol_productGroup" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_bonusGroup)) { <input type="hidden" name="filterCol_bonusGroup" value="@filterCol_bonusGroup" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_company)) { <input type="hidden" name="filterCol_company" value="@filterCol_company" /> }
-        @if (!string.IsNullOrWhiteSpace(filterCol_location)) { <input type="hidden" name="filterCol_location" value="@filterCol_location" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_imported)) { <input type="hidden" name="filterCol_imported" value="@filterCol_imported" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_name_contains)) { <input type="hidden" name="filterCol_name_contains" value="@filterCol_name_contains" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_barcode)) { <input type="hidden" name="filterCol_barcode" value="@filterCol_barcode" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_generic)) { <input type="hidden" name="filterCol_generic" value="@filterCol_generic" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_classification)) { <input type="hidden" name="filterCol_classification" value="@filterCol_classification" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_price)) { <input type="hidden" name="filterCol_price" value="@filterCol_price" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_modified)) { <input type="hidden" name="filterCol_modified" value="@filterCol_modified" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_lastprice)) { <input type="hidden" name="filterCol_lastprice" value="@filterCol_lastprice" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_hasQuota)) { <input type="hidden" name="filterCol_hasQuota" value="@filterCol_hasQuota" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity)) { <input type="hidden" name="filterCol_quotaQuantity" value="@filterCol_quotaQuantity" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_cartonQuantity)) { <input type="hidden" name="filterCol_cartonQuantity" value="@filterCol_cartonQuantity" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_packQuantity)) { <input type="hidden" name="filterCol_packQuantity" value="@filterCol_packQuantity" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_descShort)) { <input type="hidden" name="filterCol_descShort" value="@filterCol_descShort" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
-            @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
-            @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
-
+        @* بدون نموذج GET: الإرسال يتم بـ JS من الرابط الحالي + شريط البحث المرئي حتى لا تُرسل searchMode قديمة من حقول مخفية *@
+        <div id="productsPageSizeBar" class="d-flex align-items-center gap-2">
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
-            <select name="pageSize"
+            <select id="productsPageSizeSelect"
+                    name="pageSize"
                     class="form-select form-select-sm"
-                    onchange="this.form.submit()">
+                    title="حجم الصفحة">
                 <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
@@ -636,14 +612,14 @@
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
                 <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
-        </form>
+        </div>
     </div>
     <script>
         (function () {
             var params = new URLSearchParams(window.location.search);
             var all = params.getAll('pageSize');
             var ps = all.length ? all[all.length - 1] : null;
-            var sel = document.querySelector('form select[name="pageSize"]');
+            var sel = document.getElementById("productsPageSizeSelect");
             if (sel && ps !== null && ps !== '') sel.value = ps;
         })();
     </script>
@@ -737,6 +713,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -870,6 +847,83 @@
 @section Scripts {
     <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
+        // =========================
+        // شريط البحث المرئي: تطبيقه على الترقيم / حجم الصفحة / تصدير / تاريخ (بدون الاعتماد على حقول مخفية قديمة)
+        // =========================
+        (function () {
+            function getProductsMainSearch() {
+                const main = document.getElementById("productsMainSearchForm");
+                if (!main) {
+                    return { search: "", searchBy: "all", searchMode: "contains" };
+                }
+                return {
+                    search: (main.querySelector('[name="search"]')?.value || "").trim(),
+                    searchBy: (main.querySelector('[name="searchBy"]')?.value || "all").trim() || "all",
+                    searchMode: (main.querySelector('[name="searchMode"]')?.value || "contains").trim() || "contains"
+                };
+            }
+            function applyMainSearchToSearchParams(sp) {
+                const m = getProductsMainSearch();
+                if (m.search) sp.set("search", m.search);
+                else sp.delete("search");
+                sp.set("searchBy", m.searchBy);
+                sp.set("searchMode", m.searchMode);
+            }
+            function syncAllSearchHiddensFromMain() {
+                const m = getProductsMainSearch();
+                document.querySelectorAll('input[type="hidden"][name="searchMode"]').forEach(function (el) { el.value = m.searchMode; });
+                document.querySelectorAll('input[type="hidden"][name="searchBy"]').forEach(function (el) { el.value = m.searchBy; });
+                document.querySelectorAll('input[type="hidden"][name="search"]').forEach(function (el) { el.value = m.search; });
+            }
+            window.__erpProductsGetMainSearch = getProductsMainSearch;
+            window.__erpProductsApplyMainSearchToSearchParams = applyMainSearchToSearchParams;
+            window.__erpProductsSyncSearchHiddensFromMain = syncAllSearchHiddensFromMain;
+
+            document.addEventListener("click", function (e) {
+                const a = e.target.closest('nav[aria-label="pagination"] a.page-link[href]');
+                if (!a) return;
+                const li = a.closest("li.page-item");
+                if (li && li.classList.contains("disabled")) return;
+                const href = a.getAttribute("href");
+                if (!href || href === "#") return;
+                e.preventDefault();
+                e.stopPropagation();
+                const url = new URL(a.href, window.location.origin);
+                applyMainSearchToSearchParams(url.searchParams);
+                window.location.href = url.pathname + (url.search || "");
+            }, true);
+
+            document.getElementById("productsPageSizeSelect")?.addEventListener("change", function () {
+                const url = new URL(window.location.href);
+                applyMainSearchToSearchParams(url.searchParams);
+                url.searchParams.set("pageSize", this.value);
+                url.searchParams.set("page", "1");
+                window.location.href = url.pathname + (url.search || "");
+            });
+
+            function wireFormDataSearch(form) {
+                if (!form) return;
+                form.addEventListener("formdata", function (ev) {
+                    const m = getProductsMainSearch();
+                    try {
+                        ev.formData.delete("search");
+                        ev.formData.delete("searchBy");
+                        ev.formData.delete("searchMode");
+                    } catch (ignore) { }
+                    if (m.search) ev.formData.set("search", m.search);
+                    ev.formData.set("searchBy", m.searchBy);
+                    ev.formData.set("searchMode", m.searchMode);
+                });
+            }
+            wireFormDataSearch(document.querySelector(".erp-export-form"));
+            wireFormDataSearch(document.querySelector("#dateFilterModal form[method='get']"));
+
+            document.getElementById("productsMainSearchForm")?.addEventListener("change", syncAllSearchHiddensFromMain);
+            document.getElementById("productsMainSearchForm")?.addEventListener("input", function (ev) {
+                if (ev.target && ev.target.getAttribute("name") === "search") syncAllSearchHiddensFromMain();
+            });
+        })();
+
         // جعل الشريط الأفقي يفتح من جهة اليمين (بداية الجدول في RTL)
         (function () {
             var table = document.getElementById("productsTable");
@@ -884,6 +938,7 @@
         // =========================
         document.getElementById("btnPrint")?.addEventListener("click", function () {
             var url = new URL(window.location.href);
+            if (window.__erpProductsApplyMainSearchToSearchParams) window.__erpProductsApplyMainSearchToSearchParams(url.searchParams);
             url.searchParams.set("print", "true");
             url.searchParams.set("pageSize", "0");
             url.searchParams.set("page", "1");
@@ -1097,8 +1152,24 @@
             const filterComp = document.getElementById("filterCompany");
             const filterImp = document.getElementById("filterImported");
 
+            function getMainSearchParams() {
+                return window.__erpProductsGetMainSearch ? window.__erpProductsGetMainSearch() : {
+                    search: "",
+                    searchBy: "all",
+                    searchMode: "contains"
+                };
+            }
+            function syncProductsSearchHiddenFromMain() {
+                if (window.__erpProductsSyncSearchHiddensFromMain) window.__erpProductsSyncSearchHiddensFromMain();
+            }
+
             function buildUrl(codeFrom, codeTo) {
                 const url = new URL(window.location.href);
+                const ms = getMainSearchParams();
+                if (ms.search) url.searchParams.set("search", ms.search);
+                else url.searchParams.delete("search");
+                url.searchParams.set("searchBy", ms.searchBy);
+                url.searchParams.set("searchMode", ms.searchMode);
                 if (codeFrom) url.searchParams.set("codeFrom", codeFrom);
                 else          url.searchParams.delete("codeFrom");
                 if (codeTo)   url.searchParams.set("codeTo", codeTo);
@@ -1136,17 +1207,21 @@
 
             [filterPg, filterComp, filterImp].forEach(el => {
                 el?.addEventListener("change", function () {
+                    syncProductsSearchHiddenFromMain();
                     const form = document.getElementById("productsSearchForm");
                     if (form) {
                         const cf = fromInp?.value?.trim() || "";
                         const ct = toInp?.value?.trim() || "";
                         const url = new URL(form.action);
-                        url.searchParams.set("search", form.querySelector('[name="search"]')?.value || "");
-                        url.searchParams.set("searchBy", form.querySelector('[name="searchBy"]')?.value || "all");
+                        const ms = getMainSearchParams();
+                        if (ms.search) url.searchParams.set("search", ms.search);
+                        else url.searchParams.delete("search");
+                        url.searchParams.set("searchBy", ms.searchBy);
+                        url.searchParams.set("searchMode", ms.searchMode);
                         url.searchParams.set("sort", form.querySelector('[name="sort"]')?.value || "name");
                         url.searchParams.set("dir", form.querySelector('[name="dir"]')?.value || "asc");
                         url.searchParams.set("page", "1");
-                        var psVal = form.querySelector('[name="pageSize"]')?.value;
+                        var psVal = document.getElementById("productsPageSizeSelect")?.value;
                         if (!psVal) psVal = new URL(window.location.href).searchParams.get("pageSize");
                         url.searchParams.set("pageSize", psVal || "50");
                         url.searchParams.set("useDateRange", form.querySelector('[name="useDateRange"]')?.value || "false");
@@ -1413,6 +1488,10 @@
                         if (filterBoxText) {
                             url.searchParams.set("search", filterBoxText);
                             url.searchParams.set("searchBy", columnToSearchBy[currentCol] || "all");
+                            var smPref = document.getElementById("productsMainSearchForm")?.querySelector('[name="searchMode"]')?.value?.trim();
+                            if (!smPref) smPref = url.searchParams.get("searchMode") || "";
+                            if (!smPref) smPref = "contains";
+                            url.searchParams.set("searchMode", smPref);
                         }
                     }
                 }
@@ -1433,6 +1512,7 @@
                 if (columnToSearchBy[currentCol] && searchByVal === columnToSearchBy[currentCol]) {
                     url.searchParams.delete("search");
                     url.searchParams.delete("searchBy");
+                    url.searchParams.delete("searchMode");
                 }
                 url.searchParams.set("page", "1");
                 window.location.href = url.toString();

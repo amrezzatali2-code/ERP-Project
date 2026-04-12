@@ -133,6 +133,51 @@ public class StockLedgerController_Search_Tests
     }
 
     [Fact]
+    public async Task Index_SearchByProductName_StartsWith_DoesNotMatchMiddleSubstring()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+
+        var controller = CreateController(db);
+
+        var result = Assert.IsType<ViewResult>(await controller.Index(search: "سيتامول", searchBy: "productname", searchMode: "starts"));
+        var model = Assert.IsType<PagedResult<StockLedger>>(result.Model);
+
+        Assert.Empty(model.Items);
+    }
+
+    [Fact]
+    public async Task Index_SearchByProductName_StartsWith_MatchesPrefix()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+
+        var controller = CreateController(db);
+
+        var result = Assert.IsType<ViewResult>(await controller.Index(search: "بار", searchBy: "productname", searchMode: "starts"));
+        var model = Assert.IsType<PagedResult<StockLedger>>(result.Model);
+
+        Assert.Single(model.Items);
+        Assert.Equal(12, model.Items[0].EntryId);
+    }
+
+    [Fact]
+    public async Task Index_SearchByProductName_EndsWith_MatchesSuffix()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+
+        var controller = CreateController(db);
+
+        var result = Assert.IsType<ViewResult>(await controller.Index(search: "سيلين", searchBy: "productname", searchMode: "ends"));
+        var model = Assert.IsType<PagedResult<StockLedger>>(result.Model);
+
+        Assert.Single(model.Items);
+        Assert.Equal(123, model.Items[0].EntryId);
+        Assert.Equal("أموكسيسيلين", model.Items[0].Product?.ProdName);
+    }
+
+    [Fact]
     public async Task Export_Csv_UsesUnifiedStockLedgerFileName()
     {
         await using var db = CreateDbContext();

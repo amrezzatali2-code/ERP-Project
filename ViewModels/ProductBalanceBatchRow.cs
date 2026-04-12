@@ -21,5 +21,8 @@ namespace ERP.ViewModels
         public decimal SalesQty { get; set; }
         /// <summary>سعر الجمهور للتشغيلة (من Batches.PriceRetailBatch أو سعر الصنف).</summary>
         public decimal PriceRetail { get; set; }
+
+        /// <summary>خصم البيع % لسياسات 1..10 (نفس منطق الصف الرئيسي، حسب خصم التشغيلة المرجّح).</summary>
+        public decimal?[] PolicySaleDiscountPct { get; set; } = new decimal?[10];
     }
 }

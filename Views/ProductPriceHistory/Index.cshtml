@@ -15,6 +15,8 @@
     // القيم القادمة من الموديل / ViewBag
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "prod";     // افتراضيًا نبحث بالصنف
+    var searchMode = (Convert.ToString(ViewBag.SearchMode) ?? "contains").Trim().ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "date";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
@@ -53,6 +55,7 @@
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -80,6 +83,7 @@
         {
             search,
             searchBy,
+            searchMode,
             sort = col,
             dir = newDir,
             page = 1,
@@ -144,18 +148,26 @@
 
             @* --- القسم الأول: البحث العام --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
-                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                <form id="pphMainSearchForm" method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في السجل</label>
-                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
-                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
-                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:150px">
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100" style="overflow-x:auto;">
+                        <select name="searchMode" class="form-select form-select-sm form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
+                        <input type="text" name="search" class="form-control form-control-sm erp-filter-input flex-shrink-1" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px;max-width:220px;" />
+                        <select name="searchBy" class="form-select form-select-sm form-select-arrow erp-filter-input flex-shrink-0" style="max-width:160px;min-width:130px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
-                            <option value="prod"@Html.Raw(searchBy == "prod" ? " selected" : "")>الصنف</option>
+                            <option value="prod"@Html.Raw(searchBy == "prod" ? " selected" : "")>اسم الصنف</option>
+                            <option value="code"@Html.Raw(searchBy == "code" ? " selected" : "")>كود الصنف</option>
                             <option value="user"@Html.Raw(searchBy == "user" ? " selected" : "")>المستخدم</option>
                             <option value="reason"@Html.Raw(searchBy == "reason" ? " selected" : "")>السبب</option>
                             <option value="date"@Html.Raw(searchBy == "date" ? " selected" : "")>تاريخ التغيير</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">عرض</button>
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-2 mt-2 w-100">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
                         <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
@@ -200,6 +212,7 @@
                         <form method="get" asp-action="Export" asp-controller="ProductPriceHistory" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
@@ -228,15 +241,14 @@
         </div>
     </div>
 
-    @* كارت إجمالي الحركات (بعد الفلترة) *@
-    <div class="row g-2 g-md-3 mb-2 no-print">
-        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+    @* كارت إجمالي الحركات (مضغوط مثل قوائم أخرى) *@
+    <div class="row g-2 justify-content-start no-print erp-list-summary-row mt-2" dir="rtl">
+        <div class="col-auto">
             <a href="#" class="text-decoration-none erp-pph-summary-card-link" id="pphSummaryCountCard" title="فلترة كود التغيير">
-                <div class="card h-100" style="border: 1px solid #0d6efd; border-radius: 12px; box-shadow: 0 1px 3px rgba(13,110,253,.25); overflow: hidden; cursor: pointer;">
-                    <div class="card-body py-3 px-3 d-flex flex-column justify-content-center">
-                        <div class="small text-muted mb-1">إجمالي الحركات</div>
-                        <div class="h4 mb-0 text-info fw-bold">@total</div>
-                        <div class="small text-muted mt-1">عدد النتائج المطابقة للفلاتر الحالية</div>
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden; cursor: pointer;">
+                    <div class="card-body py-2 px-3">
+                        <div class="small text-muted mb-0">إجمالي الحركات</div>
+                        <div class="h5 mb-0 text-primary fw-bold">@total.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)</div>
                     </div>
                 </div>
             </a>
@@ -247,6 +259,7 @@
     <form id="pphSearchForm" method="get" action="@Url.Action(action, controller)" class="d-none">
         <input type="hidden" name="search" value="@search" />
         <input type="hidden" name="searchBy" value="@searchBy" />
+        <input type="hidden" name="searchMode" value="@searchMode" />
         <input type="hidden" name="sort" value="@sort" />
         <input type="hidden" name="dir" value="@dir" />
         <input type="hidden" name="page" value="1" />
@@ -356,6 +369,7 @@
         <form method="get" asp-action="@action" asp-controller="@controller" class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -435,6 +449,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
