@@ -245,13 +245,20 @@
                                 <div class="d-flex flex-wrap align-items-end gap-2 erp-pb-pi-range-group" title="رقم فاتورة المشتريات = المعرّف في النظام (نفس رقم الفاتورة في شاشة المشتريات)">
                                     <div class="erp-pb-pi-from-wrap">
                                         <label class="form-label small mb-0">من فاتورة مشتريات <span class="text-muted small">(رقم)</span></label>
-                                        <input type="number" name="purchaseInvoiceFrom" dir="ltr" class="form-control form-control-sm erp-filter-input" style="max-width:9rem" min="1" step="1"
+                                        <input type="number" id="erpPbPurchaseInvoiceFrom" name="purchaseInvoiceFrom" dir="ltr" class="form-control form-control-sm erp-filter-input erp-pb-pi-inv-input" min="1" step="1"
                                                value="@(purchaseInvoiceFrom.HasValue ? purchaseInvoiceFrom.Value.ToString() : "")" />
                                     </div>
                                     <div class="erp-pb-pi-to-wrap">
                                         <label class="form-label small mb-0">إلى فاتورة مشتريات <span class="text-muted small">(رقم)</span></label>
-                                        <input type="number" name="purchaseInvoiceTo" dir="ltr" class="form-control form-control-sm erp-filter-input" style="max-width:9rem" min="1" step="1"
+                                        <input type="number" id="erpPbPurchaseInvoiceTo" name="purchaseInvoiceTo" dir="ltr" class="form-control form-control-sm erp-filter-input erp-pb-pi-inv-input" min="1" step="1"
                                                value="@(purchaseInvoiceTo.HasValue ? purchaseInvoiceTo.Value.ToString() : "")" />
+                                    </div>
+                                    <div class="erp-filter-section erp-pb-pi-apply-cancel flex-shrink-0">
+                                        <label class="form-label small mb-0 d-block" style="visibility:hidden">—</label>
+                                        <div class="d-flex flex-nowrap gap-2 align-items-center">
+                                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm flex-shrink-0" id="erpPbPiApply" title="تطبيق فلتر فواتير المشتريات مع بقية الفلاتر">تطبيق</button>
+                                            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm flex-shrink-0" id="erpPbPiCancel" title="مسح نطاق فاتورة المشتريات وإعادة التجميع">إلغاء</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -477,8 +484,8 @@
                                 <td data-col="code" class="align-middle">
                                     @if (hasBatches)
                                     {
-                                        <button type="button" class="btn btn-link btn-sm p-0 text-secondary erp-pb-toggle-batches" data-prod-id="@item.ProdId" tabindex="0" title="فتح/إغلاق التشغيلات — Enter: فتح والانتقال لأول تشغيلة" aria-label="فتح التشغيلات">
-                                            <span class="erp-pb-chevron">▶</span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-secondary erp-pb-toggle-batches" data-prod-id="@item.ProdId" tabindex="0" title="طي/فتح التشغيلات — Enter: فتح والانتقال لأول تشغيلة" aria-label="طي التشغيلات">
+                                            <span class="erp-pb-chevron">▼</span>
                                         </button>
                                         <span class="me-1">@item.ProdCode</span>
                                     }
@@ -488,7 +495,7 @@
                                     }
                                 </td>
                                 <td data-col="name">@item.ProdName</td>
-                                <td data-col="batch"><small class="text-muted">@(hasBatches ? "—" : (!string.IsNullOrEmpty(item.FirstBatchNo) || item.FirstBatchExpiry.HasValue ? (item.FirstBatchNo ?? "—") : "—"))</small></td>
+                                <td data-col="batch"><small class="text-muted">@(hasBatches ? ("تشغيلات: " + item.Batches!.Count) : (!string.IsNullOrEmpty(item.FirstBatchNo) || item.FirstBatchExpiry.HasValue ? (item.FirstBatchNo ?? "—") : "—"))</small></td>
                                 <td data-col="date" class="text-nowrap"><small class="text-muted">@(hasBatches ? "—" : (item.FirstBatchExpiry.HasValue ? item.FirstBatchExpiry.Value.ToString("d/M/yyyy") : "—"))</small></td>
                                 <td data-col="category"><small class="text-muted">@item.CategoryName</small></td>
                                 <td data-col="productGroup"><small class="text-muted">@item.ProductGroupName</small></td>
@@ -525,10 +532,10 @@
                             {
                                 @foreach (var batch in item.Batches!)
                                 {
-                                    <tr class="erp-pb-batch-row erp-pb-batches-for" data-pb-batch-row data-prod-id="@item.ProdId" data-batch-id="@(batch.BatchId ?? 0)" data-qty="@batch.CurrentQty" data-pb-batches-for="@item.ProdId" data-weighted-discount="@batch.WeightedDiscount.ToString("G29", System.Globalization.CultureInfo.InvariantCulture)" style="display: none;">
+                                    <tr class="erp-pb-batch-row erp-pb-batches-for erp-list-selectable-row" data-pb-batch-row data-prod-id="@item.ProdId" data-batch-id="@(batch.BatchId ?? 0)" data-qty="@batch.CurrentQty" data-pb-batches-for="@item.ProdId" data-movement-url="@movementUrlPb" data-row-id="@item.ProdId" data-tab-title="حركة الصنف — @item.ProdCode" data-weighted-discount="@batch.WeightedDiscount.ToString("G29", System.Globalization.CultureInfo.InvariantCulture)">
                                         <td data-col="select" class="no-print"></td>
                                         <td data-col="code"></td>
-                                        <td data-col="name" class="text-secondary" style="padding-right: 1.5rem;"><small>└ @(batch.BatchNo ?? "-")</small></td>
+                                        <td data-col="name" class="text-secondary" style="padding-right: 1.5rem;"><small>↳ @(batch.BatchNo ?? "-")</small></td>
                                         <td data-col="batch"><small class="text-muted">@(batch.BatchNo ?? "—")</small></td>
                                         <td data-col="date"><small class="text-muted">@(batch.Expiry.HasValue ? batch.Expiry.Value.ToString("d/M/yyyy") : "—")</small></td>
                                         <td data-col="category"></td>
@@ -777,6 +784,11 @@
         .erp-pb-delegate-toolbar-wrap {
             position: relative;
             z-index: 6;
+        }
+        /* حقول رقم فاتورة المشتريات — أضيق قليلاً من بقية الفلاتر */
+        .erp-pb-pi-inv-input {
+            max-width: 6.25rem;
+            min-width: 5rem;
         }
         #erpPbDelegateListFormat {
             text-align: center;
@@ -1083,6 +1095,18 @@
                     searchInpPb.value = '';
                     if (searchModeSel) searchModeSel.value = 'contains';
                     searchInpPb.focus();
+                });
+            }
+
+            var piFromInp = document.getElementById('erpPbPurchaseInvoiceFrom');
+            var piToInp = document.getElementById('erpPbPurchaseInvoiceTo');
+            var btnPiCancel = document.getElementById('erpPbPiCancel');
+            if (btnPiCancel && form) {
+                btnPiCancel.addEventListener('click', function () {
+                    if (piFromInp) piFromInp.value = '';
+                    if (piToInp) piToInp.value = '';
+                    if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                    else form.submit();
                 });
             }
 
@@ -1667,7 +1691,13 @@
                 document.querySelectorAll('tr.erp-pb-batches-for').forEach(function (batchRow) {
                     var pid = batchRow.getAttribute('data-pb-batches-for');
                     var productRow = table.querySelector('tr[data-pb-row][data-prod-id="' + pid + '"]');
-                    if (!productRow || productRow.style.display === 'none') batchRow.style.display = 'none';
+                    if (!productRow || productRow.style.display === 'none') {
+                        batchRow.style.display = 'none';
+                    } else {
+                        var chevronEl = productRow.querySelector('.erp-pb-toggle-batches .erp-pb-chevron');
+                        var expanded = !chevronEl || (chevronEl.textContent || '').indexOf('▼') !== -1;
+                        batchRow.style.display = expanded ? '' : 'none';
+                    }
                 });
                 updateItemCount();
                 updateFooterTotals();
@@ -1846,7 +1876,7 @@
         document.addEventListener('DOMContentLoaded', function () {
             if (window.ERP && typeof ERP.initListSelection === 'function') {
                 ERP.initListSelection({
-                    rowSelector: 'tr[data-pb-row].erp-list-selectable-row',
+                    rowSelector: '#productBalancesTable tbody tr.erp-list-selectable-row',
                     movementButtonId: 'erpPbToolbarMovement',
                     movementUrlAttribute: 'data-movement-url',
                     movementTabId: 'product-movement-tab',

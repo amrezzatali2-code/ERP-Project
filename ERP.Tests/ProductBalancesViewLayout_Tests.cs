@@ -39,6 +39,9 @@ public class ProductBalancesViewLayout_Tests
         Assert.Contains("type=\"date\"", text);
         Assert.Contains("erpPbCenterToast", text);
         Assert.Contains("erpPbSearchCancel", text);
+        Assert.Contains("erpPbPiCancel", text);
+        Assert.Contains("erpPbPiApply", text);
+        Assert.Contains("erp-pb-pi-inv-input", text);
         Assert.Contains("تطبيق</button>", text);
         Assert.Contains("erp-export-form", text);
         Assert.Contains("name=\"visibleCols\"", text);

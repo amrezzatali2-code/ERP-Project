@@ -245,14 +245,7 @@ namespace ERP.Services
 
         // =========================================================
         // ✅ GetSaleDiscountAsync
-        // حساب خصم البيع النهائي قبل إضافة سطر البيع
-        // المنطق:
-        // 1) نحدد PolicyId للعميل (لو null => 1)
-        // 2) لو الصنف له مجموعة: نبحث عن ProductGroupPolicy (مجموعة+سياسة+مخزن) — مقدم على سياسة المخزن
-        // 3) لو مفيش قاعدة مجموعة: نبحث عن WarehousePolicyRule (WarehouseId + PolicyId)
-        // 4) لو مفيش Rule => نرجع لـ Policy.DefaultProfitPercent
-        // 5) خصم البيع = الخصم المرجح - ProfitPercent
-        // 6) نطبق MaxDiscountToCustomer إن وُجد
+        // حساب خصم البيع النهائي قبل إضافة سطر البيع (نفس منطق الفاتورة).
         // =========================================================
         public async Task<decimal> GetSaleDiscountAsync(
             int prodId,
@@ -260,15 +253,6 @@ namespace ERP.Services
             int customerId,
             decimal weightedPurchaseDiscount)
         {
-            // =========================
-            // (1) تحقق من المدخلات
-            // =========================
-            if (warehouseId <= 0)
-                return ClampPercent(weightedPurchaseDiscount);
-
-            // =========================
-            // (2) تحديد PolicyId للعميل
-            // =========================
             int policyId = 1;
             if (customerId > 0)
             {
@@ -282,9 +266,105 @@ namespace ERP.Services
                     policyId = cPolicyId.Value;
             }
 
-            // =========================
-            // (3) جلب ProductGroupId للصنف
-            // =========================
+            var core = await GetSaleDiscountCoreAsync(prodId, warehouseId, policyId, weightedPurchaseDiscount);
+            return core.SaleDiscount;
+        }
+
+        /// <summary>
+        /// خصم البيع لعمود «سياسة N» في تقرير أرصدة الأصناف: مسار الفاتورة أولاً؛ وإذا منعت مجموعة الصنف فرع سياسة المخزن لعمود (مثلاً MaxDiscount مع ربح 0) يُكمَّل من قاعدة المخزن لذلك الرقم حتى تختلف أعمدة السياسات.
+        /// </summary>
+        public async Task<decimal> GetSaleDiscountForProductBalancePolicyColumnAsync(
+            int prodId,
+            int warehouseId,
+            int policyColumnId,
+            decimal purchaseDiscountBasis)
+        {
+            if (warehouseId <= 0)
+                return RoundDisc(ClampPercent(purchaseDiscountBasis));
+            var pid = policyColumnId < 1 ? 1 : (policyColumnId > 10 ? 10 : policyColumnId);
+            var basisClamped = ClampPercent(purchaseDiscountBasis);
+            var core = await GetSaleDiscountCoreAsync(prodId, warehouseId, pid, purchaseDiscountBasis);
+            var coreR = RoundDisc(core.SaleDiscount);
+            var basisR = RoundDisc(basisClamped);
+
+            // تقرير أرصدة الأصناف: أعمدة السياسات 1..10 يجب أن تعكس قواعد المخزن لكل PolicyId.
+            // مسار الفاتورة في GetSaleDiscountCoreAsync يتجاهل policyColumnId عند تطابق مجموعة صنف
+            // (يستخدم PolicyId من المجموعة فقط)، وقد يترك خصم البيع = أساس الشراء إذا وُجد MaxDiscountToCustomer
+            // مع ربح 0 فيُمنع فرع سياسة المخزن لكل عمود — فيُعرض الخصم اليدوي في كل الأعمدة.
+            var useWarehouseOnlyPerColumn =
+                coreR == basisR
+                || (core.GroupPolicyMatched && !core.WarehouseFallbackStepUsed);
+
+            if (useWarehouseOnlyPerColumn)
+                return RoundDisc(await GetWarehouseOnlySaleDiscountAsync(warehouseId, pid, purchaseDiscountBasis));
+
+            return coreR;
+        }
+
+        private static decimal RoundDisc(decimal v) =>
+            Math.Round(v, 2, MidpointRounding.AwayFromZero);
+
+        /// <summary>خصم البيع من قاعدة سياسات المخزن لـ PolicyId فقط (بدون مجموعة صنف).</summary>
+        private async Task<decimal> GetWarehouseOnlySaleDiscountAsync(int warehouseId, int policyId, decimal basis)
+        {
+            var rule = await _context.WarehousePolicyRules
+                .AsNoTracking()
+                .Where(r => r.WarehouseId == warehouseId && r.PolicyId == policyId && r.IsActive)
+                .Select(r => new { r.ProfitPercent, r.MaxDiscountToCustomer })
+                .FirstOrDefaultAsync();
+            decimal profitPercent;
+            decimal? maxDiscountToCustomer;
+            if (rule != null)
+            {
+                profitPercent = rule.ProfitPercent;
+                maxDiscountToCustomer = rule.MaxDiscountToCustomer;
+            }
+            else
+            {
+                var policyDefaultProfit = await _context.Policies
+                    .AsNoTracking()
+                    .Where(p => p.PolicyId == policyId && p.IsActive)
+                    .Select(p => (decimal?)p.DefaultProfitPercent)
+                    .FirstOrDefaultAsync();
+                profitPercent = policyDefaultProfit ?? 0m;
+                maxDiscountToCustomer = null;
+            }
+            if (profitPercent < 0) profitPercent = 0;
+            decimal saleDiscount = basis - profitPercent;
+            if (maxDiscountToCustomer.HasValue && saleDiscount > maxDiscountToCustomer.Value)
+                saleDiscount = maxDiscountToCustomer.Value;
+            return ClampPercent(saleDiscount);
+        }
+
+        private readonly struct SaleDiscountCoreResult
+        {
+            public decimal SaleDiscount { get; init; }
+            public bool GroupPolicyMatched { get; init; }
+            public bool WarehouseFallbackStepUsed { get; init; }
+            public decimal FinalProfitPercent { get; init; }
+        }
+
+        // المنطق (مشترك مع الفاتورة):
+        // - سياسة مجموعة الصنف + المخزن أولاً (ProductGroupPolicy → WarehousePolicyRules لذلك PolicyId)
+        // - وإلا: WarehousePolicyRules للمخزن + warehouseFallbackPolicyId (من عميل الفاتورة أو رقم عمود التقرير 1..10)
+        // - خصم البيع = أساس خصم الشراء − نسبة الربح، مع MaxDiscountToCustomer
+        private async Task<SaleDiscountCoreResult> GetSaleDiscountCoreAsync(
+            int prodId,
+            int warehouseId,
+            int warehouseFallbackPolicyId,
+            decimal weightedPurchaseDiscount)
+        {
+            if (warehouseId <= 0)
+            {
+                return new SaleDiscountCoreResult
+                {
+                    SaleDiscount = ClampPercent(weightedPurchaseDiscount),
+                    GroupPolicyMatched = false,
+                    WarehouseFallbackStepUsed = false,
+                    FinalProfitPercent = 0m
+                };
+            }
+
             var productGroupId = await _context.Products
                 .AsNoTracking()
                 .Where(p => p.ProdId == prodId)
@@ -293,15 +373,11 @@ namespace ERP.Services
 
             decimal profitPercent = 0m;
             decimal? maxDiscountToCustomer = null;
+            var groupPolicyMatched = false;
+            var warehouseFallbackStepUsed = false;
 
-            // =========================
-            // (4) أولوية: سياسة المجموعة — ProductGroupPolicy يعطينا PolicyId، والربح من جدول سياسات المخازن
-            // مثال: أوجمنتين Group A → سياسته رقم 10 → نذهب لسياسات المخازن (Policy 10 + المخزن) → نطبق الربح
-            // لو الصنف ليس له مجموعة → نستخدم سياسة العميل (في الخطوة 5)
-            // =========================
             if (productGroupId.HasValue && productGroupId.Value > 0)
             {
-                // جلب PolicyId من ProductGroupPolicy للمجموعة + المخزن
                 var groupPolicy = await _context.ProductGroupPolicies
                     .AsNoTracking()
                     .Where(gp =>
@@ -311,7 +387,6 @@ namespace ERP.Services
                     .Select(gp => new { gp.PolicyId, gp.ProfitPercent, gp.MaxDiscountToCustomer })
                     .FirstOrDefaultAsync();
 
-                // لو مفيش (مجموعة + مخزن): نجرب أي سياسة للمجموعة
                 if (groupPolicy == null)
                 {
                     groupPolicy = await _context.ProductGroupPolicies
@@ -326,7 +401,7 @@ namespace ERP.Services
 
                 if (groupPolicy != null)
                 {
-                    // الربح من جدول سياسات المخازن (WarehousePolicyRules) لهذه السياسة + المخزن
+                    groupPolicyMatched = true;
                     var whRule = await _context.WarehousePolicyRules
                         .AsNoTracking()
                         .Where(w => w.WarehouseId == warehouseId && w.PolicyId == groupPolicy.PolicyId && w.IsActive)
@@ -340,7 +415,6 @@ namespace ERP.Services
                     }
                     else
                     {
-                        // لو مفيش قاعدة في سياسات المخازن: نستخدم ProfitPercent من ProductGroupPolicy أو Policy.DefaultProfitPercent
                         if (groupPolicy.ProfitPercent > 0)
                             profitPercent = groupPolicy.ProfitPercent;
                         else
@@ -357,16 +431,14 @@ namespace ERP.Services
                 }
             }
 
-            // =========================
-            // (5) لو مفيش قاعدة مجموعة: نستخدم سياسة المخزن
-            // =========================
             if (profitPercent == 0 && !maxDiscountToCustomer.HasValue)
             {
+                warehouseFallbackStepUsed = true;
                 var rule = await _context.WarehousePolicyRules
                     .AsNoTracking()
                     .Where(r =>
                         r.WarehouseId == warehouseId &&
-                        r.PolicyId == policyId &&
+                        r.PolicyId == warehouseFallbackPolicyId &&
                         r.IsActive)
                     .Select(r => new { r.ProfitPercent, r.MaxDiscountToCustomer })
                     .FirstOrDefaultAsync();
@@ -380,7 +452,7 @@ namespace ERP.Services
                 {
                     var policyDefaultProfit = await _context.Policies
                         .AsNoTracking()
-                        .Where(p => p.PolicyId == policyId && p.IsActive)
+                        .Where(p => p.PolicyId == warehouseFallbackPolicyId && p.IsActive)
                         .Select(p => (decimal?)p.DefaultProfitPercent)
                         .FirstOrDefaultAsync();
 
@@ -390,15 +462,19 @@ namespace ERP.Services
 
             if (profitPercent < 0) profitPercent = 0;
 
-            // =========================
-            // (6) حساب خصم البيع وتطبيق أقصى خصم
-            // =========================
+            var finalProfit = profitPercent;
             decimal saleDiscount = weightedPurchaseDiscount - profitPercent;
 
             if (maxDiscountToCustomer.HasValue && saleDiscount > maxDiscountToCustomer.Value)
                 saleDiscount = maxDiscountToCustomer.Value;
 
-            return ClampPercent(saleDiscount);
+            return new SaleDiscountCoreResult
+            {
+                SaleDiscount = ClampPercent(saleDiscount),
+                GroupPolicyMatched = groupPolicyMatched,
+                WarehouseFallbackStepUsed = warehouseFallbackStepUsed,
+                FinalProfitPercent = finalProfit
+            };
         }
 
         // =========================================================

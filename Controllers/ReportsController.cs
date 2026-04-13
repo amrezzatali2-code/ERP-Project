@@ -198,6 +198,99 @@ namespace ERP.Controllers
             return productIds.Intersect(purchasedIds).ToList();
         }
 
+        /// <summary>
+        /// خصم البيع % لأعمدة السياسات 1..10 في تقرير أرصدة الأصناف.
+        /// مع مخزن: <see cref="StockAnalysisService.GetSaleDiscountForProductBalancePolicyColumnAsync"/> (معاينة لكل سياسة من قواعد المخزن).
+        /// بدون مخزن (الكل): أساس الخصم − أقصى <see cref="WarehousePolicyRule.ProfitPercent"/> لكل PolicyId عبر المخازن، مع الاحتياط إلى <see cref="Policy.DefaultProfitPercent"/> عند غياب قاعدة.
+        /// </summary>
+        private async Task ApplyProductBalancePolicySaleColumnsAsync(List<ProductBalanceReportDto> reportData, int? warehouseId)
+        {
+            var wh = warehouseId ?? 0;
+            Dictionary<int, decimal>? policyProfitsForNoWarehouse = null;
+            if (wh <= 0)
+                policyProfitsForNoWarehouse = await BuildProductBalancePolicyProfitPercentsAsync(warehouseId: null);
+
+            foreach (var dto in reportData)
+            {
+                if (wh <= 0)
+                    FillProductBalancePolicyColumnsFromPolicyProfits(dto.EffectiveDiscountPct, dto.PolicySaleDiscountPct, policyProfitsForNoWarehouse!);
+                else
+                {
+                    var basis = dto.EffectiveDiscountPct;
+                    for (var pol = 1; pol <= 10; pol++)
+                    {
+                        var d = await _stockAnalysisService.GetSaleDiscountForProductBalancePolicyColumnAsync(dto.ProdId, wh, pol, basis);
+                        dto.PolicySaleDiscountPct[pol - 1] = d;
+                    }
+                }
+
+                if (dto.Batches == null) continue;
+                foreach (var batch in dto.Batches)
+                {
+                    if (wh <= 0)
+                        FillProductBalancePolicyColumnsFromPolicyProfits(batch.EffectiveDiscountPct, batch.PolicySaleDiscountPct, policyProfitsForNoWarehouse!);
+                    else
+                    {
+                        var bb = batch.EffectiveDiscountPct;
+                        for (var pol = 1; pol <= 10; pol++)
+                        {
+                            var d = await _stockAnalysisService.GetSaleDiscountForProductBalancePolicyColumnAsync(dto.ProdId, wh, pol, bb);
+                            batch.PolicySaleDiscountPct[pol - 1] = d;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// نسبة ربح المخزن لكل سياسة 1..10: لمخزن محدد = قواعد ذلك المخزن؛ بدون مخزن = أقصى نسبة بين المخازن (معاينة موحدة عند «الكل»).
+        /// </summary>
+        private async Task<Dictionary<int, decimal>> BuildProductBalancePolicyProfitPercentsAsync(int? warehouseId)
+        {
+            var q = _context.WarehousePolicyRules
+                .AsNoTracking()
+                .Where(r => r.IsActive && r.PolicyId >= 1 && r.PolicyId <= 10);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                q = q.Where(r => r.WarehouseId == warehouseId.Value);
+
+            var fromRules = await q
+                .GroupBy(r => r.PolicyId)
+                .Select(g => new { PolicyId = g.Key, Profit = g.Max(x => x.ProfitPercent) })
+                .ToDictionaryAsync(x => x.PolicyId, x => x.Profit);
+
+            var defaults = await _context.Policies
+                .AsNoTracking()
+                .Where(p => p.PolicyId >= 1 && p.PolicyId <= 10)
+                .ToDictionaryAsync(p => p.PolicyId, p => p.DefaultProfitPercent);
+
+            var result = new Dictionary<int, decimal>(10);
+            for (var pol = 1; pol <= 10; pol++)
+            {
+                if (fromRules.TryGetValue(pol, out var pr))
+                    result[pol] = pr;
+                else if (defaults.TryGetValue(pol, out var d))
+                    result[pol] = d;
+                else
+                    result[pol] = 0m;
+            }
+            return result;
+        }
+
+        private static void FillProductBalancePolicyColumnsFromPolicyProfits(
+            decimal basis,
+            decimal?[] target,
+            Dictionary<int, decimal> policyProfitPercents)
+        {
+            for (var pol = 1; pol <= 10; pol++)
+            {
+                var profit = policyProfitPercents.TryGetValue(pol, out var pr) ? pr : 0m;
+                var sale = basis - profit;
+                if (sale < 0m) sale = 0m;
+                if (sale > 100m) sale = 100m;
+                target[pol - 1] = Math.Round(sale, 2, MidpointRounding.AwayFromZero);
+            }
+        }
+
         /// <summary>تكلفة المخزون من StockLedger — مصدر واحد لربح الميزانية وكارت إجمالي التكلفة في أرصدة الأصناف.</summary>
         private async Task<decimal> ComputeBalanceSheetInventoryCostAsync(int? warehouseId)
         {
@@ -755,8 +848,12 @@ namespace ERP.Controllers
                 return View();
             }
 
-            // عند اختيار مخزن: نقتصر على أصناف لها رصيد فعلي > 0 في هذا المخزن، أو (عند عرض الصفر) أصناف معيّن لها هذا المخزن فقط — حتى لا يظهر صنف نُقل بالكامل لمخزن آخر
-            if (warehouseId.HasValue && warehouseId.Value > 0)
+            // عند اختيار مخزن:
+            // - إذا كان المستخدم "يستبعد صفر" (includeZeroQty=false): لا نُفلتر productIds هنا لتفادي أي استبعاد مبكر غير مقصود؛
+            //   نعتمد على stockQuantities (من StockLedger) + فلتر currentQty لاحقاً.
+            // - إذا كان المستخدم "يعرض الصفر" (includeZeroQty=true): نُبقي منطق استبعاد الأصناف المنقولة بالكامل لمخزن آخر،
+            //   مع السماح بإظهار الأصناف المعيّن لها هذا المخزن حتى لو كان رصيدها 0.
+            if (warehouseId.HasValue && warehouseId.Value > 0 && includeZeroQty)
             {
                 var whId = warehouseId.Value;
                 var balanceInWarehouse = await _context.StockLedger
@@ -767,15 +864,14 @@ namespace ERP.Controllers
                     .ToListAsync();
                 var withPositiveBalance = balanceInWarehouse.Where(b => b.Balance > 0).Select(b => b.ProdId).ToList();
                 var inWarehouseIds = new List<int>(withPositiveBalance);
-                if (includeZeroQty)
-                {
-                    var assignedToWarehouseIds = await _context.Products
-                        .AsNoTracking()
-                        .Where(p => p.WarehouseId == whId && p.IsActive)
-                        .Select(p => p.ProdId)
-                        .ToListAsync();
-                    inWarehouseIds = inWarehouseIds.Union(assignedToWarehouseIds).Distinct().ToList();
-                }
+
+                var assignedToWarehouseIds = await _context.Products
+                    .AsNoTracking()
+                    .Where(p => p.WarehouseId == whId && p.IsActive)
+                    .Select(p => p.ProdId)
+                    .ToListAsync();
+                inWarehouseIds = inWarehouseIds.Union(assignedToWarehouseIds).Distinct().ToList();
+
                 productIds = productIds.Intersect(inWarehouseIds).ToList();
             }
 
@@ -814,6 +910,17 @@ namespace ERP.Controllers
                 .GroupBy(sl => sl.ProdId)
                 .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sl => sl.QtyIn - sl.QtyOut) })
                 .ToDictionaryAsync(x => x.ProdId, x => Math.Max(0, x.TotalQty));
+
+            // إصلاح عزل المخزن (Regression/اختلاط مخازن):
+            // عند اختيار مخزن + استبعاد الصفر (السلوك الافتراضي)، يجب أن تكون قائمة الأصناف مبنية فعلياً على
+            // رصيد هذا المخزن فقط. لذلك نُصفّي productIds هنا اعتماداً على stockQuantities (المقيّدة بالمخزن).
+            // هذا يمنع ظهور أصناف من مخازن أخرى في التقرير حتى لو كانت موجودة في productsQuery.
+            if (warehouseId.HasValue && warehouseId.Value > 0 && !includeZeroQty)
+            {
+                productIds = productIds
+                    .Where(pid => stockQuantities.TryGetValue(pid, out var q) && q > 0)
+                    .ToList();
+            }
 
             // 6.3) تحميل StockLedger للخصم المرجح والتكلفة (شراء، رصيد أول، تحويل دخول، تحويل إلى مخزن الصنف — مع RemainingQty > 0)
             var stockLedgerCostQuery = _context.StockLedger
@@ -1006,53 +1113,109 @@ namespace ERP.Controllers
                     UnitCost = unitCost,
                     TotalCost = totalCost
                 };
-                // التشغيلات: نعرض فقط التشغيلات التي لها كميات فعلية في StockLedger، والصنف نعرض له قسم التشغيلات فقط إذا كان له أكثر من تشغيلة واحدة (٢+)
-                if (includeBatches && batchLookup.TryGetValue(prodId, out var prodBatches) && prodBatches != null)
+                // التشغيلات: صف رئيسي + سطر لكل تشغيلة — من جدول Batches إن وُجد صفّان+، وإلا من دفتر الحركة إن وُجد تشغيلتان+ (مثل فاتورة مشتريات بعدة أسطر تشغيل رغم ضعف تسجيل Batches)
+                if (includeBatches)
                 {
                     var ledgerList = batchesByProdId.TryGetValue(prodId, out var blist) ? blist : null;
+                    var ledgerCount = ledgerList?.Count ?? 0;
+                    var hasMaster = batchLookup.TryGetValue(prodId, out var prodBatches) && prodBatches != null;
+                    var masterCount = hasMaster ? prodBatches!.Count : 0;
                     var batchRows = new List<ProductBalanceBatchRow>();
-                    foreach (var m in prodBatches.OrderBy(m => m.Expiry).ThenBy(m => m.BatchNo ?? ""))
+
+                    if (ledgerCount >= 2 && masterCount < 2)
                     {
-                        var bExp = m.Expiry.Date;
-                        var match = ledgerList?.FirstOrDefault(b => (b.BatchNo ?? "").Trim() == (m.BatchNo ?? "").Trim() && (b.Expiry?.Date ?? DateTime.MinValue) == bExp);
-                        decimal brQty = match != null ? match.TotalRemaining : 0m;
-                        if (brQty <= 0) continue; // نعرض فقط التشغيلات التي لها كمية فعلية
-                        decimal calcDisc = match != null ? match.WeightedDiscount / brQty : 0m;
-                        decimal calcCost = match != null ? match.WeightedCost / brQty : 0m;
-                        var manualBatch = GetLatestOverride(prodId, warehouseId, m.BatchId);
-                        var effectiveBatch = manualBatch ?? calcDisc;
-                        var batchKey = (ProdId: prodId, BatchNo: (m.BatchNo ?? "").Trim(), ExpiryDate: (DateTime?)m.Expiry.Date);
-                        decimal batchSalesQty = salesByBatchKey.TryGetValue(batchKey, out var bs) ? bs : 0m;
-                        if (returnsByBatchKey.TryGetValue(batchKey, out var br))
-                            batchSalesQty = Math.Max(0m, batchSalesQty - br);
-                        decimal batchPriceRetail = (m.PriceRetailBatch ?? 0m) > 0m ? (m.PriceRetailBatch ?? 0m) : product.PriceRetail;
-                        batchRows.Add(new ProductBalanceBatchRow
+                        foreach (var lg in ledgerList!.OrderBy(b => b.Expiry).ThenBy(b => b.BatchNo ?? ""))
                         {
-                            BatchId = m.BatchId,
-                            BatchNo = m.BatchNo,
-                            Expiry = m.Expiry,
-                            CurrentQty = (int)brQty,
-                            WeightedDiscount = calcDisc,
-                            ManualDiscountPct = manualBatch,
-                            EffectiveDiscountPct = effectiveBatch,
-                            UnitCost = calcCost,
-                            TotalCost = brQty * calcCost,
-                            SalesQty = batchSalesQty,
-                            PriceRetail = batchPriceRetail
-                        });
+                            var bNo = (lg.BatchNo ?? "").Trim();
+                            var lgExpDate = lg.Expiry?.Date ?? DateTime.MinValue;
+                            var master = hasMaster
+                                ? prodBatches!.FirstOrDefault(m =>
+                                    (m.BatchNo ?? "").Trim() == bNo &&
+                                    m.Expiry.Date == lgExpDate)
+                                : null;
+                            decimal brQty = lg.TotalRemaining;
+                            decimal calcDisc = brQty > 0m ? lg.WeightedDiscount / brQty : 0m;
+                            decimal calcCost = brQty > 0m ? lg.WeightedCost / brQty : 0m;
+                            int? bid = master?.BatchId;
+                            var manualBatch = GetLatestOverride(prodId, warehouseId, bid);
+                            var effectiveBatch = manualBatch ?? calcDisc;
+                            var batchKeyLg = (ProdId: prodId, BatchNo: bNo, ExpiryDate: lg.Expiry.HasValue ? (DateTime?)lg.Expiry!.Value.Date : null);
+                            decimal batchSalesQty = salesByBatchKey.TryGetValue(batchKeyLg, out var bsLg) ? bsLg : 0m;
+                            if (returnsByBatchKey.TryGetValue(batchKeyLg, out var brLg))
+                                batchSalesQty = Math.Max(0m, batchSalesQty - brLg);
+                            decimal batchPriceRetail = master != null && (master.PriceRetailBatch ?? 0m) > 0m
+                                ? (master.PriceRetailBatch ?? 0m)
+                                : product.PriceRetail;
+                            batchRows.Add(new ProductBalanceBatchRow
+                            {
+                                BatchId = bid,
+                                BatchNo = string.IsNullOrWhiteSpace(lg.BatchNo) ? null : lg.BatchNo.Trim(),
+                                Expiry = lg.Expiry,
+                                CurrentQty = (int)brQty,
+                                WeightedDiscount = calcDisc,
+                                ManualDiscountPct = manualBatch,
+                                EffectiveDiscountPct = effectiveBatch,
+                                UnitCost = calcCost,
+                                TotalCost = brQty * calcCost,
+                                SalesQty = batchSalesQty,
+                                PriceRetail = batchPriceRetail
+                            });
+                        }
                     }
-                    if (batchRows.Count >= 2) // الصنف له أكثر من تشغيلة واحدة فقط نعرض قسم التشغيلات
+                    else if (hasMaster)
+                    {
+                        foreach (var m in prodBatches!.OrderBy(m => m.Expiry).ThenBy(m => m.BatchNo ?? ""))
+                        {
+                            var bExp = m.Expiry.Date;
+                            var match = ledgerList?.FirstOrDefault(b => (b.BatchNo ?? "").Trim() == (m.BatchNo ?? "").Trim() && (b.Expiry?.Date ?? DateTime.MinValue) == bExp);
+                            decimal brQty = match != null ? match.TotalRemaining : 0m;
+                            decimal calcDisc = brQty > 0m && match != null ? match.WeightedDiscount / brQty : 0m;
+                            decimal calcCost = brQty > 0m && match != null ? match.WeightedCost / brQty : 0m;
+                            var manualBatch = GetLatestOverride(prodId, warehouseId, m.BatchId);
+                            var effectiveBatch = manualBatch ?? calcDisc;
+                            var batchKey = (ProdId: prodId, BatchNo: (m.BatchNo ?? "").Trim(), ExpiryDate: (DateTime?)m.Expiry.Date);
+                            decimal batchSalesQty = salesByBatchKey.TryGetValue(batchKey, out var bs) ? bs : 0m;
+                            if (returnsByBatchKey.TryGetValue(batchKey, out var br))
+                                batchSalesQty = Math.Max(0m, batchSalesQty - br);
+                            decimal batchPriceRetail = (m.PriceRetailBatch ?? 0m) > 0m ? (m.PriceRetailBatch ?? 0m) : product.PriceRetail;
+                            batchRows.Add(new ProductBalanceBatchRow
+                            {
+                                BatchId = m.BatchId,
+                                BatchNo = m.BatchNo,
+                                Expiry = m.Expiry,
+                                CurrentQty = (int)brQty,
+                                WeightedDiscount = calcDisc,
+                                ManualDiscountPct = manualBatch,
+                                EffectiveDiscountPct = effectiveBatch,
+                                UnitCost = calcCost,
+                                TotalCost = brQty * calcCost,
+                                SalesQty = batchSalesQty,
+                                PriceRetail = batchPriceRetail
+                            });
+                        }
+                    }
+
+                    if (batchRows.Count >= 2)
                     {
                         dto.Batches = batchRows;
-                        // تكلفة الصف الرئيسي = إجمالي تكلفات التشغيلات المعروضة (حتى يتطابق الرقم مع مجموع الثلاث تشغيلات)
                         decimal batchesTotalCost = batchRows.Sum(b => b.TotalCost);
                         int batchesTotalQty = batchRows.Sum(b => b.CurrentQty);
                         dto.TotalCost = batchesTotalCost;
-                        dto.UnitCost = batchesTotalQty > 0 ? batchesTotalCost / batchesTotalQty : unitCost;
+                        dto.UnitCost = currentQty > 0 && batchesTotalCost > 0m
+                            ? batchesTotalCost / currentQty
+                            : (batchesTotalQty > 0 ? batchesTotalCost / batchesTotalQty : unitCost);
+                        dto.SalesQty = batchRows.Sum(b => b.SalesQty);
+                        var qtyForAvg = batchRows.Where(b => b.CurrentQty > 0).Sum(b => (decimal)b.CurrentQty);
+                        if (qtyForAvg > 0m)
+                        {
+                            dto.WeightedDiscount = batchRows.Where(b => b.CurrentQty > 0).Sum(b => b.WeightedDiscount * b.CurrentQty) / qtyForAvg;
+                            dto.PriceRetail = batchRows.Where(b => b.CurrentQty > 0).Sum(b => b.PriceRetail * b.CurrentQty) / qtyForAvg;
+                        }
+                        dto.EffectiveDiscountPct = dto.ManualDiscountPct ?? dto.WeightedDiscount;
+                        dto.ProfitDeltaExpected = (dto.EffectiveDiscountPct - dto.WeightedDiscount) * dto.PriceRetail * currentQty / 100m;
                     }
                     else if (batchRows.Count == 1)
                     {
-                        // تشغيلة واحدة: عرض رقم التشغيلة والتاريخ في الصف الرئيسي
                         dto.FirstBatchNo = batchRows[0].BatchNo;
                         dto.FirstBatchExpiry = batchRows[0].Expiry;
                     }
@@ -1067,9 +1230,7 @@ namespace ERP.Controllers
                 reportData.Add(dto);
             }
 
-            var whForPolicyRules = warehouseId is int whPb && whPb > 0 ? whPb : 0;
-            var ctxPol = await ProductBalancePolicySaleHelper.LoadWarehousePolicyContextAsync(_context, whForPolicyRules);
-            ProductBalancePolicySaleHelper.ApplyToReport(reportData, ctxPol.Rules, ctxPol.DefaultProfit);
+            await ApplyProductBalancePolicySaleColumnsAsync(reportData, warehouseId);
 
             ViewBag.ShowPolicyColumns = true;
 
@@ -2486,8 +2647,9 @@ namespace ERP.Controllers
             productIds = await ApplyProductBalancesPurchaseMovementFilterAsync(
                 productIds, fromDate, toDate, purchaseInvoiceFrom, purchaseInvoiceTo);
 
-            // عند اختيار مخزن: نقتصر على أصناف لها رصيد > 0 أو (عرض الصفر) معيّنة لهذا المخزن (نفس منطق ProductBalances)
-            if (warehouseId.HasValue && warehouseId.Value > 0)
+            // عند اختيار مخزن:
+            // نفس قرار ProductBalances: لا نُفلتر productIds مبكراً إلا في حالة "عرض الصفر" (includeZeroQty=true).
+            if (warehouseId.HasValue && warehouseId.Value > 0 && includeZeroQty)
             {
                 var whIdExp = warehouseId.Value;
                 var balanceInWarehouseExp = await _context.StockLedger
@@ -2498,15 +2660,14 @@ namespace ERP.Controllers
                     .ToListAsync();
                 var withPositiveBalanceExp = balanceInWarehouseExp.Where(b => b.Balance > 0).Select(b => b.ProdId).ToList();
                 var inWarehouseIdsExp = new List<int>(withPositiveBalanceExp);
-                if (includeZeroQty)
-                {
-                    var assignedToWarehouseIdsExp = await _context.Products
-                        .AsNoTracking()
-                        .Where(p => p.WarehouseId == whIdExp && p.IsActive)
-                        .Select(p => p.ProdId)
-                        .ToListAsync();
-                    inWarehouseIdsExp = inWarehouseIdsExp.Union(assignedToWarehouseIdsExp).Distinct().ToList();
-                }
+
+                var assignedToWarehouseIdsExp = await _context.Products
+                    .AsNoTracking()
+                    .Where(p => p.WarehouseId == whIdExp && p.IsActive)
+                    .Select(p => p.ProdId)
+                    .ToListAsync();
+                inWarehouseIdsExp = inWarehouseIdsExp.Union(assignedToWarehouseIdsExp).Distinct().ToList();
+
                 productIds = productIds.Intersect(inWarehouseIdsExp).ToList();
             }
 
@@ -2541,6 +2702,14 @@ namespace ERP.Controllers
                 .GroupBy(sl => sl.ProdId)
                 .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sl => sl.QtyIn - sl.QtyOut) })
                 .ToDictionaryAsync(x => x.ProdId, x => Math.Max(0, x.TotalQty));
+
+            // نفس عزل المخزن للتصدير: عند اختيار مخزن + استبعاد الصفر نُبقِي فقط الأصناف ذات رصيد > 0 في هذا المخزن.
+            if (warehouseId.HasValue && warehouseId.Value > 0 && !includeZeroQty)
+            {
+                productIds = productIds
+                    .Where(pid => stockQuantities.TryGetValue(pid, out var q) && q > 0)
+                    .ToList();
+            }
 
             var stockLedgerCostQueryExp = _context.StockLedger
                 .AsNoTracking()
@@ -2693,42 +2862,111 @@ namespace ERP.Controllers
                     UnitCost = unitCost,
                     TotalCost = totalCost
                 };
-                if (includeBatches && batchLookupExp.TryGetValue(prodId, out var prodBatchesExp) && prodBatchesExp != null)
+                if (includeBatches)
                 {
                     var ledgerListExp = batchesByProdIdExp.TryGetValue(prodId, out var blistExp) ? blistExp : null;
+                    var ledgerCountExp = ledgerListExp?.Count ?? 0;
+                    var hasMasterExp = batchLookupExp.TryGetValue(prodId, out var prodBatchesExp) && prodBatchesExp != null;
+                    var masterCountExp = hasMasterExp ? prodBatchesExp!.Count : 0;
                     var batchRowsExp = new List<ProductBalanceBatchRow>();
-                    foreach (var m in prodBatchesExp.OrderBy(m => m.Expiry).ThenBy(m => m.BatchNo ?? ""))
+
+                    if (ledgerCountExp >= 2 && masterCountExp < 2)
                     {
-                        var bExp = m.Expiry.Date;
-                        var matchExp = ledgerListExp?.FirstOrDefault(b => (b.BatchNo ?? "").Trim() == (m.BatchNo ?? "").Trim() && (b.Expiry?.Date ?? DateTime.MinValue) == bExp);
-                        decimal brQty = matchExp != null ? matchExp.TotalRemaining : 0m;
-                        if (brQty <= 0) continue;
-                        decimal brDisc = matchExp != null ? matchExp.WeightedDiscount / brQty : 0m;
-                        decimal brCost = matchExp != null ? matchExp.WeightedCost / brQty : 0m;
-                        var manualBatchExp = GetLatestOverrideExp(prodId, warehouseId, m.BatchId);
-                        var effectiveBatchExp = manualBatchExp ?? brDisc;
-                        var batchKeyExp = (ProdId: prodId, BatchNo: (m.BatchNo ?? "").Trim(), ExpiryDate: (DateTime?)m.Expiry.Date);
-                        decimal batchSalesQtyExp = salesByBatchKeyExp.TryGetValue(batchKeyExp, out var bsExp) ? bsExp : 0m;
-                        if (returnsByBatchKeyExp.TryGetValue(batchKeyExp, out var brExp))
-                            batchSalesQtyExp = Math.Max(0m, batchSalesQtyExp - brExp);
-                        decimal batchPriceRetailExp = (m.PriceRetailBatch ?? 0m) > 0m ? (m.PriceRetailBatch ?? 0m) : product.PriceRetail;
-                        batchRowsExp.Add(new ProductBalanceBatchRow { BatchNo = m.BatchNo, Expiry = m.Expiry, CurrentQty = (int)brQty, WeightedDiscount = brDisc, ManualDiscountPct = manualBatchExp, EffectiveDiscountPct = effectiveBatchExp, UnitCost = brCost, TotalCost = brQty * brCost, SalesQty = batchSalesQtyExp, PriceRetail = batchPriceRetailExp });
+                        foreach (var lg in ledgerListExp!.OrderBy(b => b.Expiry).ThenBy(b => b.BatchNo ?? ""))
+                        {
+                            var bNo = (lg.BatchNo ?? "").Trim();
+                            var lgExpDate = lg.Expiry?.Date ?? DateTime.MinValue;
+                            var masterE = hasMasterExp
+                                ? prodBatchesExp!.FirstOrDefault(m =>
+                                    (m.BatchNo ?? "").Trim() == bNo &&
+                                    m.Expiry.Date == lgExpDate)
+                                : null;
+                            decimal brQty = lg.TotalRemaining;
+                            decimal brDisc = brQty > 0m ? lg.WeightedDiscount / brQty : 0m;
+                            decimal brCost = brQty > 0m ? lg.WeightedCost / brQty : 0m;
+                            int? bidE = masterE?.BatchId;
+                            var manualBatchExp = GetLatestOverrideExp(prodId, warehouseId, bidE);
+                            var effectiveBatchExp = manualBatchExp ?? brDisc;
+                            var batchKeyLg = (ProdId: prodId, BatchNo: bNo, ExpiryDate: lg.Expiry.HasValue ? (DateTime?)lg.Expiry!.Value.Date : null);
+                            decimal batchSalesQtyExp = salesByBatchKeyExp.TryGetValue(batchKeyLg, out var bsLgE) ? bsLgE : 0m;
+                            if (returnsByBatchKeyExp.TryGetValue(batchKeyLg, out var brLgE))
+                                batchSalesQtyExp = Math.Max(0m, batchSalesQtyExp - brLgE);
+                            decimal batchPriceRetailExp = masterE != null && (masterE.PriceRetailBatch ?? 0m) > 0m
+                                ? (masterE.PriceRetailBatch ?? 0m)
+                                : product.PriceRetail;
+                            batchRowsExp.Add(new ProductBalanceBatchRow
+                            {
+                                BatchId = bidE,
+                                BatchNo = string.IsNullOrWhiteSpace(lg.BatchNo) ? null : lg.BatchNo.Trim(),
+                                Expiry = lg.Expiry,
+                                CurrentQty = (int)brQty,
+                                WeightedDiscount = brDisc,
+                                ManualDiscountPct = manualBatchExp,
+                                EffectiveDiscountPct = effectiveBatchExp,
+                                UnitCost = brCost,
+                                TotalCost = brQty * brCost,
+                                SalesQty = batchSalesQtyExp,
+                                PriceRetail = batchPriceRetailExp
+                            });
+                        }
                     }
+                    else if (hasMasterExp)
+                    {
+                        foreach (var m in prodBatchesExp!.OrderBy(m => m.Expiry).ThenBy(m => m.BatchNo ?? ""))
+                        {
+                            var bExp = m.Expiry.Date;
+                            var matchExp = ledgerListExp?.FirstOrDefault(b => (b.BatchNo ?? "").Trim() == (m.BatchNo ?? "").Trim() && (b.Expiry?.Date ?? DateTime.MinValue) == bExp);
+                            decimal brQty = matchExp != null ? matchExp.TotalRemaining : 0m;
+                            decimal brDisc = brQty > 0m && matchExp != null ? matchExp.WeightedDiscount / brQty : 0m;
+                            decimal brCost = brQty > 0m && matchExp != null ? matchExp.WeightedCost / brQty : 0m;
+                            var manualBatchExp = GetLatestOverrideExp(prodId, warehouseId, m.BatchId);
+                            var effectiveBatchExp = manualBatchExp ?? brDisc;
+                            var batchKeyExp = (ProdId: prodId, BatchNo: (m.BatchNo ?? "").Trim(), ExpiryDate: (DateTime?)m.Expiry.Date);
+                            decimal batchSalesQtyExp = salesByBatchKeyExp.TryGetValue(batchKeyExp, out var bsExp) ? bsExp : 0m;
+                            if (returnsByBatchKeyExp.TryGetValue(batchKeyExp, out var brExp))
+                                batchSalesQtyExp = Math.Max(0m, batchSalesQtyExp - brExp);
+                            decimal batchPriceRetailExp = (m.PriceRetailBatch ?? 0m) > 0m ? (m.PriceRetailBatch ?? 0m) : product.PriceRetail;
+                            batchRowsExp.Add(new ProductBalanceBatchRow
+                            {
+                                BatchId = m.BatchId,
+                                BatchNo = m.BatchNo,
+                                Expiry = m.Expiry,
+                                CurrentQty = (int)brQty,
+                                WeightedDiscount = brDisc,
+                                ManualDiscountPct = manualBatchExp,
+                                EffectiveDiscountPct = effectiveBatchExp,
+                                UnitCost = brCost,
+                                TotalCost = brQty * brCost,
+                                SalesQty = batchSalesQtyExp,
+                                PriceRetail = batchPriceRetailExp
+                            });
+                        }
+                    }
+
                     if (batchRowsExp.Count >= 2)
                     {
                         dtoExp.Batches = batchRowsExp;
                         decimal batchesTotalCostExp = batchRowsExp.Sum(b => b.TotalCost);
                         int batchesTotalQtyExp = batchRowsExp.Sum(b => b.CurrentQty);
                         dtoExp.TotalCost = batchesTotalCostExp;
-                        dtoExp.UnitCost = batchesTotalQtyExp > 0 ? batchesTotalCostExp / batchesTotalQtyExp : unitCost;
+                        dtoExp.UnitCost = currentQty > 0 && batchesTotalCostExp > 0m
+                            ? batchesTotalCostExp / currentQty
+                            : (batchesTotalQtyExp > 0 ? batchesTotalCostExp / batchesTotalQtyExp : unitCost);
+                        dtoExp.SalesQty = batchRowsExp.Sum(b => b.SalesQty);
+                        var qtyForAvgExp = batchRowsExp.Where(b => b.CurrentQty > 0).Sum(b => (decimal)b.CurrentQty);
+                        if (qtyForAvgExp > 0m)
+                        {
+                            dtoExp.WeightedDiscount = batchRowsExp.Where(b => b.CurrentQty > 0).Sum(b => b.WeightedDiscount * b.CurrentQty) / qtyForAvgExp;
+                            dtoExp.PriceRetail = batchRowsExp.Where(b => b.CurrentQty > 0).Sum(b => b.PriceRetail * b.CurrentQty) / qtyForAvgExp;
+                        }
+                        dtoExp.EffectiveDiscountPct = dtoExp.ManualDiscountPct ?? dtoExp.WeightedDiscount;
+                        dtoExp.ProfitDeltaExpected = (dtoExp.EffectiveDiscountPct - dtoExp.WeightedDiscount) * dtoExp.PriceRetail * currentQty / 100m;
                     }
                 }
                 reportData.Add(dtoExp);
             }
 
-            var whForPolicyRulesExp = warehouseId is int whExp && whExp > 0 ? whExp : 0;
-            var ctxPolExp = await ProductBalancePolicySaleHelper.LoadWarehousePolicyContextAsync(_context, whForPolicyRulesExp);
-            ProductBalancePolicySaleHelper.ApplyToReport(reportData, ctxPolExp.Rules, ctxPolExp.DefaultProfit);
+            await ApplyProductBalancePolicySaleColumnsAsync(reportData, warehouseId);
 
             // الترتيب (نفس منطق ProductBalances)
             bool isDesc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
