@@ -95,11 +95,13 @@
         }) ?? "#";
     };
 
+    var productBalancesEmptyRowColspan = 29;
     // مصدر ثابت لنافذة «اختيار الأعمدة» (نفس ترتيب الجدول) — احتياط عندما لا تُقرأ رؤوس thead من الـ DOM (تاب/iframe/ترتيب أحداث المودال)
     var pbColumnChooserMeta = new List<(string key, string title)>
     {
         ("code", "الكود"),
         ("name", "اسم الصنف"),
+        ("warehouse", "المخزن"),
         ("batch", "التشغيلة"),
         ("date", "التاريخ"),
         ("category", "الفئة"),
@@ -402,6 +404,12 @@
                                 <button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="name" data-sort-key="name" data-col-title="اسم الصنف" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
                             </div>
                         </th>
+                        <th style="min-width: 110px;" data-col="warehouse">
+                            <div class="d-flex align-items-center gap-1">
+                                <span>المخزن</span>
+                                <button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="warehouse" data-col-title="المخزن" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                            </div>
+                        </th>
                         <th style="min-width: 90px;" data-col="batch">التشغيلة</th>
                         <th style="min-width: 100px;" data-col="date">التاريخ</th>
                         <th style="min-width: 100px;" data-col="category">
@@ -468,7 +476,7 @@
                     @if (!reportData.Any())
                     {
                         <tr>
-                            <td colspan="28" class="text-center text-muted py-4">لا توجد بيانات.</td>
+                            <td colspan="@productBalancesEmptyRowColspan" class="text-center text-muted py-4">لا توجد بيانات.</td>
                         </tr>
                     }
                     else
@@ -495,6 +503,7 @@
                                     }
                                 </td>
                                 <td data-col="name">@item.ProdName</td>
+                                <td data-col="warehouse"><small class="text-muted">@(item.WarehouseDisplay ?? "—")</small></td>
                                 <td data-col="batch"><small class="text-muted">@(hasBatches ? ("تشغيلات: " + item.Batches!.Count) : (!string.IsNullOrEmpty(item.FirstBatchNo) || item.FirstBatchExpiry.HasValue ? (item.FirstBatchNo ?? "—") : "—"))</small></td>
                                 <td data-col="date" class="text-nowrap"><small class="text-muted">@(hasBatches ? "—" : (item.FirstBatchExpiry.HasValue ? item.FirstBatchExpiry.Value.ToString("d/M/yyyy") : "—"))</small></td>
                                 <td data-col="category"><small class="text-muted">@item.CategoryName</small></td>
@@ -536,6 +545,7 @@
                                         <td data-col="select" class="no-print"></td>
                                         <td data-col="code"></td>
                                         <td data-col="name" class="text-secondary" style="padding-right: 1.5rem;"><small>↳ @(batch.BatchNo ?? "-")</small></td>
+                                        <td data-col="warehouse"><small class="text-muted">@(item.WarehouseDisplay ?? "—")</small></td>
                                         <td data-col="batch"><small class="text-muted">@(batch.BatchNo ?? "—")</small></td>
                                         <td data-col="date"><small class="text-muted">@(batch.Expiry.HasValue ? batch.Expiry.Value.ToString("d/M/yyyy") : "—")</small></td>
                                         <td data-col="category"></td>
@@ -574,6 +584,7 @@
                             <td data-col="select" class="no-print"></td>
                             <td data-col="code" class="text-end"><strong>المجموع الإجمالي</strong></td>
                             <td data-col="name"></td>
+                            <td data-col="warehouse"></td>
                             <td data-col="batch"></td>
                             <td data-col="date"></td>
                             <td data-col="category"></td>

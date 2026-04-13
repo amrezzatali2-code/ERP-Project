@@ -271,7 +271,8 @@ namespace ERP.Services
         }
 
         /// <summary>
-        /// خصم البيع لعمود «سياسة N» في تقرير أرصدة الأصناف: مسار الفاتورة أولاً؛ وإذا منعت مجموعة الصنف فرع سياسة المخزن لعمود (مثلاً MaxDiscount مع ربح 0) يُكمَّل من قاعدة المخزن لذلك الرقم حتى تختلف أعمدة السياسات.
+        /// خصم البيع لعمود «سياسة N» في تقرير أرصدة الأصناف.
+        /// يعتمد نفس مسار الخصم العام لكن مع PolicyId العمود نفسه.
         /// </summary>
         public async Task<decimal> GetSaleDiscountForProductBalancePolicyColumnAsync(
             int prodId,
@@ -282,23 +283,8 @@ namespace ERP.Services
             if (warehouseId <= 0)
                 return RoundDisc(ClampPercent(purchaseDiscountBasis));
             var pid = policyColumnId < 1 ? 1 : (policyColumnId > 10 ? 10 : policyColumnId);
-            var basisClamped = ClampPercent(purchaseDiscountBasis);
             var core = await GetSaleDiscountCoreAsync(prodId, warehouseId, pid, purchaseDiscountBasis);
-            var coreR = RoundDisc(core.SaleDiscount);
-            var basisR = RoundDisc(basisClamped);
-
-            // تقرير أرصدة الأصناف: أعمدة السياسات 1..10 يجب أن تعكس قواعد المخزن لكل PolicyId.
-            // مسار الفاتورة في GetSaleDiscountCoreAsync يتجاهل policyColumnId عند تطابق مجموعة صنف
-            // (يستخدم PolicyId من المجموعة فقط)، وقد يترك خصم البيع = أساس الشراء إذا وُجد MaxDiscountToCustomer
-            // مع ربح 0 فيُمنع فرع سياسة المخزن لكل عمود — فيُعرض الخصم اليدوي في كل الأعمدة.
-            var useWarehouseOnlyPerColumn =
-                coreR == basisR
-                || (core.GroupPolicyMatched && !core.WarehouseFallbackStepUsed);
-
-            if (useWarehouseOnlyPerColumn)
-                return RoundDisc(await GetWarehouseOnlySaleDiscountAsync(warehouseId, pid, purchaseDiscountBasis));
-
-            return coreR;
+            return RoundDisc(core.SaleDiscount);
         }
 
         private static decimal RoundDisc(decimal v) =>
@@ -382,22 +368,14 @@ namespace ERP.Services
                     .AsNoTracking()
                     .Where(gp =>
                         gp.ProductGroupId == productGroupId.Value &&
+                        gp.PolicyId == warehouseFallbackPolicyId &&
                         gp.WarehouseId == warehouseId &&
                         gp.IsActive)
                     .Select(gp => new { gp.PolicyId, gp.ProfitPercent, gp.MaxDiscountToCustomer })
                     .FirstOrDefaultAsync();
-
-                if (groupPolicy == null)
-                {
-                    groupPolicy = await _context.ProductGroupPolicies
-                        .AsNoTracking()
-                        .Where(gp =>
-                            gp.ProductGroupId == productGroupId.Value &&
-                            gp.IsActive)
-                        .OrderByDescending(gp => gp.WarehouseId == warehouseId)
-                        .Select(gp => new { gp.PolicyId, gp.ProfitPercent, gp.MaxDiscountToCustomer })
-                        .FirstOrDefaultAsync();
-                }
+                // إصلاح خلط خصومات المخازن:
+                // ممنوع fallback لسياسة مجموعة من مخزن آخر عند حساب مخزن محدد.
+                // إذا لا يوجد Policy للمخزن الحالي نكمل مسار قواعد المخزن/الافتراضي فقط.
 
                 if (groupPolicy != null)
                 {
@@ -523,16 +501,7 @@ namespace ERP.Services
                     .Where(gp => gp.ProductGroupId == productGroupId.Value && gp.WarehouseId == warehouseId && gp.IsActive)
                     .Select(gp => new { gp.PolicyId, PolicyName = gp.Policy != null ? gp.Policy.Name : null })
                     .FirstOrDefaultAsync();
-
-                if (gpWithPolicy == null)
-                {
-                    gpWithPolicy = await _context.ProductGroupPolicies
-                        .AsNoTracking()
-                        .Where(gp => gp.ProductGroupId == productGroupId.Value && gp.IsActive)
-                        .OrderByDescending(gp => gp.WarehouseId == warehouseId)
-                        .Select(gp => new { gp.PolicyId, PolicyName = gp.Policy != null ? gp.Policy.Name : null })
-                        .FirstOrDefaultAsync();
-                }
+                // نفس قاعدة العزل: لا نقرأ Policy مجموعة من مخزن آخر.
 
                 if (gpWithPolicy != null)
                 {

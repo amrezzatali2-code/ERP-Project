@@ -16,14 +16,14 @@ internal static class ProductBalancesExportHelper
     internal static readonly string[] KnownColumnKeys =
         new[]
         {
-            "code", "name", "batch", "date", "category", "productGroup", "bonusGroup",
+            "code", "name", "warehouse", "batch", "date", "category", "productGroup", "bonusGroup",
             "company", "imported", "description", "qty", "discount", "manualDiscount",
             "effective", "sales", "priceRetail", "unitCost", "cost"
         }.Concat(Enumerable.Range(1, 10).Select(i => "policy" + i)).ToArray();
 
     private static readonly string[] DefaultColumnKeysWhenNoVisibleCols =
     {
-        "code", "name", "category", "productGroup", "bonusGroup", "qty", "discount",
+        "code", "name", "warehouse", "category", "productGroup", "bonusGroup", "qty", "discount",
         "manualDiscount", "effective", "sales", "priceRetail", "unitCost", "cost"
     };
 
@@ -98,6 +98,7 @@ internal static class ProductBalancesExportHelper
     {
         "code" => "الكود",
         "name" => "اسم الصنف",
+        "warehouse" => "المخزن",
         "batch" => "التشغيلة",
         "date" => "التاريخ",
         "category" => "الفئة",
@@ -143,6 +144,9 @@ internal static class ProductBalancesExportHelper
                     break;
                 case "name":
                     cell.Value = item.ProdName ?? "";
+                    break;
+                case "warehouse":
+                    cell.Value = item.WarehouseDisplay ?? "";
                     break;
                 case "batch":
                     cell.Value = hb ? "—" : (string.IsNullOrEmpty(item.FirstBatchNo) && !item.FirstBatchExpiry.HasValue ? "—" : (item.FirstBatchNo ?? "—"));
@@ -221,6 +225,9 @@ internal static class ProductBalancesExportHelper
                 case "name":
                     cell.Value = "  └ تشغيلة: " + (batch.BatchNo ?? "-") + (batch.Expiry.HasValue ? " | " + batch.Expiry.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : "");
                     break;
+                case "warehouse":
+                    cell.Value = item.WarehouseDisplay ?? "";
+                    break;
                 case "batch":
                     cell.Value = batch.BatchNo ?? "—";
                     break;
@@ -295,6 +302,7 @@ internal static class ProductBalancesExportHelper
         {
             "code" => CsvEscape(item.ProdCode),
             "name" => CsvEscape(item.ProdName ?? ""),
+            "warehouse" => CsvEscape(item.WarehouseDisplay ?? ""),
             "batch" => CsvEscape(hb ? "—" : (string.IsNullOrEmpty(item.FirstBatchNo) && !item.FirstBatchExpiry.HasValue ? "—" : (item.FirstBatchNo ?? "—"))),
             "date" => CsvEscape(hb ? "—" : (item.FirstBatchExpiry.HasValue ? item.FirstBatchExpiry.Value.ToString("d/M/yyyy", CultureInfo.InvariantCulture) : "—")),
             "category" => CsvEscape(item.CategoryName ?? ""),
@@ -327,6 +335,7 @@ internal static class ProductBalancesExportHelper
         {
             "code" => CsvEscape(""),
             "name" => CsvEscape("  └ تشغيلة: " + (batch.BatchNo ?? "-") + (batch.Expiry.HasValue ? " | " + batch.Expiry.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : "")),
+            "warehouse" => CsvEscape(item.WarehouseDisplay ?? ""),
             "batch" => CsvEscape(batch.BatchNo ?? "—"),
             "date" => CsvEscape(batch.Expiry.HasValue ? batch.Expiry.Value.ToString("d/M/yyyy", CultureInfo.InvariantCulture) : "—"),
             "category" or "productgroup" or "bonusgroup" or "company" or "imported" or "description" => CsvEscape(""),

@@ -201,44 +201,66 @@ namespace ERP.Controllers
         /// <summary>
         /// خصم البيع % لأعمدة السياسات 1..10 في تقرير أرصدة الأصناف.
         /// مع مخزن: <see cref="StockAnalysisService.GetSaleDiscountForProductBalancePolicyColumnAsync"/> (معاينة لكل سياسة من قواعد المخزن).
-        /// بدون مخزن (الكل): أساس الخصم − أقصى <see cref="WarehousePolicyRule.ProfitPercent"/> لكل PolicyId عبر المخازن، مع الاحتياط إلى <see cref="Policy.DefaultProfitPercent"/> عند غياب قاعدة.
+        /// بدون مخزن (الكل): نطبّق حساب كل صف على مخزن الصنف الافتراضي (مطابق لمسار المبيعات حسب الصنف/المخزن)؛
+        /// وإذا لا يوجد مخزن افتراضي للصنف نستخدم معاينة عامة: أساس الخصم − أقصى <see cref="WarehousePolicyRule.ProfitPercent"/> لكل PolicyId عبر المخازن.
         /// </summary>
         private async Task ApplyProductBalancePolicySaleColumnsAsync(List<ProductBalanceReportDto> reportData, int? warehouseId)
         {
             var wh = warehouseId ?? 0;
             Dictionary<int, decimal>? policyProfitsForNoWarehouse = null;
             if (wh <= 0)
+            {
+                // بدون مخزن: سلوك المعاينة الحالي (أقصى ربح بين المخازن لكل Policy).
                 policyProfitsForNoWarehouse = await BuildProductBalancePolicyProfitPercentsAsync(warehouseId: null);
+            }
+
+            // cache لتقليل عدد الاستدعاءات عند تكرار نفس (الصنف + المخزن + أساس الخصم + رقم السياسة)
+            var saleDiscCache = new Dictionary<(int ProdId, int WarehouseId, int BasisScaled, int PolicyId), decimal>();
 
             foreach (var dto in reportData)
             {
-                if (wh <= 0)
-                    FillProductBalancePolicyColumnsFromPolicyProfits(dto.EffectiveDiscountPct, dto.PolicySaleDiscountPct, policyProfitsForNoWarehouse!);
+                var rowWarehouseId = wh > 0 ? wh : (dto.ProductDefaultWarehouseId ?? 0);
+                if (rowWarehouseId > 0)
+                {
+                    await FillProductBalancePolicyColumnsFromServiceAsync(dto.ProdId, rowWarehouseId, dto.EffectiveDiscountPct, dto.PolicySaleDiscountPct, saleDiscCache);
+                }
                 else
                 {
-                    var basis = dto.EffectiveDiscountPct;
-                    for (var pol = 1; pol <= 10; pol++)
-                    {
-                        var d = await _stockAnalysisService.GetSaleDiscountForProductBalancePolicyColumnAsync(dto.ProdId, wh, pol, basis);
-                        dto.PolicySaleDiscountPct[pol - 1] = d;
-                    }
+                    FillProductBalancePolicyColumnsFromPolicyProfits(dto.EffectiveDiscountPct, dto.PolicySaleDiscountPct, policyProfitsForNoWarehouse!);
                 }
 
                 if (dto.Batches == null) continue;
                 foreach (var batch in dto.Batches)
                 {
-                    if (wh <= 0)
-                        FillProductBalancePolicyColumnsFromPolicyProfits(batch.EffectiveDiscountPct, batch.PolicySaleDiscountPct, policyProfitsForNoWarehouse!);
+                    if (rowWarehouseId > 0)
+                    {
+                        await FillProductBalancePolicyColumnsFromServiceAsync(dto.ProdId, rowWarehouseId, batch.EffectiveDiscountPct, batch.PolicySaleDiscountPct, saleDiscCache);
+                    }
                     else
                     {
-                        var bb = batch.EffectiveDiscountPct;
-                        for (var pol = 1; pol <= 10; pol++)
-                        {
-                            var d = await _stockAnalysisService.GetSaleDiscountForProductBalancePolicyColumnAsync(dto.ProdId, wh, pol, bb);
-                            batch.PolicySaleDiscountPct[pol - 1] = d;
-                        }
+                        FillProductBalancePolicyColumnsFromPolicyProfits(batch.EffectiveDiscountPct, batch.PolicySaleDiscountPct, policyProfitsForNoWarehouse!);
                     }
                 }
+            }
+        }
+
+        private async Task FillProductBalancePolicyColumnsFromServiceAsync(
+            int prodId,
+            int warehouseId,
+            decimal basis,
+            decimal?[] target,
+            Dictionary<(int ProdId, int WarehouseId, int BasisScaled, int PolicyId), decimal> cache)
+        {
+            var basisScaled = (int)Math.Round(basis * 100m, MidpointRounding.AwayFromZero);
+            for (var pol = 1; pol <= 10; pol++)
+            {
+                var key = (prodId, warehouseId, basisScaled, pol);
+                if (!cache.TryGetValue(key, out var disc))
+                {
+                    disc = await _stockAnalysisService.GetSaleDiscountForProductBalancePolicyColumnAsync(prodId, warehouseId, pol, basis);
+                    cache[key] = disc;
+                }
+                target[pol - 1] = disc;
             }
         }
 
@@ -889,6 +911,7 @@ namespace ERP.Controllers
                 .Select(p => new
                 {
                     p.ProdId,
+                    p.WarehouseId,
                     p.ProdName,
                     CategoryName = p.Category != null ? p.Category.CategoryName : "",
                     ProductGroupName = p.ProductGroup != null ? p.ProductGroup.Name : "",
@@ -896,7 +919,8 @@ namespace ERP.Controllers
                     p.PriceRetail,
                     p.Company,
                     p.Imported,
-                    p.Description
+                    p.Description,
+                    DefaultWarehouseName = p.Warehouse != null ? p.Warehouse.WarehouseName : null
                 })
                 .ToDictionaryAsync(p => p.ProdId);
 
@@ -1057,6 +1081,12 @@ namespace ERP.Controllers
 
             // 6.5) بناء reportData من البيانات المحملة
             var reportData = new List<ProductBalanceReportDto>();
+            var filterWarehouseName = warehouseId.HasValue && warehouseId.Value > 0
+                ? await _context.Warehouses.AsNoTracking()
+                    .Where(w => w.WarehouseId == warehouseId.Value)
+                    .Select(w => w.WarehouseName)
+                    .FirstOrDefaultAsync()
+                : null;
 
             foreach (var prodId in productIds)
             {
@@ -1097,6 +1127,10 @@ namespace ERP.Controllers
                     ProdId = prodId,
                     ProdCode = prodId.ToString(),
                     ProdName = product.ProdName ?? "",
+                    ProductDefaultWarehouseId = product.WarehouseId,
+                    WarehouseDisplay = warehouseId.HasValue && warehouseId.Value > 0
+                        ? (filterWarehouseName ?? "—")
+                        : (product.DefaultWarehouseName ?? "—"),
                     CategoryName = product.CategoryName ?? "",
                     ProductGroupName = product.ProductGroupName ?? "",
                     ProductBonusGroupName = product.ProductBonusGroupName ?? "",
@@ -1230,8 +1264,6 @@ namespace ERP.Controllers
                 reportData.Add(dto);
             }
 
-            await ApplyProductBalancePolicySaleColumnsAsync(reportData, warehouseId);
-
             ViewBag.ShowPolicyColumns = true;
 
             // =========================================================
@@ -1320,6 +1352,10 @@ namespace ERP.Controllers
                 ViewBag.PageSize = pageSize;
                 ViewBag.TotalPages = 1;
             }
+
+            // تحسين الأداء عند اختيار مخزن: حساب أعمدة السياسات لصفوف الصفحة المعروضة فقط
+            // دون تغيير معادلات الخصم نفسها.
+            await ApplyProductBalancePolicySaleColumnsAsync(reportData, warehouseId);
 
             ViewBag.ReportData = reportData;
             ViewBag.TotalQty = totalQty;
@@ -2681,6 +2717,7 @@ namespace ERP.Controllers
                 .Select(p => new
                 {
                     p.ProdId,
+                    p.WarehouseId,
                     p.ProdName,
                     CategoryName = p.Category != null ? p.Category.CategoryName : "",
                     ProductGroupName = p.ProductGroup != null ? p.ProductGroup.Name : "",
@@ -2688,7 +2725,8 @@ namespace ERP.Controllers
                     p.PriceRetail,
                     p.Company,
                     p.Imported,
-                    p.Description
+                    p.Description,
+                    DefaultWarehouseName = p.Warehouse != null ? p.Warehouse.WarehouseName : null
                 })
                 .ToDictionaryAsync(p => p.ProdId);
 
@@ -2814,6 +2852,12 @@ namespace ERP.Controllers
                 .ToDictionary(g => (g.Key.ProdId, g.Key.BatchNo, g.Key.ExpiryDate), g => g.Sum(x => x.Qty));
 
             var reportData = new List<ProductBalanceReportDto>();
+            var filterWarehouseNameExp = warehouseId.HasValue && warehouseId.Value > 0
+                ? await _context.Warehouses.AsNoTracking()
+                    .Where(w => w.WarehouseId == warehouseId.Value)
+                    .Select(w => w.WarehouseName)
+                    .FirstOrDefaultAsync()
+                : null;
 
             foreach (var prodId in productIds)
             {
@@ -2846,6 +2890,10 @@ namespace ERP.Controllers
                     ProdId = prodId,
                     ProdCode = prodId.ToString(),
                     ProdName = product.ProdName ?? "",
+                    ProductDefaultWarehouseId = product.WarehouseId,
+                    WarehouseDisplay = warehouseId.HasValue && warehouseId.Value > 0
+                        ? (filterWarehouseNameExp ?? "—")
+                        : (product.DefaultWarehouseName ?? "—"),
                     CategoryName = product.CategoryName ?? "",
                     ProductGroupName = product.ProductGroupName ?? "",
                     ProductBonusGroupName = product.ProductBonusGroupName ?? "",

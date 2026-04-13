@@ -8,6 +8,8 @@ namespace ERP.ViewModels
         public int ProdId { get; set; }
         public string ProdCode { get; set; } = "";
         public string ProdName { get; set; } = "";
+        public string WarehouseDisplay { get; set; } = "";
+        public int? ProductDefaultWarehouseId { get; set; }
         public string CategoryName { get; set; } = "";
         public string ProductGroupName { get; set; } = "";
         public string? Company { get; set; }
