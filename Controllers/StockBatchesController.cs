@@ -407,7 +407,7 @@ namespace ERP.Controllers
             // ------------------------------
             // البحث
             // searchMode: starts | contains | ends — يُطبَّق على حقول نصية (تشغيلة، ملاحظة، الكل)
-            // searchBy: all | id | warehouse | prod | batchno | expiry | qty | note
+            // searchBy: all | id | warehouse | prod | productname | batchno | expiry | qty | note
             // ------------------------------
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -415,6 +415,13 @@ namespace ERP.Controllers
                 var sb = (searchBy ?? "all").ToLowerInvariant();
                 var sm = (searchMode ?? "contains").ToLowerInvariant();
                 if (sm != "starts" && sm != "ends") sm = "contains";
+                var matchedProdIds = _db.Products
+                    .AsNoTracking()
+                    .Where(p => p.ProdName != null && (
+                        sm == "starts" ? p.ProdName.StartsWith(term) :
+                        sm == "ends" ? p.ProdName.EndsWith(term) :
+                        p.ProdName.Contains(term)))
+                    .Select(p => p.ProdId);
 
                 switch (sb)
                 {
@@ -427,16 +434,23 @@ namespace ERP.Controllers
                         break;
 
                     case "prod":
-                        q = q.Where(x => x.ProdId.ToString() == term);
+                        if (int.TryParse(term, out var prodTerm))
+                            q = q.Where(x => x.ProdId == prodTerm);
+                        else
+                            q = q.Where(x => matchedProdIds.Contains(x.ProdId));
+                        break;
+
+                    case "productname":
+                        q = q.Where(x => matchedProdIds.Contains(x.ProdId));
                         break;
 
                     case "batchno":
                         if (sm == "starts")
-                            q = q.Where(x => x.BatchNo != null && x.BatchNo.StartsWith(term));
+                            q = q.Where(x => (x.BatchNo != null && x.BatchNo.StartsWith(term)) || matchedProdIds.Contains(x.ProdId));
                         else if (sm == "ends")
-                            q = q.Where(x => x.BatchNo != null && x.BatchNo.EndsWith(term));
+                            q = q.Where(x => (x.BatchNo != null && x.BatchNo.EndsWith(term)) || matchedProdIds.Contains(x.ProdId));
                         else
-                            q = q.Where(x => x.BatchNo != null && x.BatchNo.Contains(term));
+                            q = q.Where(x => (x.BatchNo != null && x.BatchNo.Contains(term)) || matchedProdIds.Contains(x.ProdId));
                         break;
 
                     case "note":
@@ -475,6 +489,7 @@ namespace ERP.Controllers
                             x.Id.ToString() == term ||
                             x.WarehouseId.ToString() == term ||
                             x.ProdId.ToString() == term ||
+                            matchedProdIds.Contains(x.ProdId) ||
                             x.QtyOnHand.ToString() == term ||
                             x.QtyReserved.ToString() == term
                         );
@@ -585,7 +600,7 @@ namespace ERP.Controllers
             string? filterCol_qtyExpr = null,
             string? filterCol_reservedExpr = null)
         {
-            searchBy ??= "batchno";
+            searchBy ??= "all";
             sort ??= "id";
             dir ??= "asc";
             searchMode ??= "contains";
@@ -884,6 +899,7 @@ namespace ERP.Controllers
             {
                 using var wb = new XLWorkbook();
                 var ws = wb.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أرصدة التشغيلات"));
+                ws.RightToLeft = true;
 
                 ws.Cell(1, 1).Value = "كود السجل";
                 ws.Cell(1, 2).Value = "كود المخزن";

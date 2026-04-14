@@ -56,8 +56,9 @@ public static class CsvPdfExportHelper
             {
                 table.Header(header =>
                 {
-                    foreach (var cell in headers)
+                    for (var i = columnCount - 1; i >= 0; i--)
                     {
+                        var cell = i < headers.Length ? headers[i] : string.Empty;
                         header.Cell().Element(HeaderCellStyle).AlignCenter().Text(Sanitize(cell));
                     }
                 });
@@ -65,7 +66,7 @@ public static class CsvPdfExportHelper
 
             foreach (var row in rows)
             {
-                for (var i = 0; i < columnCount; i++)
+                for (var i = columnCount - 1; i >= 0; i--)
                 {
                     var value = i < row.Length ? row[i] : string.Empty;
                     table.Cell().Element(CellStyle).AlignRight().Text(Sanitize(value));

@@ -48,6 +48,13 @@
 
     // القوائم المنسدلة
     var warehouses = ViewBag.Warehouses as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var warehouseFilterValues = warehouses
+        .Where(w => !string.IsNullOrWhiteSpace(w.Value) && !string.IsNullOrWhiteSpace(w.Text))
+        .Select(w => w.Text!.Trim())
+        .Where(t => !string.IsNullOrWhiteSpace(t))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(t => t, StringComparer.CurrentCultureIgnoreCase)
+        .ToList();
 
     // دالة إنشاء رابط الترتيب
     Func<string, string, string> sortUrl = (col, direction) =>
@@ -130,10 +137,12 @@
     foreach (var c in pbColumnChooserMeta)
         pbChooserJsonList.Add(new { key = c.key, title = c.title });
     var pbColumnChooserJson = JsonSerializer.Serialize(pbChooserJsonList);
+    var warehouseFilterValuesJson = JsonSerializer.Serialize(warehouseFilterValues);
 }
 
 <div dir="rtl" class="container-fluid">
     <script type="application/json" id="erpPbColumnsMeta">@Html.Raw(pbColumnChooserJson)</script>
+    <script type="application/json" id="erpPbWarehouseFilterValues">@Html.Raw(warehouseFilterValuesJson)</script>
     @* توكن مكافحة التزوير لطلبات AJAX (حفظ الخصم اليدوي) *@
     <form id="__AntiForgeryFormProductBalances" method="post" style="display:none">@Html.AntiForgeryToken()</form>
     @* ===== شريط الفلاتر الموحد (هادئ للعين) ===== *@
@@ -289,7 +298,7 @@
                                         <option value="pdf">PDF</option>
                                     </select>
                                 </div>
-                                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" id="erpPbPrintPage" @(!hasReportData ? "disabled=\"disabled\"" : "") title="طباعة الصفحة الحالية (الجدول)">طباعة</button>
+                                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" id="erpPbPrintPage" @(!hasReportData ? "disabled=\"disabled\"" : "") title="طباعة كل النتائج حسب الفلاتر الحالية">طباعة</button>
                             </div>
                         </div>
                     </div>
@@ -297,8 +306,7 @@
             </div>
             @* —— صف 3: قائمة الصيدلي (يظهر دائماً؛ التفعيل بعد تجميع + مخزن) —— *@
             <div class="w-100 mt-2 pt-2 border-top border-light-subtle erp-pb-delegate-toolbar-wrap d-print-none" dir="rtl">
-                <div class="small text-muted mb-1">قائمة للصيدلي — تصدير أو طباعة مختصرة (صنف + سعر الجمهور + خصم بيع السياسة)</div>
-                <div class="d-flex flex-wrap align-items-end gap-2 erp-pb-delegate-toolbar" title="التصدير: كل الأصناف المطابقة للفلاتر. الطباعة: الصفوف الظاهرة في الجدول فقط.">
+                <div class="d-flex flex-wrap align-items-end gap-2 erp-pb-delegate-toolbar">
                     <button type="button" class="btn btn-erp btn-erp-success btn-erp-sm" id="erpPbExportListRun" @(!delegateListUiEnabled ? "disabled=\"disabled\"" : "") title="تصدير قائمة حسب الفلاتر (Excel أو PDF)">تصدير قائمة</button>
                     <div class="d-flex flex-column align-items-stretch flex-shrink-0">
                         <label class="form-label small mb-0 text-nowrap" for="erpPbDelegateListFormat">صيغة الملف</label>
@@ -317,7 +325,15 @@
                             }
                         </select>
                     </div>
-                    <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpPbPrintListOpen" @(!delegateListUiEnabled ? "disabled=\"disabled\"" : "") title="طباعة قائمة للصفوف الظاهرة — نفس السياسة أعلاه">طباعة قائمة</button>
+                    <div class="d-flex flex-column align-items-stretch flex-shrink-0">
+                        <label class="form-label small mb-0" for="erpPbDelegatePrintColsInline">أعمدة الطباعة</label>
+                        <select class="form-select form-select-sm form-select-arrow erp-filter-input" id="erpPbDelegatePrintColsInline" style="width:100px;min-width:100px;">
+                            <option value="1">1 عمود</option>
+                            <option value="2" selected>2 عمود</option>
+                            <option value="3">3 أعمدة</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpPbPrintListOpen" @(!delegateListUiEnabled ? "disabled=\"disabled\"" : "") title="طباعة كل أصناف المخزن حسب الفلاتر والسياسة المختارة">طباعة قائمة</button>
                 </div>
             </div>
         </form>
@@ -337,10 +353,18 @@
                 </div>
             </div>
             <div class="col-12 col-sm-6 col-md-4 col-lg">
+                <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #20c997 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(32,201,151,.25); overflow: hidden;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">إجمالي الكمية</div>
+                        <div class="h4 mb-0 fw-bold" id="productBalancesCardTotalQty">@totalQty.ToString("N0", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg">
                 <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #198754 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(25,135,84,.25); overflow: hidden;">
                     <div class="card-body py-3 px-3">
                         <div class="small text-muted mb-1">متوسط الخصم المرجح %</div>
-                        <div class="h4 mb-0 text-success fw-bold">@weightedAvgDiscount.ToString("N2", n2)</div>
+                        <div class="h4 mb-0 text-success fw-bold" id="productBalancesCardWeightedAvgDiscount">@weightedAvgDiscount.ToString("N2", n2)</div>
                     </div>
                 </div>
             </div>
@@ -348,7 +372,7 @@
                 <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #fd7e14 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(253,126,20,.25); overflow: hidden;">
                     <div class="card-body py-3 px-3">
                         <div class="small text-muted mb-1">إجمالي المبيعات</div>
-                        <div class="h4 mb-0 fw-bold">@totalSalesQty.ToString("N2", n2)</div>
+                        <div class="h4 mb-0 fw-bold" id="productBalancesCardTotalSales">@totalSalesQty.ToString("N2", n2)</div>
                     </div>
                 </div>
             </div>
@@ -356,7 +380,7 @@
                 <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #6f42c1 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(111,66,193,.25); overflow: hidden;">
                     <div class="card-body py-3 px-3">
                         <div class="small text-muted mb-1">متوسط سعر الجمهور</div>
-                        <div class="h4 mb-0 fw-bold">@averagePriceRetail.ToString("N2", n2)</div>
+                        <div class="h4 mb-0 fw-bold" id="productBalancesCardAvgPriceRetail">@averagePriceRetail.ToString("N2", n2)</div>
                     </div>
                 </div>
             </div>
@@ -364,7 +388,7 @@
                 <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #0dcaf0 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(13,202,240,.25); overflow: hidden;">
                     <div class="card-body py-3 px-3">
                         <div class="small text-muted mb-1">متوسط تكلفة العلبة</div>
-                        <div class="h4 mb-0 fw-bold">@averageUnitCost.ToString("N2", n2)</div>
+                        <div class="h4 mb-0 fw-bold" id="productBalancesCardAvgUnitCost">@averageUnitCost.ToString("N2", n2)</div>
                     </div>
                 </div>
             </div>
@@ -372,7 +396,7 @@
                 <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #dc3545 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(220,53,69,.25); overflow: hidden;">
                     <div class="card-body py-3 px-3">
                         <div class="small text-muted mb-1">إجمالي التكلفة</div>
-                        <div class="h4 mb-0 text-danger fw-bold">@totalCost.ToString("N2", n2)</div>
+                        <div class="h4 mb-0 text-danger fw-bold" id="productBalancesCardTotalCost">@totalCost.ToString("N2", n2)</div>
                     </div>
                 </div>
             </div>
@@ -579,7 +603,7 @@
                 </tbody>
                 @if (loadReport)
                 {
-                    <tfoot class="table-secondary fw-bold erp-list-summary-tfoot text-start" id="productBalancesFooter" data-total-qty="@totalQty" data-total-sales="@totalSalesQty.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-priceretail="@totalPriceRetail.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-unitcost="@totalUnitCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-cost="@totalCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)">
+                    <tfoot class="table-secondary fw-bold erp-list-summary-tfoot text-start" id="productBalancesFooter" data-total-qty="@totalQty" data-total-weightedavg="@weightedAvgDiscount.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-sales="@totalSalesQty.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-priceretail="@totalPriceRetail.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-unitcost="@totalUnitCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-cost="@totalCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)">
                         <tr>
                             <td data-col="select" class="no-print"></td>
                             <td data-col="code" class="text-end"><strong>المجموع الإجمالي</strong></td>
@@ -614,43 +638,45 @@
         </div>
     </div>
 
-    @* ===== شريط الترقيم تحت الجدول (حجم الصفحة + عرض من-إلى + تنقل) — محاذاة لليمين ===== *@
+    @* ===== فوتر الترقيم (بنمط قائمة العملاء) ===== *@
     @if (loadReport)
     {
         var ps = pageSize;
         var startRow = totalCount == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
         var endRow = (ps == 0 || totalCount == 0) ? totalCount : Math.Min(totalCount, page * ps);
-        <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-3 mb-2 pb-2 border-top border-light-subtle no-print" id="productBalancesPaginationBar" dir="rtl">
-            <small class="text-muted" id="productBalancesPaginationText">
-                عرض @startRow - @endRow من @totalCount
-            </small>
-            <form method="get" asp-action="ProductBalances" asp-controller="Reports" class="d-flex align-items-center gap-2">
-                <input type="hidden" name="loadReport" value="true" />
-                <input type="hidden" name="search" value="@search" />
-                <input type="hidden" name="searchMode" value="@searchMode" />
-                <input type="hidden" name="hasBonus" value="@(hasBonus == true ? "true" : "false")" />
-                <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
-                <input type="hidden" name="fromDate" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-dd") : "")" />
-                <input type="hidden" name="toDate" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-dd") : "")" />
-                <input type="hidden" name="purchaseInvoiceFrom" value="@(purchaseInvoiceFrom?.ToString() ?? "")" />
-                <input type="hidden" name="purchaseInvoiceTo" value="@(purchaseInvoiceTo?.ToString() ?? "")" />
-                <input type="hidden" name="pbQtyGtZero" value="@(pbQtyGtZeroChecked ? "true" : "false")" />
-                <input type="hidden" name="includeBatches" value="true" />
-                <input type="hidden" name="sortBy" value="@(sortBy ?? "name")" />
-                <input type="hidden" name="sortDir" value="@(sortDir ?? "asc")" />
-                <input type="hidden" name="page" value="1" />
-                <label class="form-label m-0 nowrap">حجم الصفحة</label>
-                <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="10" @(pageSize == 10 ? "selected" : null)>10</option>
-                    <option value="25" @(pageSize == 25 ? "selected" : null)>25</option>
-                    <option value="50" @(pageSize == 50 ? "selected" : null)>50</option>
-                    <option value="100" @(pageSize == 100 ? "selected" : null)>100</option>
-                    <option value="200" @(pageSize == 200 ? "selected" : null)>200</option>
-                    <option value="0" @(pageSize == 0 ? "selected" : null)>الكل</option>
-                </select>
-            </form>
-            <nav aria-label="pagination">
-                <ul class="pagination pagination-sm mb-0">
+        <div class="mt-3 mb-2 pb-2 border-top border-light-subtle no-print" id="productBalancesPaginationBar" dir="rtl">
+            <div class="d-flex flex-wrap align-items-center justify-content-center gap-3 mb-2">
+                <small class="text-muted" id="productBalancesPaginationText">
+                    عرض @startRow - @endRow من @totalCount
+                </small>
+                <form method="get" asp-action="ProductBalances" asp-controller="Reports" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="loadReport" value="true" />
+                    <input type="hidden" name="search" value="@search" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
+                    <input type="hidden" name="hasBonus" value="@(hasBonus == true ? "true" : "false")" />
+                    <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
+                    <input type="hidden" name="fromDate" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-dd") : "")" />
+                    <input type="hidden" name="toDate" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-dd") : "")" />
+                    <input type="hidden" name="purchaseInvoiceFrom" value="@(purchaseInvoiceFrom?.ToString() ?? "")" />
+                    <input type="hidden" name="purchaseInvoiceTo" value="@(purchaseInvoiceTo?.ToString() ?? "")" />
+                    <input type="hidden" name="pbQtyGtZero" value="@(pbQtyGtZeroChecked ? "true" : "false")" />
+                    <input type="hidden" name="includeBatches" value="true" />
+                    <input type="hidden" name="sortBy" value="@(sortBy ?? "name")" />
+                    <input type="hidden" name="sortDir" value="@(sortDir ?? "asc")" />
+                    <input type="hidden" name="page" value="1" />
+                    <label class="form-label m-0 nowrap">حجم الصفحة</label>
+                    <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="10" @(pageSize == 10 ? "selected" : null)>10</option>
+                        <option value="25" @(pageSize == 25 ? "selected" : null)>25</option>
+                        <option value="50" @(pageSize == 50 ? "selected" : null)>50</option>
+                        <option value="100" @(pageSize == 100 ? "selected" : null)>100</option>
+                        <option value="200" @(pageSize == 200 ? "selected" : null)>200</option>
+                        <option value="0" @(pageSize == 0 ? "selected" : null)>الكل</option>
+                    </select>
+                </form>
+            </div>
+            <nav aria-label="pagination" class="mt-2">
+                <ul class="pagination pagination-sm justify-content-center mb-0">
                     <li class="page-item @(page == 1 ? "disabled" : "")">
                         <a class="page-link" href="@pageUrl(1)">الأول</a>
                     </li>
@@ -716,6 +742,7 @@
                 <div class="mb-0">
                     <label class="form-label small mb-1">عدد الأعمدة في الصف</label>
                     <select class="form-select form-select-sm" id="pbDelegatePrintCols">
+                        <option value="1">1 عمود</option>
                         <option value="2" selected>2 (عرض أكبر)</option>
                         <option value="3">3</option>
                     </select>
@@ -1101,11 +1128,12 @@
             var searchInpPb = document.getElementById('erpPbSearchText');
             var searchModeSel = form ? form.querySelector('select[name="searchMode"]') : null;
             var btnSearchCancel = document.getElementById('erpPbSearchCancel');
-            if (btnSearchCancel && searchInpPb) {
+            if (btnSearchCancel && searchInpPb && form) {
                 btnSearchCancel.addEventListener('click', function () {
                     searchInpPb.value = '';
                     if (searchModeSel) searchModeSel.value = 'contains';
-                    searchInpPb.focus();
+                    if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                    else form.submit();
                 });
             }
 
@@ -1448,6 +1476,16 @@
             if (!panel || !listEl) return;
 
             const numericColumns = ['code', 'qty', 'discount', 'manualDiscount', 'sales', 'priceRetail', 'unitCost', 'cost', 'policy1', 'policy2', 'policy3', 'policy4', 'policy5', 'policy6', 'policy7', 'policy8', 'policy9', 'policy10'];
+            const warehouseFilterValuesFromServer = (() => {
+                try {
+                    const el = document.getElementById('erpPbWarehouseFilterValues');
+                    if (!el) return [];
+                    const parsed = JSON.parse(el.textContent || '[]');
+                    return Array.isArray(parsed)
+                        ? parsed.map(v => String(v || '').trim()).filter(Boolean)
+                        : [];
+                } catch (e) { return []; }
+            })();
             let currentCol = null;
             let currentSortKey = null;
             let currentFilterBtn = null;
@@ -1514,16 +1552,18 @@
 
             function updateFooterTotals() {
                 var rows = table.querySelectorAll('tbody tr[data-pb-row]');
-                var totalQty = 0, totalSales = 0, totalPriceRetail = 0, totalUnitCost = 0, totalCost = 0, visibleCount = 0;
+                var totalQty = 0, totalSales = 0, totalPriceRetail = 0, totalUnitCost = 0, totalCost = 0, discountSum = 0, visibleCount = 0;
                 rows.forEach(function (tr) {
                     if (tr.style.display === 'none') return;
                     visibleCount++;
                     var qty = parseInt(tr.getAttribute('data-qty') || '0', 10) || 0;
                     totalQty += qty;
+                    var discountTd = tr.querySelector('td[data-col="discount"]');
                     var salesTd = tr.querySelector('td[data-col="sales"]');
                     var priceTd = tr.querySelector('td[data-col="priceRetail"]');
                     var unitCostTd = tr.querySelector('td[data-col="unitCost"]');
                     var costTd = tr.querySelector('td[data-col="cost"]');
+                    discountSum += (parseCellNumber(discountTd) || 0);
                     totalSales += parseCellNumber(salesTd);
                     totalPriceRetail += parseCellNumber(priceTd);
                     totalUnitCost += parseCellNumber(unitCostTd);
@@ -1543,6 +1583,21 @@
                 if (paginationText) paginationText.textContent = 'عرض 1 - ' + visibleCount + ' من ' + visibleCount;
                 var cardCountAfter = document.getElementById('productBalancesCardCountAfterFilter');
                 if (cardCountAfter) cardCountAfter.textContent = visibleCount.toLocaleString('ar-EG');
+                var cardTotalQty = document.getElementById('productBalancesCardTotalQty');
+                if (cardTotalQty) cardTotalQty.textContent = totalQty.toLocaleString('ar-EG');
+                var cardWeightedAvg = document.getElementById('productBalancesCardWeightedAvgDiscount');
+                if (cardWeightedAvg) {
+                    var wAvg = visibleCount > 0 ? (discountSum / visibleCount) : 0;
+                    cardWeightedAvg.textContent = wAvg.toFixed(2);
+                }
+                var cardTotalSales = document.getElementById('productBalancesCardTotalSales');
+                if (cardTotalSales) cardTotalSales.textContent = totalSales.toFixed(2);
+                var cardAvgPriceRetail = document.getElementById('productBalancesCardAvgPriceRetail');
+                if (cardAvgPriceRetail) cardAvgPriceRetail.textContent = (visibleCount > 0 ? (totalPriceRetail / visibleCount) : 0).toFixed(2);
+                var cardAvgUnitCost = document.getElementById('productBalancesCardAvgUnitCost');
+                if (cardAvgUnitCost) cardAvgUnitCost.textContent = (visibleCount > 0 ? (totalUnitCost / visibleCount) : 0).toFixed(2);
+                var cardTotalCost = document.getElementById('productBalancesCardTotalCost');
+                if (cardTotalCost) cardTotalCost.textContent = totalCost.toFixed(2);
             }
 
             function restoreFooterTotals() {
@@ -1552,11 +1607,25 @@
                 var cardCountAfter = document.getElementById('productBalancesCardCountAfterFilter');
                 if (cardCountAfter) cardCountAfter.textContent = parseInt(totalCountAttr, 10).toLocaleString('ar-EG');
                 var totalQty = footer.getAttribute('data-total-qty') || '0';
+                var totalWeightedAvg = footer.getAttribute('data-total-weightedavg') || '0';
+                var cardTotalQty = document.getElementById('productBalancesCardTotalQty');
+                if (cardTotalQty) cardTotalQty.textContent = parseFloat(totalQty).toLocaleString('ar-EG');
+                var cardWeightedAvg = document.getElementById('productBalancesCardWeightedAvgDiscount');
+                if (cardWeightedAvg) cardWeightedAvg.textContent = parseFloat(totalWeightedAvg).toFixed(2);
                 var totalSales = footer.getAttribute('data-total-sales') || '0';
                 var totalPriceRetail = footer.getAttribute('data-total-priceretail') || '0';
                 var totalUnitCost = footer.getAttribute('data-total-unitcost') || '0';
                 var totalCost = footer.getAttribute('data-total-cost') || '0';
                 var totalCount = table.getAttribute('data-pb-total-count') || '0';
+                var totalCountNum = parseInt(totalCount, 10) || 0;
+                var cardTotalSales = document.getElementById('productBalancesCardTotalSales');
+                if (cardTotalSales) cardTotalSales.textContent = parseFloat(totalSales).toFixed(2);
+                var cardAvgPriceRetail = document.getElementById('productBalancesCardAvgPriceRetail');
+                if (cardAvgPriceRetail) cardAvgPriceRetail.textContent = (totalCountNum > 0 ? (parseFloat(totalPriceRetail) / totalCountNum) : 0).toFixed(2);
+                var cardAvgUnitCost = document.getElementById('productBalancesCardAvgUnitCost');
+                if (cardAvgUnitCost) cardAvgUnitCost.textContent = (totalCountNum > 0 ? (parseFloat(totalUnitCost) / totalCountNum) : 0).toFixed(2);
+                var cardTotalCost = document.getElementById('productBalancesCardTotalCost');
+                if (cardTotalCost) cardTotalCost.textContent = parseFloat(totalCost).toFixed(2);
                 var pageSize = @(pageSize);
                 var page = @(page);
                 var from = (page - 1) * pageSize + 1;
@@ -1626,7 +1695,9 @@
                     }, 50);
                 } else {
                     if (searchRow) searchRow.style.display = '';
-                    var values = getDistinctValues(currentCol);
+                    var values = currentCol === 'warehouse'
+                        ? warehouseFilterValuesFromServer
+                        : getDistinctValues(currentCol);
                     var allChecked = true;
                     var html = '<div class="form-check mb-1">' +
                         '<input type="checkbox" class="form-check-input" id="erpPbFilterSelectAll" ' + (allChecked ? 'checked' : '') + '>' +
@@ -1693,6 +1764,33 @@
                     var checkboxes = listEl.querySelectorAll('.erp-pb-filter-cb:checked');
                     selectedValues = new Set();
                     checkboxes.forEach(function (cb) { selectedValues.add(cb.dataset.value); });
+
+                    // فلتر "المخزن": عند اختيار مخزن واحد، طبّقه كفلتر التقرير الأساسي (server-side)
+                    // بدل الاعتماد على صفوف الصفحة الحالية فقط.
+                    if (currentCol === 'warehouse') {
+                        var selectedWarehouseNames = Array.from(selectedValues)
+                            .map(function (v) { return String(v || '').trim(); })
+                            .filter(function (v) { return !!v; });
+                        if (selectedWarehouseNames.length === 1) {
+                            var targetWarehouseName = selectedWarehouseNames[0];
+                            var warehouseSelectEl = document.getElementById('warehouseIdSelect');
+                            if (warehouseSelectEl) {
+                                var targetOpt = Array.from(warehouseSelectEl.options || []).find(function (opt) {
+                                    return String(opt.text || '').trim() === targetWarehouseName;
+                                });
+                                if (targetOpt && warehouseSelectEl.value !== targetOpt.value) {
+                                    warehouseSelectEl.value = targetOpt.value;
+                                    var form = document.getElementById('filtersForm');
+                                    if (form) {
+                                        if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                                        else form.submit();
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     rows.forEach(function (tr) {
                         var td = tr.querySelector('td[data-col="' + currentCol + '"]');
                         var v = (td ? td.textContent : '').trim();
@@ -1795,92 +1893,16 @@
             });
         })();
 
-        // طباعة الصفحة + طباعة قائمة صيدلية + تصدير قائمة (Excel/PDF) — نفس فلاتر الفورم
-        (function () {
-            var exportPbPath = @Html.Raw(JsonSerializer.Serialize(Url.Action("ExportProductBalances", "Reports")));
-            function buildExportUrl(format, extra) {
-                var form = document.getElementById('filtersForm');
-                if (!form || !exportPbPath) return '';
-                var u = new URL(exportPbPath, window.location.origin);
-                var fd = new FormData(form);
-                fd.forEach(function (v, k) {
-                    if (typeof v === 'string' && v !== '') u.searchParams.set(k, v);
+    </script>
+    <script src="~/js/product-balances-delegate-tools.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.ERP && typeof ERP.initProductBalancesDelegateTools === 'function') {
+                ERP.initProductBalancesDelegateTools({
+                    exportUrl: @Html.Raw(JsonSerializer.Serialize(Url.Action("ExportProductBalances", "Reports")))
                 });
-                if (format) u.searchParams.set('format', format);
-                if (extra) {
-                    Object.keys(extra).forEach(function (k) {
-                        if (extra[k] !== null && extra[k] !== undefined && extra[k] !== '')
-                            u.searchParams.set(k, extra[k]);
-                    });
-                }
-                return u.toString();
             }
-            document.getElementById('erpPbPrintPage')?.addEventListener('click', function () { window.print(); });
-            function escapePbHtml(s) {
-                if (!s) return '';
-                return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\"/g, '&quot;');
-            }
-            function runPbDelegatePrintWithCols(cols) {
-                var polSel = document.getElementById('erpPbDelegatePolicy');
-                var pol = polSel ? parseInt(polSel.value, 10) : 1;
-                if (isNaN(pol) || pol < 1 || pol > 10) pol = 1;
-                if (cols !== 3) cols = 2;
-                var dataCol = 'policy' + pol;
-                var rows = Array.from(document.querySelectorAll('#productBalancesTable tbody tr[data-pb-row]')).filter(function (tr) {
-                    return tr.style.display !== 'none';
-                });
-                var policyTh = document.querySelector('#productBalancesTable thead th[data-col="' + dataCol + '"]');
-                var policyDisplayName = (policyTh && policyTh.getAttribute('data-policy-display-name')) ? policyTh.getAttribute('data-policy-display-name').trim() : '';
-                if (!policyDisplayName && polSel && polSel.options[polSel.selectedIndex])
-                    policyDisplayName = (polSel.options[polSel.selectedIndex].text || '').trim();
-                if (!policyDisplayName) policyDisplayName = 'سياسة ' + pol;
-                var html = '<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"/><title>قائمة أصناف</title><style>body{font-family:Segoe UI,Tahoma,sans-serif;padding:12px;} .g{display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:10px;} .card{border:1px solid #6366f1;border-radius:10px;padding:8px;font-size:13px;} .nm{font-weight:600;} .muted{color:#64748b;font-size:12px;} .polname{font-weight:600;font-size:12px;margin-top:2px;}</style></head><body><h5 style="margin:0 0 10px 0;">قائمة أصناف — ' + escapePbHtml(policyDisplayName) + '</h5><div class="g">';
-                rows.forEach(function (tr) {
-                    var nameTd = tr.querySelector('td[data-col="name"]');
-                    var prTd = tr.querySelector('td[data-col="priceRetail"]');
-                    var dTd = tr.querySelector('td[data-col="' + dataCol + '"]');
-                    var nm = nameTd ? nameTd.textContent.trim() : '';
-                    var pr = prTd ? prTd.textContent.trim() : '';
-                    var dc = dTd ? dTd.textContent.trim() : '';
-                    html += '<div class="card"><div class="nm">' + escapePbHtml(nm) + '</div><div class="muted">سعر الجمهور: ' + escapePbHtml(pr) + '</div><div class="muted">خصم البيع</div><div class="polname">' + escapePbHtml(policyDisplayName) + '</div><div class="nm">' + escapePbHtml(dc) + '</div></div>';
-                });
-                html += '</div><script>window.onload=function(){window.print();}<\/script></body></html>';
-                var w = window.open('', '_blank');
-                if (w) { w.document.open(); w.document.write(html); w.document.close(); }
-                else { window.alert('تعذر فتح نافذة الطباعة (المنع المنبثقات؟).'); }
-            }
-            document.getElementById('erpPbPrintListOpen')?.addEventListener('click', function () {
-                var m = document.getElementById('pbDelegatePrintModal');
-                if (m && window.bootstrap && typeof bootstrap.Modal === 'function') {
-                    (bootstrap.Modal.getInstance(m) || new bootstrap.Modal(m)).show();
-                    return;
-                }
-                var use3 = window.confirm ? window.confirm('عدد أعمدة الصف في الطباعة: موافق = 3، إلغاء = 2') : false;
-                runPbDelegatePrintWithCols(use3 ? 3 : 2);
-            });
-            document.getElementById('pbDelegatePrintRun')?.addEventListener('click', function () {
-                var colSel = document.getElementById('pbDelegatePrintCols');
-                var cols = colSel ? parseInt(colSel.value, 10) : 2;
-                if (cols !== 3) cols = 2;
-                runPbDelegatePrintWithCols(cols);
-                var modalEl = document.getElementById('pbDelegatePrintModal');
-                if (modalEl && window.bootstrap && typeof bootstrap.Modal === 'function')
-                    bootstrap.Modal.getInstance(modalEl)?.hide();
-            });
-            function runDelegateExport(format) {
-                var polEl = document.getElementById('erpPbDelegatePolicy');
-                var pol = polEl ? parseInt(polEl.value, 10) : 1;
-                if (isNaN(pol) || pol < 1 || pol > 10) pol = 1;
-                var url = buildExportUrl(format, { exportKind: 'delegate', delegatePolicyId: String(pol) });
-                if (url) window.location.href = url;
-            }
-            document.getElementById('erpPbExportListRun')?.addEventListener('click', function () {
-                var fmtEl = document.getElementById('erpPbDelegateListFormat');
-                var fmt = fmtEl ? (fmtEl.value || 'excel') : 'excel';
-                if (fmt !== 'pdf') fmt = 'excel';
-                runDelegateExport(fmt);
-            });
-        })();
+        });
     </script>
     <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>

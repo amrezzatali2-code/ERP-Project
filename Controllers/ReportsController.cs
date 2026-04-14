@@ -1307,12 +1307,12 @@ namespace ERP.Controllers
             decimal totalPriceRetail = reportData.Sum(r => r.PriceRetail);
             decimal totalSalesQty = reportData.Sum(r => r.SalesQty);
             decimal totalUnitCost = reportData.Sum(r => r.UnitCost);
-            decimal totalCostSum = await ComputeBalanceSheetInventoryCostAsync(warehouseId);
+            decimal totalCostSum = reportData.Sum(r => r.TotalCost);
 
             int totalCount = reportData.Count; // إجمالي عدد الأصناف (قبل Pagination)
-            // متوسط الخصم المرجح (موزون بالكمية)، متوسط سعر الجمهور، متوسط تكلفة العلبة — للكروت
-            decimal weightedAvgDiscount = totalQty > 0
-                ? reportData.Sum(r => r.WeightedDiscount * r.CurrentQty) / totalQty
+            // متوسط الخصم المرجح % في الكارت = متوسط عمود الخصم للصفوف المعروضة (مطابق مقارنة إكسل/التصدير)
+            decimal weightedAvgDiscount = totalCount > 0
+                ? reportData.Average(r => r.WeightedDiscount)
                 : 0m;
             decimal averagePriceRetail = totalCount > 0 ? totalPriceRetail / totalCount : 0m;
             decimal averageUnitCost = totalCount > 0 ? totalUnitCost / totalCount : 0m;
@@ -3049,9 +3049,16 @@ namespace ERP.Controllers
 
             var exportKind = Request.Query["exportKind"].LastOrDefault();
             var delegatePolicyStr = Request.Query["delegatePolicyId"].LastOrDefault();
+            var delegateColsStr = Request.Query["delegateCols"].LastOrDefault();
             if (string.Equals(exportKind, "delegate", StringComparison.OrdinalIgnoreCase)
                 && int.TryParse(delegatePolicyStr, out var delPol) && delPol >= 1 && delPol <= 10)
             {
+                var delegateCols = 2;
+                if (!string.IsNullOrWhiteSpace(delegateColsStr) && int.TryParse(delegateColsStr, out var colsParsed))
+                    delegateCols = colsParsed;
+                if (delegateCols < 1) delegateCols = 1;
+                if (delegateCols > 3) delegateCols = 3;
+
                 var rowsDel = reportData
                     .Select(r => (
                         Name: r.ProdName ?? "",
@@ -3060,13 +3067,26 @@ namespace ERP.Controllers
                     .ToList();
                 var polNamesDel = await GetProductBalancePolicyNamesFromDbAsync();
                 var polName = polNamesDel.TryGetValue(delPol, out var pnDel) ? pnDel : ("سياسة " + delPol);
+                if (string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new
+                    {
+                        policyName = polName,
+                        rows = rowsDel.Select(x => new
+                        {
+                            name = x.Name,
+                            price = x.Price,
+                            discount = x.Disc
+                        })
+                    });
+                }
                 if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
                 {
-                    var bytesDel = ProductBalancesDelegateListExportHelper.BuildExcel(rowsDel, polName);
+                    var bytesDel = ProductBalancesDelegateListExportHelper.BuildExcel(rowsDel, delegateCols);
                     var fn = ExcelExportNaming.ArabicTimestampedFileName("قائمة أصناف صيدلية", ".xlsx");
                     return File(bytesDel, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fn);
                 }
-                var csvDel = ProductBalancesDelegateListExportHelper.BuildCsv(rowsDel, polName);
+                var csvDel = ProductBalancesDelegateListExportHelper.BuildCsv(rowsDel, delegateCols);
                 var csvNm = ExcelExportNaming.ArabicTimestampedFileName("قائمة أصناف صيدلية", ".csv");
                 return File(csvDel, "text/csv; charset=utf-8", csvNm);
             }
