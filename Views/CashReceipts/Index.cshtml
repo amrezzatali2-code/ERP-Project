@@ -240,6 +240,13 @@
                         </span>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><button type="button" id="btnBulkDelete" class="dropdown-item">حذف المحدد</button></li>
+                                <li><button type="button" id="btnDeleteAll" class="dropdown-item text-danger">حذف الجميع</button></li>
+                            </ul>
+                        </div>
                         <form method="get" asp-action="Export" asp-controller="CashReceipts" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
@@ -310,7 +317,7 @@
                     <th data-col="cashAccount">@filterableCol("cashAccount", "CashAccount", "حساب الصندوق/البنك")</th>
                     <th data-col="counterAccount">@filterableCol("counterAccount", "CounterAccount", "حساب الطرف")</th>
                     <th data-col="amount">@filterableCol("amount", "Amount", "المبلغ")</th>
-                    <th data-col="posted">@filterableCol("posted", "IsPosted", "مرحّل؟")</th>
+                    <th data-col="posted">@filterableCol("posted", "IsPosted", "حالة الترحيل")</th>
                     <th data-col="created">@filterableCol("created", "CreatedAt", "تاريخ الإنشاء")</th>
                     <th data-col="updated">@filterableCol("updated", "UpdatedAt", "آخر تعديل")</th>
                     <th data-col="description">@filterableCol("desc", "Description", "البيان")</th>
@@ -339,7 +346,7 @@
                             <td data-col="cashAccount">@r.CashAccount?.AccountName</td>
                             <td data-col="counterAccount">@r.CounterAccount?.AccountName</td>
                             <td data-col="amount">@r.Amount.ToString("N2")</td>
-                            <td data-col="posted">@(r.IsPosted ? "مرحّل" : "مسودة")</td>
+                            <td data-col="posted">@(r.IsPosted ? "مرحلة 1" : "غير مرحلة")</td>
                             <td data-col="created">@(r.CreatedAt == default ? "" : r.CreatedAt.ToString("yyyy-MM-dd HH:mm"))</td>
                             <td data-col="updated">@(r.UpdatedAt.HasValue ? r.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</td>
                             <td data-col="description">@descShort</td>
@@ -500,6 +507,13 @@
     </div>
 </div>
 
+<form id="formBulkDelete" asp-action="BulkDelete" asp-controller="CashReceipts" method="post" class="d-none">
+    @Html.AntiForgeryToken()
+</form>
+<form id="formDeleteAll" asp-action="DeleteAll" asp-controller="CashReceipts" method="post" class="d-none">
+    @Html.AntiForgeryToken()
+</form>
+
 @section Scripts {
 <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
 <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
@@ -564,8 +578,30 @@
 
     (function () {
         const selectAll = document.getElementById("selectAll");
+        const bulkBtn = document.getElementById("btnBulkDelete");
+        const deleteAllBtn = document.getElementById("btnDeleteAll");
+        const bulkForm = document.getElementById("formBulkDelete");
+        const deleteAllForm = document.getElementById("formDeleteAll");
+
         function getRowCheckboxes() { return Array.from(document.querySelectorAll(".row-select")); }
         selectAll?.addEventListener("change", function () { const checked = this.checked; getRowCheckboxes().forEach(cb => cb.checked = checked); });
+
+        function doBulkDelete() {
+            const checks = getRowCheckboxes().filter(cb => cb.checked);
+            if (checks.length === 0) { alert("من فضلك اختر على الأقل إذن واحد للحذف."); return; }
+            if (!confirm("هل أنت متأكد من حذف الإذون المحددة؟")) return;
+            bulkForm.querySelectorAll("input[type='hidden'][name='ids']").forEach(h => h.remove());
+            checks.forEach(cb => { const input = document.createElement("input"); input.type = "hidden"; input.name = "ids"; input.value = cb.value; bulkForm.appendChild(input); });
+            bulkForm.submit();
+        }
+
+        function doDeleteAll() {
+            if (!confirm("هل أنت متأكد من حذف جميع إذون الاستلام؟ يُنصح باستخدام هذا في بيئة تجريبية فقط.")) return;
+            deleteAllForm.submit();
+        }
+
+        if (bulkBtn) bulkBtn.addEventListener("click", doBulkDelete);
+        if (deleteAllBtn) deleteAllBtn.addEventListener("click", doDeleteAll);
     })();
 
     (function () {

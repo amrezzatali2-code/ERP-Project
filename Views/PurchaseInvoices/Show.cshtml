@@ -47,6 +47,49 @@
         .invoice-side-card .invoice-actions-bar hr { display: none !important; }
         .invoice-side-card .btn-erp { font-size: 0.85rem; padding: 0.35rem 0.6rem; border: 1px solid #64748b !important; }
         .invoice-side-card .btn-erp + .btn-erp { margin-top: 0.25rem; }
+        .si-print-dropdown-menu {
+            border-radius: 12px;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+            padding: 0.25rem 0;
+        }
+        .si-print-dropdown-header {
+            font-weight: 600;
+            color: #64748b;
+            background: #f8fafc;
+        }
+        .si-print-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+        }
+        .si-print-dropdown-item:hover,
+        .si-print-dropdown-item:focus {
+            background: #eef2ff;
+            color: #1e293b;
+        }
+        .si-print-opt-icon {
+            width: 1.15rem;
+            text-align: center;
+            font-size: 0.95rem;
+            opacity: 0.9;
+        }
+        .si-print-opt-text { flex: 1; }
+        .si-print-dropdown-btn.dropdown-toggle::after {
+            margin-inline-start: 0.5rem;
+        }
+        .si-settings-panel {
+            display: none;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 0.6rem;
+            background: #f8fafc;
+            margin-top: 0.25rem;
+        }
+        .si-settings-panel.show { display: block; }
         .invoice-actions-sticky {
             position: sticky;
             top: 58px;
@@ -225,11 +268,15 @@
             background: #ffffff !important;
         }
         .invoice-page .invoice-lines-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+            min-height: 14rem;
             border: 1px solid #6366f1 !important;
             border-radius: 12px !important;
             box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
-            background: #fff !important;
             overflow: hidden;
+            background: linear-gradient(165deg, #eef2ff 0%, #e0e7ff 42%, #dbeafe 78%, #cffafe 100%);
         }
 
         /* مسافات بين الكروت — مثل فاتورة المبيعات (0.85rem) */
@@ -426,17 +473,32 @@
             box-shadow: 0 0 0 0.2rem rgba(100,116,139,.2);
         }
 
-        /* هيدر جدول السطور — أرضية رمادي عادي ونص أسود (مثل طلب الشراء) */
-        .invoice-lines-container .erp-table-wrapper thead.invoice-lines-header th {
-            background-color: #e9ecef !important;
+        /* هيدر جدول السطور — مثل قائمة المبيعات (ثابت عند التمرير) */
+        .invoice-lines-container .erp-table-wrapper table thead.invoice-lines-header,
+        .invoice-lines-container .erp-table-wrapper table thead.invoice-lines-header tr,
+        .invoice-lines-container .erp-table-wrapper table thead.invoice-lines-header th {
+            position: sticky;
+            top: 0;
+            z-index: 12;
+            background-color: #fff !important;
             color: #212529 !important;
             font-weight: 600;
             padding: 0.5rem 0.55rem;
             border: 1px solid #dee2e6 !important;
+            box-shadow: 0 1px 0 0 #dee2e6;
+        }
+        .invoice-lines-container .erp-table-wrapper thead.invoice-lines-header th {
+            background-color: #fff !important;
+            color: #212529 !important;
         }
         .invoice-page .invoice-lines-container .erp-table-wrapper {
-            max-height: 420px;
+            flex: 1 1 auto;
+            min-height: 16rem;
+            max-height: 55vh !important;
+            overflow: auto;
             border: none;
+            border-radius: 0;
+            background: rgba(255, 255, 255, 0.42);
         }
 
         /* كارت الإجماليات — نفس درجة طلب الشراء: حجم البوكسات والكلام وغمقان الحدود والنص */
@@ -751,6 +813,34 @@
                             </button>
                         </div>
 
+                        <button type="button"
+                                id="btnInvoiceSettingsToggle"
+                                class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
+                            ⚙️ إعدادات الفاتورة
+                        </button>
+
+                        <div id="siInvoiceSettingsPanel" class="si-settings-panel">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="siShowClearAllChk">
+                                <label class="form-check-label" for="siShowClearAllChk">إظهار زر مسح كل الأصناف</label>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1" for="siMaxItemsInput">الحد الأقصى لعدد الأصناف</label>
+                                <input type="number" id="siMaxItemsInput" class="form-control form-control-sm text-center" min="1" step="1" value="35" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1" for="siSortModeSelect">نظام ترتيب السطور</label>
+                                <select id="siSortModeSelect" class="form-select form-select-sm">
+                                    <option value="location">بالموقع (A → Z)</option>
+                                    <option value="auto">تلقائي (حسب ترتيب النزول)</option>
+                                    <option value="alpha">أبجدي (حسب اسم الصنف)</option>
+                                </select>
+                            </div>
+                            <button type="button" id="btnSaveInvoiceSettingsInline" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
+                                حفظ الإعدادات
+                            </button>
+                        </div>
+
                         <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
                            data-tab-id="pi-show-tab"
                            data-tab-title="فاتورة المشتريات"
@@ -821,11 +911,22 @@
                             <a href="@Url.Action("ExportShowExcel", "PurchaseInvoices", new { id = Model.PIId })" target="_blank" rel="noopener" class="btn btn-erp btn-erp-success btn-erp-sm w-100 text-decoration-none">📥 تصدير Excel</a>
                         }
 
-                        <button type="button"
-                                id="btnPrintInvoice"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
-                            🖨️ طباعة الفاتورة
-                        </button>
+                        <div class="dropdown w-100 si-print-dropdown">
+                            <button type="button"
+                                    id="btnPrintInvoice"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100 dropdown-toggle si-print-dropdown-btn"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                    title="اختر نوع الطباعة">
+                                🖨️ طباعة الفاتورة
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end w-100 si-print-dropdown-menu" aria-labelledby="btnPrintInvoice">
+                                <li class="si-print-dropdown-header px-3 py-2 small text-muted border-bottom mb-0">اختر نوع الطباعة</li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-pi-print-mode="1"><span class="si-print-opt-icon" aria-hidden="true">📄</span><span class="si-print-opt-text">طباعة صفحة واحدة</span></a></li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-pi-print-mode="2"><span class="si-print-opt-icon" aria-hidden="true">📑</span><span class="si-print-opt-text">طباعة أصل وصورة</span></a></li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-pi-print-mode="3"><span class="si-print-opt-icon" aria-hidden="true">📚</span><span class="si-print-opt-text">طباعة أصل وصورتين</span></a></li>
+                            </ul>
+                        </div>
 
 
 
@@ -908,7 +1009,11 @@
                                                        type="text"
                                                        class="form-control form-control-sm product-dropdown-input"
                                                        placeholder="اكتب اسم المورد"
-                                                       autocomplete="off"
+                                                       autocomplete="new-password"
+                                                       autocorrect="off"
+                                                       autocapitalize="none"
+                                                       spellcheck="false"
+                                                       data-lpignore="true"
                                                        value="@ViewBag.SelectedCustomerName"
                                                        data-lock-posted="1" />
                                             </div>
@@ -1126,7 +1231,11 @@
                                                    type="text"
                                                    class="form-control form-control-sm pi-input pi-product-name-input product-dropdown-input"
                                                    placeholder="اختر صنف..."
-                                                   autocomplete="off"
+                                                   autocomplete="new-password"
+                                                   autocorrect="off"
+                                                   autocapitalize="none"
+                                                   spellcheck="false"
+                                                   data-lpignore="true"
                                                    data-lock-posted="1" />
                                         </div>
                                         <div id="productDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
@@ -1194,10 +1303,11 @@
                        ===================================================== *@
                     <div class="invoice-lines-container">
                             <div class="erp-table-wrapper mb-0">
-                                <table class="table table-sm table-striped table-hover mb-0 erp-table">
+                                <table id="PILinesTable" class="table table-sm table-striped table-hover mb-0 erp-table erp-table-sortable">
                                     <thead class="invoice-lines-header">
                                         <tr>
                                             <th class="text-center">#</th>
+                                            <th class="text-center">الموقع</th>
                                             <th>اسم الصنف</th>
                                             <th class="text-center">التشغيلة</th>
                                             <th class="text-center">الصلاحية</th>
@@ -1205,7 +1315,6 @@
                                             <th class="text-center">سعر الجمهور</th>
                                             <th class="text-center">خصم الشراء %</th>
                                             <th class="text-center">قيمة السطر</th>
-                                        <th class="text-center no-print">مسح</th>
                                         </tr>
                                     </thead>
 
@@ -1242,9 +1351,11 @@
                                                     var line = g.First();
                                                     decimal lineValue =
                                                     line.Qty * line.PriceRetail * (1m - (line.PurchaseDiscountPct / 100m));
+                                                    var locDisp = string.IsNullOrWhiteSpace(line.Product?.Location) ? "—" : line.Product!.Location!;
 
-                                                    <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
+                                                    <tr class="erp-list-selectable-row" data-line-no="@line.LineNo" data-prodid="@line.ProdId">
                                                         <td class="text-center">@line.LineNo</td>
+                                                        <td class="text-center text-muted small">@locDisp</td>
 
                                                         <td>
                                                             <strong>@g.Key.ProdName</strong>
@@ -1264,20 +1375,14 @@
                                                         <td class="text-center">@line.PurchaseDiscountPct.ToString("0.##")</td>
 
                                                         <td class="text-center">@lineValue.ToString("0.00")</td>
-
-                                                    <td class="text-center no-print">
-                                                            <button type="button"
-                                                                    class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                                        data-line-no="@line.LineNo" data-lock-posted="1">
-                                                                مسح
-                                                            </button>
-                                                     </td>
                                                  </tr>
                                                 }
                                                 else
                                                 {
-                                                    <tr class="table-light pi-group-row" data-prodid="@g.Key.ProdId">
+                                                    var grpLocDisp = string.IsNullOrWhiteSpace(g.First().Product?.Location) ? "—" : g.First().Product!.Location!;
+                                                    <tr class="table-light pi-group-row erp-list-selectable-row" data-prodid="@g.Key.ProdId">
                                                         <td class="text-center">—</td>
+                                                        <td class="text-center text-muted small">@grpLocDisp</td>
 
                                                         <td>
                                                             <strong>@g.Key.ProdName</strong>
@@ -1290,16 +1395,17 @@
                                                         <td class="text-center"></td>
                                                         <td class="text-center"></td>
                                                         <td class="text-center"></td>
-                                                        <td class="text-center"></td>
                                                     </tr>
 
                                                     foreach (var line in g.OrderBy(x => x.LineNo))
                                                     {
                                                         decimal lineValue =
                                                         line.Qty * line.PriceRetail * (1m - (line.PurchaseDiscountPct / 100m));
+                                                        var lineLocDisp = string.IsNullOrWhiteSpace(line.Product?.Location) ? "—" : line.Product!.Location!;
 
-                                                        <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
+                                                        <tr class="erp-list-selectable-row" data-line-no="@line.LineNo" data-prodid="@line.ProdId">
                                                             <td class="text-center">@line.LineNo</td>
+                                                            <td class="text-center text-muted small">@lineLocDisp</td>
                                                             <td class="text-muted small">↳</td>
                                                             <td class="text-center">@line.BatchNo</td>
                                                             <td class="text-center">
@@ -1309,13 +1415,6 @@
                                                             <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
                                                             <td class="text-center">@line.PurchaseDiscountPct.ToString("0.##")</td>
                                                             <td class="text-center">@lineValue.ToString("0.00")</td>
-                                                        <td class="text-center no-print">
-                                                                <button type="button"
-                                                                        class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                                        data-line-no="@line.LineNo">
-                                                                    مسح
-                                                                </button>
-                                                            </td>
                                                         </tr>
                                                     }
                                                 }
@@ -1434,43 +1533,59 @@
          ERP — منطقة طباعة فاتورة المشتريات (ثابت معتمد)
          ملاحظة: الـ site.css عندك بيطبع فقط .erp-print-area
     ========================================================= -->
-    <div id="piPrintArea" class="erp-print-area print-only erp-print-page-portrait">
+    <div id="piPrintWrapper" class="erp-print-area print-only">
+    <div id="piPrintArea" class="pi-print-copy">
 
-        <!-- ===== هيدر الطباعة (قابل للتخصيص لاحقاً: لوجو/بيانات شركة) ===== -->
-        <div class="mb-3">
-            <div class="d-flex justify-content-between align-items-start">
-                <div class="small text-muted" id="piPrintNow"></div>
+        <table class="pi-print-master-table table table-bordered table-sm mb-0 w-100">
+            <thead>
+                <tr>
+                    <td colspan="9" class="p-0 border-0 pi-print-thead-banner-cell">
+                        <div class="pi-print-header mb-2">
+                            <div class="pi-print-company-row d-flex justify-content-between align-items-center">
+                                <div class="pi-print-logo-placeholder">
+                                    @if (!string.IsNullOrWhiteSpace(ViewBag.PrintHeaderLogoUrl as string))
+                                    {
+                                        <img src="@((string)ViewBag.PrintHeaderLogoUrl)" alt="logo" style="max-width:80px; max-height:36px;" />
+                                    }
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <h2 class="pi-print-company-name mb-0 fw-bold">@((string?)ViewBag.PrintHeaderCompanyName ?? "شركة الهدى")</h2>
+                                    <span class="pi-print-doc-title">ERP — فاتورة مشتريات</span>
+                                </div>
+                            </div>
+                            <hr class="pi-print-company-underline my-1" />
+                            <div class="pi-print-details-grid small w-100" role="presentation">
+                                <div>اسم المورد: <strong id="piPrintSupplier"></strong></div>
+                                <div>الكاتب: <strong id="piPrintAuthor"></strong></div>
+                                <div>المخزن: <strong id="piPrintWarehouse"></strong></div>
+                                <div>التاريخ: <strong id="piPrintInvoiceDate"></strong></div>
+                                <div>الهاتف: <strong id="piPrintCustomerPhone"></strong></div>
+                                <div>رقم الفاتورة: <strong id="piPrintInvoiceNo"></strong></div>
+                                <div class="pi-print-details-cell-span2" aria-hidden="true"></div>
+                                <div class="pi-print-details-span-row">العنوان: <strong id="piPrintCustomerAddress"></strong></div>
+                                <div class="pi-print-details-span-row text-muted small" id="piPrintNow"></div>
+                            </div>
+                        </div>
+                        <hr class="my-1 pi-print-hr-after-banner" />
+                    </td>
+                </tr>
+                <tr class="pi-print-column-head-row table-light">
+                    <th class="text-center">#</th>
+                    <th class="text-center">الموقع</th>
+                    <th>اسم الصنف</th>
+                    <th class="text-center">التشغيلة</th>
+                    <th class="text-center">الصلاحية</th>
+                    <th class="text-center">الكمية</th>
+                    <th class="text-center">سعر الجمهور</th>
+                    <th class="text-center">خصم البيع %</th>
+                    <th class="text-center">قيمة السطر</th>
+                </tr>
+            </thead>
+            <tbody id="piPrintMasterTbody" class="pi-print-master-tbody"></tbody>
+        </table>
+        <div id="piPrintTotalsWrap" class="pi-print-totals-block mt-2"></div>
 
-                <div class="text-center">
-                    @* <div class="fw-bold">فاتورة مشتريات</div> *@
-                    <div class="small text-muted" id="piPrintTitle"></div>
-                </div>
-
-                <div class="text-end">
-                    <div class="fw-bold">شركة الهدى</div>
-                    <div class="small text-muted">العنوان / الهاتف</div>
-                </div>
-            </div>
-
-            <hr class="my-2" />
-
-            <div class="row g-2 small">
-                <div class="col-6">رقم الفاتورة: <strong id="piPrintInvoiceNo"></strong></div>
-                <div class="col-6 text-end">التاريخ: <strong id="piPrintInvoiceDate"></strong></div>
-
-                <div class="col-6">المورد: <strong id="piPrintSupplier"></strong></div>
-                <div class="col-6 text-end">المخزن: <strong id="piPrintWarehouse"></strong></div>
-            </div>
-        </div>
-
-        <!-- ===== السطور ===== -->
-        <div id="piPrintLinesWrap"></div>
-
-        @* <hr class="my-3" /> *@
-
-        <!-- ===== الإجماليات ===== -->
-        <div id="piPrintTotalsWrap"></div>
-
+    </div>
     </div>
 </div>
 
@@ -1512,6 +1627,88 @@
                 }, 250);
             }, ms);
         }
+
+        // =========================================================
+        // (0.5) إعدادات واجهة الفاتورة — مثل فاتورة المبيعات
+        // =========================================================
+        const SI_UI_SETTINGS_KEY = 'erp.purchaseinvoice.ui.settings.v1';
+        function readSiUiSettings() {
+            try {
+                const raw = localStorage.getItem(SI_UI_SETTINGS_KEY);
+                if (!raw) return { showClearAll: true, maxItems: 35, sortMode: 'location' };
+                const parsed = JSON.parse(raw);
+                const sortModeRaw = (parsed.sortMode || '').toString().toLowerCase();
+                const sortMode = (sortModeRaw === 'alpha' || sortModeRaw === 'location' || sortModeRaw === 'auto')
+                    ? sortModeRaw
+                    : 'location';
+                return {
+                    showClearAll: parsed.showClearAll !== false,
+                    maxItems: (Number(parsed.maxItems) > 0 ? Number(parsed.maxItems) : 35),
+                    sortMode: sortMode
+                };
+            } catch {
+                return { showClearAll: true, maxItems: 35, sortMode: 'location' };
+            }
+        }
+        function writeSiUiSettings(s) {
+            const maxItems = (Number(s.maxItems) > 0 ? Number(s.maxItems) : 35);
+            const sortModeRaw = (s.sortMode || '').toString().toLowerCase();
+            const sortMode = (sortModeRaw === 'alpha' || sortModeRaw === 'location' || sortModeRaw === 'auto')
+                ? sortModeRaw
+                : 'location';
+            localStorage.setItem(SI_UI_SETTINGS_KEY, JSON.stringify({
+                showClearAll: !!s.showClearAll,
+                maxItems: maxItems,
+                sortMode: sortMode
+            }));
+        }
+        function getInvoiceMaxItemsFromSettings() {
+            return readSiUiSettings().maxItems || 35;
+        }
+        function getInvoiceSortModeFromSettings() {
+            return readSiUiSettings().sortMode || 'location';
+        }
+        function applySiUiSettings() {
+            const s = readSiUiSettings();
+            const clearBtn = document.getElementById('btnClearInvoiceLines');
+            const chk = document.getElementById('siShowClearAllChk');
+            const maxItemsInput = document.getElementById('siMaxItemsInput');
+            const sortModeSelect = document.getElementById('siSortModeSelect');
+            if (chk) chk.checked = s.showClearAll;
+            if (maxItemsInput) maxItemsInput.value = String(s.maxItems || 35);
+            if (sortModeSelect) sortModeSelect.value = (s.sortMode === 'alpha' ? 'alpha' : (s.sortMode === 'auto' ? 'auto' : 'location'));
+            if (clearBtn) clearBtn.classList.toggle('d-none', !s.showClearAll);
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            const toggleBtn = document.getElementById('btnInvoiceSettingsToggle');
+            const panel = document.getElementById('siInvoiceSettingsPanel');
+            const saveBtn = document.getElementById('btnSaveInvoiceSettingsInline');
+            const chk = document.getElementById('siShowClearAllChk');
+            const maxItemsInput = document.getElementById('siMaxItemsInput');
+            const sortModeSelect = document.getElementById('siSortModeSelect');
+            if (toggleBtn && panel) {
+                toggleBtn.addEventListener('click', function () {
+                    panel.classList.toggle('show');
+                });
+            }
+            if (saveBtn && chk) {
+                saveBtn.addEventListener('click', function () {
+                    const maxItems = maxItemsInput ? parseInt(maxItemsInput.value || '35', 10) : 35;
+                    const sortMode = sortModeSelect ? sortModeSelect.value : 'location';
+                    writeSiUiSettings({
+                        showClearAll: chk.checked,
+                        maxItems: (isNaN(maxItems) ? 35 : maxItems),
+                        sortMode: sortMode
+                    });
+                    applySiUiSettings();
+                    if (window.__piLinesCache && typeof window.renderGroupedLines === 'function') {
+                        window.renderGroupedLines(window.__piLinesCache);
+                    }
+                    showToast('تم حفظ إعدادات الفاتورة.', 'success', 2000);
+                });
+            }
+            applySiUiSettings();
+        });
 
         // =========================================================
         // (A) أوتوكومبليت المورد (اسم ⇐⇒ كود + بيانات)
@@ -2124,7 +2321,7 @@
                 const productDropdownList = document.getElementById('productDropdownList');
                 const productDropdownArrow = document.getElementById('productDropdownArrow');
 
-                const PRODUCT_LIST_MAX = 10;
+                const PRODUCT_LIST_MAX_DEFAULT = 10;
                 var productDropdownHighlightedIndex = -1;
                 var productDropdownSelectableItems = [];
                 var productDropdownSelectableOptions = [];
@@ -2133,13 +2330,13 @@
                 function getFilteredProductOptions(search, max) {
                     if (!prodDataList || !prodDataList.options) return [];
                     var q = normalizeText(search);
-                    if (!q) return Array.from(prodDataList.options || []).slice(0, (max || PRODUCT_LIST_MAX));
+                    if (!q) return Array.from(prodDataList.options || []).slice(0, (max || getInvoiceMaxItemsFromSettings() || PRODUCT_LIST_MAX_DEFAULT));
 
                     if (q.indexOf(' ') !== -1) q = q.split(/\s+/)[0] || q;
 
                     var opts = prodDataList.options;
                     var out = [];
-                    for (var i = 0; i < opts.length && out.length < (max || PRODUCT_LIST_MAX); i++) {
+                    for (var i = 0; i < opts.length && out.length < (max || getInvoiceMaxItemsFromSettings() || PRODUCT_LIST_MAX_DEFAULT); i++) {
                         var opt = opts[i];
                         var name = normalizeText(opt.value || '');
                         var code = (opt.getAttribute('data-code') || opt.getAttribute('data-id') || '').toString().trim();
@@ -2175,7 +2372,8 @@
                     var searchTerm = (prodNameInput.value || '').trim();
                     if (searchTerm.indexOf(' ') !== -1) searchTerm = searchTerm.split(/\s+/)[0] || searchTerm;
 
-                    var list = getFilteredProductOptions(searchTerm, PRODUCT_LIST_MAX);
+                    var uiMax = getInvoiceMaxItemsFromSettings() || PRODUCT_LIST_MAX_DEFAULT;
+                    var list = getFilteredProductOptions(searchTerm, uiMax);
                     productDropdownList.innerHTML = '';
                     productDropdownSelectableItems = [];
                     productDropdownSelectableOptions = [];
@@ -2191,7 +2389,7 @@
                     if (list.length === 0) {
                         var empty = document.createElement('div');
                         empty.className = 'product-dropdown-item text-muted py-2 px-3 small';
-                        empty.textContent = prodNameInput.value ? 'لا توجد نتائج' : 'اكتب للبحث ثم انزل بالسهم ▼ واختر (10 كحد أقصى)';
+                        empty.textContent = prodNameInput.value ? 'لا توجد نتائج' : ('اكتب للبحث ثم انزل بالسهم ▼ واختر (' + uiMax + ' كحد أقصى)');
                         productDropdownList.appendChild(empty);
                         productDropdownHighlightedIndex = -1;
                     } else {
@@ -2525,14 +2723,38 @@
                 map.get(key).lines.push(l);
             });
 
-            // ترتيب المجموعات بالاسم
-            const groups = Array.from(map.values())
-                .sort((a, b) => (a.prodName || '').localeCompare(b.prodName || '', 'ar'));
+            // ترتيب المجموعات حسب الإعدادات (مثل فاتورة المبيعات)
+            const sortMode = getInvoiceSortModeFromSettings();
+            const minLineNo = (group) => {
+                const arr = Array.isArray(group?.lines) ? group.lines : [];
+                if (!arr.length) return Number.MAX_SAFE_INTEGER;
+                return arr.reduce((min, x) => {
+                    const v = Number(x?.lineNo || 0);
+                    if (!Number.isFinite(v) || v <= 0) return min;
+                    return Math.min(min, v);
+                }, Number.MAX_SAFE_INTEGER);
+            };
+            const groups = Array.from(map.values());
+            if (sortMode === 'auto') {
+                groups.sort((a, b) => minLineNo(a) - minLineNo(b));
+            } else {
+                groups.sort((a, b) => (a.prodName || '').localeCompare(b.prodName || '', 'ar'));
+            }
 
             // ===============================
             // 2) رسم كل مجموعة حسب عدد التشغيلات
             // ===============================
             groups.forEach(g => {
+                const getLocationText = (lineObj) => {
+                    const raw = (lineObj && (
+                        lineObj.location ??
+                        lineObj.prodLocation ??
+                        lineObj.productLocation ??
+                        lineObj.locationName
+                    )) || '';
+                    const txt = String(raw).trim();
+                    return txt || '—';
+                };
 
                 // ترتيب تشغيلات الصنف حسب lineNo
                 const sortedLines = (g.lines || [])
@@ -2565,13 +2787,16 @@
                     const lineValue = (line.lineValue != null)
                         ? Number(line.lineValue)
                         : (qty * priceRetail * (1 - (discPct / 100))); // متغير: قيمة السطر
+                    const locationText = getLocationText(line); // متغير: موقع الصنف
 
                     const tr = document.createElement('tr');
+                    tr.className = 'erp-list-selectable-row';
                     tr.setAttribute('data-line-no', lineNo);
                     tr.setAttribute('data-prodid', g.prodId);
 
                     tr.innerHTML = `
                         <td class="text-center">${lineNo}</td>
+                        <td class="text-center text-muted small">${escapeHtml(locationText)}</td>
 
                         <td>
                             <strong>${escapeHtml(g.prodName)}</strong>
@@ -2585,14 +2810,6 @@
                         <td class="text-center">${fmt2(discPct)}</td>
 
                         <td class="text-center">${fmt2(lineValue)}</td>
-
-                        <td class="text-center">
-                            <button type="button"
-                                    class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                    data-line-no="${lineNo}">
-                                مسح
-                            </button>
-                        </td>
                     `;
 
                     tbody.appendChild(tr);
@@ -2605,11 +2822,13 @@
 
                 // (أ) سطر عنوان الصنف فقط (بدون بيانات وبدون زر مسح)
                 const grpRow = document.createElement('tr');
-                grpRow.className = 'table-light pi-group-row';
+                grpRow.className = 'table-light pi-group-row erp-list-selectable-row';
                 grpRow.setAttribute('data-prodid', g.prodId);
+                const groupLocationText = getLocationText(sortedLines[0]); // متغير: موقع الصنف
 
                 grpRow.innerHTML = `
                     <td class="text-center">—</td>
+                    <td class="text-center text-muted small">${escapeHtml(groupLocationText)}</td>
 
                     <td>
                         <strong>${escapeHtml(g.prodName)}</strong>
@@ -2617,7 +2836,6 @@
                     </td>
 
                     <td class="text-center text-muted small">تشغيلات: ${sortedLines.length}</td>
-                    <td class="text-center"></td>
                     <td class="text-center"></td>
                     <td class="text-center"></td>
                     <td class="text-center"></td>
@@ -2647,13 +2865,16 @@
                     const lineValue = (line.lineValue != null)
                         ? Number(line.lineValue)
                         : (qty * priceRetail * (1 - (discPct / 100))); // متغير: قيمة السطر
+                    const locationText = getLocationText(line); // متغير: موقع الصنف
 
                     const tr = document.createElement('tr');
+                    tr.className = 'erp-list-selectable-row';
                     tr.setAttribute('data-line-no', lineNo);
                     tr.setAttribute('data-prodid', g.prodId);
 
                     tr.innerHTML = `
                         <td class="text-center">${lineNo}</td>
+                        <td class="text-center text-muted small">${escapeHtml(locationText)}</td>
 
                         <td class="text-muted small">↳</td>
 
@@ -2664,14 +2885,6 @@
                         <td class="text-center">${fmt2(discPct)}</td>
 
                         <td class="text-center">${fmt2(lineValue)}</td>
-
-                        <td class="text-center">
-                            <button type="button"
-                                    class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                    data-line-no="${lineNo}">
-                                مسح
-                            </button>
-                        </td>
                     `;
 
                     tbody.appendChild(tr);
@@ -4695,199 +4908,181 @@ showToast(data.message || 'تم حذف السطر.', 'success');
 
 
 
-            // =========================================================
-// ERP — زر طباعة الفاتورة (Purchase Invoice) [ثابت معتمد]
-// - ممنوع الطباعة إلا لو الفاتورة مُرحّلة (مغلقة)
-// - نقرأ InvoiceId وقت الضغط
-// - نطبع فقط .erp-print-area (حسب site.css)
-// - نجهز (الهيدر + السطور + الإجماليات) قبل الطباعة
+// =========================================================
+// ERP — زر طباعة فاتورة المشتريات (قائمة منسدلة: صفحة واحدة / أصل وصورة / أصل وصورتين)
 // =========================================================
 document.addEventListener("DOMContentLoaded", function () {
 
-    const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر طباعة الفاتورة
-
+    const btnPrint = document.getElementById("btnPrintInvoice");
     if (!btnPrint) return;
-
-    // ✅ ربط مرة واحدة
     if (btnPrint.dataset.boundPrint) return;
     btnPrint.dataset.boundPrint = "1";
 
-    // ✅ عند فتح الصفحة: لو الفاتورة مش مُرحّلة نقفل زر الطباعة
     if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
         btnPrint.disabled = true;
     }
 
-    // متغير: منع فتح نافذة الطباعة مرتين
     let printing = false;
+    let printWrapperParent = null;
+    let printWrapperNext = null;
 
-    // =========================================================
-    // دالة: تجهيز منطقة الطباعة من القيم الظاهرة في الشاشة
-    // =========================================================
     function preparePurchaseInvoicePrint() {
-
-        // متغير: منطقة الطباعة
         const printArea = document.getElementById("piPrintArea");
         if (!printArea) return false;
 
-        // =========================
-        // (1) هيدر الطباعة
-        // =========================
-
-        // متغير: رقم الفاتورة
         const invoiceId = (document.getElementById("InvoiceId")?.value || "").trim();
-
-        // متغير: تاريخ الفاتورة (لو عندك input اسمه PIDate)
-        const invoiceDate =
-            (document.getElementById("PIDate")?.value || "").trim() ||
-            "";
-
-        // متغير: اسم المورد من الـ Select (CustomerId)
-        let supplierName = "";
-        const customerSel = document.getElementById("CustomerId");
-        if (customerSel && customerSel.options && customerSel.selectedIndex >= 0) {
-            supplierName = (customerSel.options[customerSel.selectedIndex].text || "").trim();
-        }
-
-        // متغير: اسم المخزن من الـ Select (WarehouseId)
+        const invoiceDate = (document.getElementById("InvoiceDateDisplay")?.value || document.getElementById("PIDate")?.value || "").trim();
+        const supplierName = (document.getElementById("CustomerNameInput")?.value || "").trim();
         let warehouseName = "";
         const whSel = document.getElementById("WarehouseId");
         if (whSel && whSel.options && whSel.selectedIndex >= 0) {
             warehouseName = (whSel.options[whSel.selectedIndex].text || "").trim();
         }
 
-        // تعبئة عناصر الهيدر
-        document.getElementById("piPrintNow").textContent = new Date().toLocaleString();
-        document.getElementById("piPrintTitle").textContent = `ERP — فاتورة مشتريات رقم ${invoiceId || ""}`;
-        document.getElementById("piPrintInvoiceNo").textContent = invoiceId || "";
-        document.getElementById("piPrintInvoiceDate").textContent = invoiceDate || "";
-        document.getElementById("piPrintSupplier").textContent = supplierName || "";
-        document.getElementById("piPrintWarehouse").textContent = warehouseName || "";
+        const el = (id) => document.getElementById(id);
+        if (el("piPrintNow")) el("piPrintNow").textContent = new Date().toLocaleString();
+        if (el("piPrintInvoiceNo")) el("piPrintInvoiceNo").textContent = invoiceId || "";
+        if (el("piPrintInvoiceDate")) el("piPrintInvoiceDate").textContent = invoiceDate || "";
+        if (el("piPrintSupplier")) el("piPrintSupplier").textContent = supplierName || "";
+        if (el("piPrintWarehouse")) el("piPrintWarehouse").textContent = warehouseName || "";
+        const supplierPhone = (el("CustomerPhone") && el("CustomerPhone").value) ? el("CustomerPhone").value.trim() : "";
+        if (el("piPrintCustomerPhone")) el("piPrintCustomerPhone").textContent = supplierPhone || "—";
+        const supplierAddress = (el("CustomerAddress") && el("CustomerAddress").value) ? el("CustomerAddress").value.trim() : "";
+        if (el("piPrintCustomerAddress")) el("piPrintCustomerAddress").textContent = supplierAddress || "—";
+        const createdBy = (el("InvoiceCreatedByDisplay") && el("InvoiceCreatedByDisplay").value) ? el("InvoiceCreatedByDisplay").value.trim() : "";
+        if (el("piPrintAuthor")) el("piPrintAuthor").textContent = createdBy || "—";
 
-        // =========================
-        // (2) السطور: ننسخ جدول السطور الموجود
-        // =========================
-        const linesWrap = document.getElementById("piPrintLinesWrap");
-        if (!linesWrap) return false;
-
-        linesWrap.innerHTML = "";
-
-        const tbody = document.getElementById("PILinesTbody"); // متغير: tbody الخاص بسطور الفاتورة
-        if (!tbody) {
-            linesWrap.innerHTML = `<div class="text-muted small">لا توجد سطور للطباعة.</div>`;
+        const destTbody = el("piPrintMasterTbody");
+        if (!destTbody) return false;
+        destTbody.innerHTML = "";
+        const srcTbody = document.getElementById("PILinesTbody");
+        if (!srcTbody) {
+            destTbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-2">لا توجد سطور للطباعة.</td></tr>';
         } else {
-            const table = tbody.closest("table");
-            if (!table) {
-                linesWrap.innerHTML = `<div class="text-muted small">تعذر العثور على جدول السطور.</div>`;
+            const rows = srcTbody.querySelectorAll("tr");
+            if (!rows.length) {
+                destTbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-2">لا توجد سطور للطباعة.</td></tr>';
             } else {
-                // استنساخ الجدول
-                const clone = table.cloneNode(true);
-
-                // إزالة أي أزرار داخل الجدول (مسح/تعديل)
-                clone.querySelectorAll("button, a").forEach(x => x.remove());
-
-                linesWrap.appendChild(clone);
+                rows.forEach(function (tr) {
+                    const c = tr.cloneNode(true);
+                    c.querySelectorAll("button, a, .no-print").forEach(x => x.remove());
+                    c.querySelectorAll("th.no-print, td.no-print").forEach(x => x.remove());
+                    destTbody.appendChild(c);
+                });
             }
         }
 
-        // =========================
-        // (3) الإجماليات: نقرأها من IDs التي عندك
-        // =========================
-        const totalsWrap = document.getElementById("piPrintTotalsWrap");
+        const totalsWrap = el("piPrintTotalsWrap");
         if (!totalsWrap) return false;
-
-        const totalLines = document.getElementById("TotalLinesValue")?.textContent?.trim() || "0";
-        const totalItems = document.getElementById("TotalItemsValue")?.textContent?.trim() || "0";
-        const totalQty = document.getElementById("TotalQtyValue")?.textContent?.trim() || "0";
-        const totalRetail = document.getElementById("TotalRetailValue")?.textContent?.trim() || "0";
-        const totalAfterDiscount = document.getElementById("TotalAfterDiscountValue")?.textContent?.trim() || "0";
-        const tax = (document.getElementById("TaxAmountInput")?.value || "").trim() || "0";
-        const totalAfterDiscountAndTax = document.getElementById("TotalAfterDiscountAndTaxValue")?.textContent?.trim() || "0";
-        const netTotal = document.getElementById("NetTotalValue")?.textContent?.trim() || "0";
+        const totalItems = el("TotalItemsValue")?.textContent?.trim() || "0";
+        const totalQty = el("TotalQtyValue")?.textContent?.trim() || "0";
+        const totalRetail = el("TotalRetailValue")?.textContent?.trim() || "0";
+        const totalAfterDiscount = el("TotalAfterDiscountValue")?.textContent?.trim() || "0";
+        const taxPct = (el("TaxPercentInput") && el("TaxPercentInput").value) ? el("TaxPercentInput").value.trim() : "0";
+        const tax = (el("TaxAmountValue")?.textContent || "").trim() || (el("TaxAmountInput")?.value || "").trim() || "0";
+        const totalAfterDiscountAndTax = el("TotalAfterDiscountAndTaxValue")?.textContent?.trim() || "0";
+        const netTotal = el("NetTotalValue")?.textContent?.trim() || "0";
+        const grandWithPrev = el("GrandTotalWithPreviousValue")?.textContent?.trim() || totalAfterDiscountAndTax || netTotal;
+        const prevBalance = el("CustomerPreviousBalanceValue")?.textContent?.trim() || "0";
 
         totalsWrap.innerHTML = `
-            <table>
-                <thead><tr><th colspan="4">الإجماليات</th></tr></thead>
-                <tbody>
-                    <tr>
-                        <td>عدد السطور</td><td><strong>${totalLines}</strong></td>
-                        <td>عدد الأصناف</td><td><strong>${totalItems}</strong></td>
-                    </tr>
-                    <tr>
-                        <td>إجمالي الكمية</td><td><strong>${totalQty}</strong></td>
-                        <td>إجمالي سعر الجمهور</td><td><strong>${totalRetail}</strong></td>
-                    </tr>
-                    <tr>
-                        <td>الإجمالي بعد الخصم</td><td><strong>${totalAfterDiscount}</strong></td>
-                        <td>قيمة الضريبة</td><td><strong>${tax}</strong></td>
-                    </tr>
-                    <tr>
-                        <td>الإجمالي بعد الخصم والضريبة</td><td><strong>${totalAfterDiscountAndTax}</strong></td>
-                        <td>الصافي النهائي</td><td><strong>${netTotal}</strong></td>
-                    </tr>
-                </tbody>
-            </table>
-        `;
-
+<div class="card shadow-sm invoice-totals-card mb-0">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row invoice-summary-row-boxes">
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">عدد الأصناف</span><span class="invoice-summary-value">${totalItems}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي الكمية</span><span class="invoice-summary-value">${totalQty}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">الحساب السابق للمورد</span><span class="invoice-summary-value">${prevBalance}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">اجمالي الجمهور</span><span class="invoice-summary-value">${totalRetail}</span></div>
+        </div>
+        <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row invoice-summary-row-totals mt-2">
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي الفاتورة</span><span class="invoice-summary-value">${totalAfterDiscount}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">نسبة الضريبة %</span><span class="invoice-summary-value">${taxPct}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">قيمة الضريبة</span><span class="invoice-summary-value">${tax}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">الإجمالي</span><span class="invoice-summary-value fw-bold">${grandWithPrev}</span></div>
+        </div>
+    </div>
+</div>`;
         return true;
     }
 
-    btnPrint.addEventListener("click", function () {
-
-        // ✅ اقرأ رقم الفاتورة وقت الضغط
+    function doPurchaseInvoicePrint(mode) {
         const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
-
         if (invoiceId <= 0) {
             showToast("⚠️ لا يمكن طباعة فاتورة قبل حفظها.", "warning");
             return;
         }
-
-        // ✅ شرط البرنامج: لا طباعة إلا بعد الترحيل
         if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
             showToast("❌ لا يمكن طباعة الفاتورة إلا بعد الترحيل (إغلاق الفاتورة).", "danger");
             document.getElementById("btnPostInvoice")?.focus();
             return;
         }
-
-        // منع تكرار الطباعة
         if (printing) return;
         printing = true;
 
-        // ✅ تجهيز منطقة الطباعة
-        const ok = preparePurchaseInvoicePrint();
-        if (!ok) {
+        if (!preparePurchaseInvoicePrint()) {
             printing = false;
-            showToast("تعذر تجهيز الطباعة. تأكد من وجود منطقة الطباعة piPrintArea.", "danger");
+            showToast("تعذر تجهيز الطباعة.", "danger");
             return;
         }
 
-                    // =========================
-            // (ERP ثابت) تجهيز بيانات الهيدر داخل منطقة الطباعة قبل التنفيذ
-            // =========================
+        const wrapper = document.getElementById("piPrintWrapper");
+        const printArea = document.getElementById("piPrintArea");
+        if (!wrapper || !printArea) { printing = false; return; }
 
-            // متغير: اسم المورد من نفس Input في الهيدر
-            const supplierName = (document.getElementById("CustomerNameInput")?.value || "").trim();
+        wrapper.classList.remove("print-mode-1", "print-mode-2", "print-mode-3");
+        wrapper.querySelectorAll(".pi-print-copy:not(#piPrintArea)").forEach(c => c.remove());
 
-            // متغير: تاريخ الفاتورة من نفس Input في الهيدر
-            const invoiceDate = (document.getElementById("InvoiceDateDisplay")?.value || "").trim();
-
-            // دالة صغيرة: تكتب نص في عنصر طباعة لو موجود
-            function setPrintText(id, text) {
-                const el = document.getElementById(id);
-                if (el) el.textContent = text || "";
+        if (mode === 2 || mode === 3) {
+            const copies = mode === 2 ? 2 : 3;
+            for (let i = 1; i < copies; i++) {
+                const clone = printArea.cloneNode(true);
+                clone.id = "";
+                clone.classList.add("pi-print-copy");
+                clone.querySelectorAll("[id]").forEach(el => el.removeAttribute("id"));
+                wrapper.appendChild(clone);
             }
+            wrapper.classList.add("print-mode-" + mode);
+        } else {
+            wrapper.classList.add("print-mode-1");
+        }
 
-            // ✅ املأ القيم داخل الطباعة
-            setPrintText("piPrintSupplier", supplierName);
-            setPrintText("piPrintInvoiceDate", invoiceDate);
+        printWrapperParent = null;
+        printWrapperNext = null;
+        if (wrapper.parentNode !== document.body) {
+            printWrapperParent = wrapper.parentNode;
+            printWrapperNext = wrapper.nextSibling;
+            document.body.appendChild(wrapper);
+        }
 
-
-        // ✅ اطبع مرة واحدة
+        document.body.classList.add("printing-invoice");
         setTimeout(() => window.print(), 50);
+    }
+
+    document.querySelectorAll("[data-pi-print-mode]").forEach(item => {
+        item.addEventListener("click", function (e) {
+            e.preventDefault();
+            const mode = parseInt(this.getAttribute("data-pi-print-mode") || "1", 10);
+            doPurchaseInvoicePrint(mode);
+        });
     });
 
-    // بعد إغلاق نافذة الطباعة
     window.addEventListener("afterprint", function () {
+        document.body.classList.remove("printing-invoice");
         printing = false;
+        const wrapper = document.getElementById("piPrintWrapper");
+        if (wrapper) {
+            wrapper.classList.remove("print-mode-1", "print-mode-2", "print-mode-3");
+            wrapper.querySelectorAll(".pi-print-copy:not(#piPrintArea)").forEach(c => c.remove());
+            if (printWrapperParent) {
+                if (printWrapperNext) {
+                    printWrapperParent.insertBefore(wrapper, printWrapperNext);
+                } else {
+                    printWrapperParent.appendChild(wrapper);
+                }
+                printWrapperParent = null;
+                printWrapperNext = null;
+            }
+        }
     });
 });
 

@@ -675,13 +675,50 @@ private async Task PopulateDropDownsAsync(
             .ToListAsync();
 
         // متغير: إرسال قائمة المخازن للـ View كـ SelectList
-        ViewBag.Warehouses = new SelectList(
-            warehouses,
-            "WarehouseId",       // متغير: كود المخزن
-            "WarehouseName",     // متغير: اسم المخزن
-            selectedWarehouseId  // متغير: المخزن المختار (لو موجود)
-        );
+    ViewBag.Warehouses = new SelectList(
+        warehouses,
+        "WarehouseId",       // متغير: كود المخزن
+        "WarehouseName",     // متغير: اسم المخزن
+        selectedWarehouseId  // متغير: المخزن المختار (لو موجود)
+    );
+}
+
+private async Task LoadPrintHeaderSettingsAsync()
+{
+    try
+    {
+        var printHeader = await _context.PrintHeaderSettings
+            .AsNoTracking()
+            .OrderByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+
+        ViewBag.PrintHeaderCompanyName = string.IsNullOrWhiteSpace(printHeader?.CompanyName)
+            ? "شركة الهدى"
+            : printHeader!.CompanyName.Trim();
+        ViewBag.PrintHeaderLogoUrl = string.IsNullOrWhiteSpace(printHeader?.LogoPath)
+            ? null
+            : Url.Content(printHeader!.LogoPath!);
     }
+    catch (Exception ex) when (IsMissingPrintHeaderSettingsTable(ex))
+    {
+        ViewBag.PrintHeaderCompanyName = "شركة الهدى";
+        ViewBag.PrintHeaderLogoUrl = null;
+    }
+}
+
+private static bool IsMissingPrintHeaderSettingsTable(Exception ex)
+{
+    Exception? current = ex;
+    while (current != null)
+    {
+        var msg = current.Message ?? string.Empty;
+        if (msg.Contains("Invalid object name", StringComparison.OrdinalIgnoreCase) &&
+            msg.Contains("PrintHeaderSettings", StringComparison.OrdinalIgnoreCase))
+            return true;
+        current = current.InnerException;
+    }
+    return false;
+}
 
 
 
@@ -1765,7 +1802,7 @@ private async Task PopulateDropDownsAsync(
                 TotalQtyRequested = 0,           // متغير: إجمالي الكمية المطلوبة
                 ExpectedItemsTotal = 0m,         // متغير: إجمالي التكلفة/القيمة المتوقعة
 
-                Status = "Draft",                // متغير: حالة الطلب الافتراضية
+                Status = "غير مرحلة",                // متغير: حالة الطلب الافتراضية
                 IsConverted = false,             // متغير: الطلب لم يتحول لفاتورة شراء بعد
 
                 RequestedBy = GetCurrentUserDisplayName(), // متغير: طالب الطلب (افتراضياً اليوزر الحالي)
@@ -1875,7 +1912,7 @@ private async Task PopulateDropDownsAsync(
                 model.RequestedBy = GetCurrentUserDisplayName();
 
             // متغير: الحالة الافتراضية
-            model.Status = string.IsNullOrWhiteSpace(model.Status) ? "Draft" : model.Status;
+            model.Status = string.IsNullOrWhiteSpace(model.Status) ? "غير مرحلة" : model.Status;
 
             // متغير: الطلب جديد ولم يتحول بعد
             model.IsConverted = false;
@@ -2246,6 +2283,7 @@ private async Task PopulateDropDownsAsync(
             // ملاحظة: بنحافظ على اسم الدالة كما هو عندك حتى لا نكسر الاستدعاءات
             // =========================================
             await FillPurchaseRequestNavAsync(request.PRId);
+            await LoadPrintHeaderSettingsAsync();
 
             // =========================================
             // 5) عرض الـ View نفسه

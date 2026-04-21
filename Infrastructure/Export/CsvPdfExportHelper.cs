@@ -46,10 +46,13 @@ public static class CsvPdfExportHelper
                 return;
             }
 
+            var columnWeights = BuildColumnWeights(headers, rows, columnCount);
+
             table.ColumnsDefinition(columns =>
             {
-                for (var i = 0; i < columnCount; i++)
-                    columns.RelativeColumn();
+                // نُعرّف الأعمدة بالعكس لأننا نضيف الخلايا بالعكس (RTL)
+                for (var sourceIndex = columnCount - 1; sourceIndex >= 0; sourceIndex--)
+                    columns.RelativeColumn(columnWeights[sourceIndex]);
             });
 
             if (headers.Length > 0)
@@ -73,6 +76,68 @@ public static class CsvPdfExportHelper
                 }
             }
         });
+    }
+
+    private static float[] BuildColumnWeights(string[] headers, IReadOnlyList<string[]> rows, int columnCount)
+    {
+        var weights = new float[columnCount];
+        var sampleCount = Math.Min(rows.Count, 300);
+
+        for (var i = 0; i < columnCount; i++)
+        {
+            var header = i < headers.Length ? Sanitize(headers[i]) : string.Empty;
+            var maxLen = header.Length;
+
+            for (var r = 0; r < sampleCount; r++)
+            {
+                var row = rows[r];
+                if (i >= row.Length) continue;
+                var valueLen = Sanitize(row[i]).Length;
+                if (valueLen > maxLen) maxLen = valueLen;
+            }
+
+            var weight = 0.85f + (Math.Min(maxLen, 42) / 14f);
+
+            if (IsNumericLikeHeader(header))
+                weight = Math.Min(weight, 1.15f);
+
+            if (ContainsAny(header, "اسم الصنف", "الصنف"))
+                weight = Math.Max(weight, 3.0f);
+            else if (ContainsAny(header, "اسم العميل", "العميل"))
+                weight = Math.Max(weight, 2.4f);
+            else if (ContainsAny(header, "المنطقة"))
+                weight = Math.Max(weight, 1.7f);
+            else if (ContainsAny(header, "التشغيلة", "batch"))
+                weight = Math.Max(weight, 1.6f);
+
+            weights[i] = Math.Clamp(weight, 0.75f, 3.4f);
+        }
+
+        return weights;
+    }
+
+    private static bool IsNumericLikeHeader(string header)
+    {
+        if (string.IsNullOrWhiteSpace(header))
+            return false;
+
+        return ContainsAny(header,
+            "رقم", "الكود", "الكمية", "سعر", "خصم", "صافي", "إجمالي", "قيمة", "%", "qty", "price", "net", "total", "id", "line");
+    }
+
+    private static bool ContainsAny(string source, params string[] needles)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return false;
+
+        foreach (var needle in needles)
+        {
+            if (!string.IsNullOrWhiteSpace(needle) &&
+                source.Contains(needle, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private static IContainer HeaderCellStyle(IContainer container)

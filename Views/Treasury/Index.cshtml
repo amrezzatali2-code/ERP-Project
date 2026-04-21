@@ -195,7 +195,7 @@
                                 <th>حساب الطرف</th>
                                 <th>الطرف</th>
                                 <th>المبلغ</th>
-                                <th>مرحّل</th>
+                                <th>حالة الترحيل</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -218,9 +218,9 @@
                                     <td class="fw-bold">@receipt.Amount.ToString("N2")</td>
                                     <td>
                                         @if (receipt.IsPosted)
-                                        { <span class="badge bg-secondary">مرحّل</span> }
+                                        { <span class="badge bg-secondary">مرحلة 1</span> }
                                         else
-                                        { <span class="badge bg-warning text-dark">غير مرحّل</span> }
+                                        { <span class="badge bg-warning text-dark">غير مرحلة</span> }
                                     </td>
                                 </tr>
                             }
@@ -291,7 +291,7 @@
                                 <th>حساب الطرف</th>
                                 <th>الطرف</th>
                                 <th>المبلغ</th>
-                                <th>مرحّل</th>
+                                <th>حالة الترحيل</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -314,9 +314,9 @@
                                     <td class="fw-bold">@payment.Amount.ToString("N2")</td>
                                     <td>
                                         @if (payment.IsPosted)
-                                        { <span class="badge bg-secondary">مرحّل</span> }
+                                        { <span class="badge bg-secondary">مرحلة 1</span> }
                                         else
-                                        { <span class="badge bg-warning text-dark">غير مرحّل</span> }
+                                        { <span class="badge bg-warning text-dark">غير مرحلة</span> }
                                     </td>
                                 </tr>
                             }

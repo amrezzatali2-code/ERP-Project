@@ -521,7 +521,7 @@ namespace ERP.Controllers
          /// <summary>
          /// دالة مساعدة: تجهيز الموردين والمخازن للفورم (الهيدر فقط).
          /// </summary>
-            private async Task PopulateDropDownsAsync(
+        private async Task PopulateDropDownsAsync(
                  int? selectedCustomerId = null,    // متغير: كود المورد المختار (لو فاتورة قديمة)
                 int? selectedWarehouseId = null)   // متغير: كود المخزن المختار (لو فاتورة قديمة)
                  {
@@ -606,6 +606,43 @@ namespace ERP.Controllers
                 "WarehouseName",    // اسم المخزن
                 selectedWarehouseId // المخزن المختار (لو موجود)
             );
+        }
+
+        private async Task LoadPrintHeaderSettingsAsync()
+        {
+            try
+            {
+                var printHeader = await _context.PrintHeaderSettings
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.Id)
+                    .FirstOrDefaultAsync();
+
+                ViewBag.PrintHeaderCompanyName = string.IsNullOrWhiteSpace(printHeader?.CompanyName)
+                    ? "شركة الهدى"
+                    : printHeader!.CompanyName.Trim();
+                ViewBag.PrintHeaderLogoUrl = string.IsNullOrWhiteSpace(printHeader?.LogoPath)
+                    ? null
+                    : Url.Content(printHeader!.LogoPath!);
+            }
+            catch (Exception ex) when (IsMissingPrintHeaderSettingsTable(ex))
+            {
+                ViewBag.PrintHeaderCompanyName = "شركة الهدى";
+                ViewBag.PrintHeaderLogoUrl = null;
+            }
+        }
+
+        private static bool IsMissingPrintHeaderSettingsTable(Exception ex)
+        {
+            Exception? current = ex;
+            while (current != null)
+            {
+                var msg = current.Message ?? string.Empty;
+                if (msg.Contains("Invalid object name", StringComparison.OrdinalIgnoreCase) &&
+                    msg.Contains("PrintHeaderSettings", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                current = current.InnerException;
+            }
+            return false;
         }
 
 
@@ -2110,6 +2147,7 @@ namespace ERP.Controllers
             // 4) ✅ تجهيز التنقل بشكل موحّد (استخدم دالتك المساعدة)
             // =========================================
             await FillPurchaseInvoiceNavAsync(invoice.PIId);
+            await LoadPrintHeaderSettingsAsync();
 
             // =========================================
             // 4.5) فاتورة لها مرتجع بالكامل → تصحيح الحالة في DB والقائمة (مرحلة)

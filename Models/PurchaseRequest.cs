@@ -78,8 +78,8 @@ namespace ERP.Models
         // ========= حالة الطلب وملاحظات =========
 
         [Display(Name = "الحالة")]
-        public string Status { get; set; } = "Draft";
-        // Draft     = مسودة
+        public string Status { get; set; } = "غير مرحلة";
+        // غير مرحلة = الحالة الافتراضية قبل الاعتماد/التحويل
         // Converted = تم التحويل إلى فاتورة شراء
         // Cancelled = تم إلغاء الطلب
 

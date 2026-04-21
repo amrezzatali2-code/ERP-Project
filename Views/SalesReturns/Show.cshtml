@@ -274,53 +274,45 @@
                         }
 
                         <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
-                            <button type="button"
-                                    id="btnFirstReturn"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="sr-show-tab"
-                                    data-tab-title="مرتجع مبيعات"
-                                    data-base-url="@Url.Action("Edit", "SalesReturns", new { id = (navFirst ?? 0) })"
-                                    data-id="@(navFirst ?? 0)"
-                                    title="أول مرتجع"
-                                    @(canFirst ? "" : "disabled")>
+                            <a id="btnFirstReturn"
+                               class="btn btn-erp btn-erp-outline-primary btn-erp-sm@(canFirst ? "" : " disabled")"
+                               href="@(canFirst ? Url.Action("Edit", "SalesReturns", new { id = (navFirst ?? 0), frame = 1 }) : "#")"
+                               data-local-nav="1"
+                               title="أول مرتجع"
+                               aria-disabled="@(canFirst ? "false" : "true")"
+                               tabindex="@(canFirst ? "0" : "-1")">
                                 ⏮
-                            </button>
+                            </a>
 
-                            <button type="button"
-                                    id="btnPrevReturn"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="sr-show-tab"
-                                    data-tab-title="مرتجع مبيعات"
-                                    data-base-url="@Url.Action("Edit", "SalesReturns", new { id = (prevEffective ?? 0) })"
-                                    data-id="@(prevEffective ?? 0)"
-                                    title="المرتجع السابق"
-                                    @(canPrev ? "" : "disabled")>
+                            <a id="btnPrevReturn"
+                               class="btn btn-erp btn-erp-outline-primary btn-erp-sm@(canPrev ? "" : " disabled")"
+                               href="@(canPrev ? Url.Action("Edit", "SalesReturns", new { id = (prevEffective ?? 0), frame = 1 }) : "#")"
+                               data-local-nav="1"
+                               title="المرتجع السابق"
+                               aria-disabled="@(canPrev ? "false" : "true")"
+                               tabindex="@(canPrev ? "0" : "-1")">
                                 ◀
-                            </button>
+                            </a>
 
-                            <button type="button"
-                                    id="btnNextReturn"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="sr-show-tab"
-                                    data-tab-title="مرتجع مبيعات"
-                                    data-base-url="@Url.Action("Edit", "SalesReturns", new { id = (nextEffective ?? 0) })"
-                                    data-id="@(nextEffective ?? 0)"
-                                    title="المرتجع التالي"
-                                    @(canNext ? "" : "disabled")>
+                            <a id="btnNextReturn"
+                               class="btn btn-erp btn-erp-outline-primary btn-erp-sm@(canNext ? "" : " disabled")"
+                               href="@(canNext ? Url.Action("Edit", "SalesReturns", new { id = (nextEffective ?? 0), frame = 1 }) : "#")"
+                               data-local-nav="1"
+                               title="المرتجع التالي"
+                               aria-disabled="@(canNext ? "false" : "true")"
+                               tabindex="@(canNext ? "0" : "-1")">
                                 ▶
-                            </button>
+                            </a>
 
-                            <button type="button"
-                                    id="btnLastReturn"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="sr-show-tab"
-                                    data-tab-title="مرتجع مبيعات"
-                                    data-base-url="@Url.Action("Edit", "SalesReturns", new { id = (navLast ?? 0) })"
-                                    data-id="@(navLast ?? 0)"
-                                    title="آخر مرتجع"
-                                    @(canLast ? "" : "disabled")>
+                            <a id="btnLastReturn"
+                               class="btn btn-erp btn-erp-outline-primary btn-erp-sm@(canLast ? "" : " disabled")"
+                               href="@(canLast ? Url.Action("Edit", "SalesReturns", new { id = (navLast ?? 0), frame = 1 }) : "#")"
+                               data-local-nav="1"
+                               title="آخر مرتجع"
+                               aria-disabled="@(canLast ? "false" : "true")"
+                               tabindex="@(canLast ? "0" : "-1")">
                                 ⏭
-                            </button>
+                            </a>
                         </div>
 
                         <div class="d-flex align-items-center gap-1">
@@ -396,12 +388,21 @@
                             <a href="@Url.Action("ExportShowExcel", "SalesReturns", new { id = Model.SRId })" target="_blank" rel="noopener" class="btn btn-erp btn-erp-success btn-erp-sm w-100 text-decoration-none">📥 تصدير Excel</a>
                         }
 
-                        <button type="button"
-                                id="btnPrintReturn"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
-                                onclick="window.print()">
-                            🖨️ طباعة المرتجع
-                        </button>
+                        <div class="dropdown w-100">
+                            <button type="button"
+                                    id="btnPrintReturnDropdown"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100 dropdown-toggle"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                    title="اختر نوع الطباعة">
+                                🖨️ طباعة المرتجع
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end w-100" aria-labelledby="btnPrintReturnDropdown">
+                                <li><a class="dropdown-item" href="#" data-sr-print-mode="1" onclick="if(window.__doSalesReturnPrint){window.__doSalesReturnPrint(1);} return false;">طباعة صفحة واحدة</a></li>
+                                <li><a class="dropdown-item" href="#" data-sr-print-mode="2" onclick="if(window.__doSalesReturnPrint){window.__doSalesReturnPrint(2);} return false;">طباعة أصل وصورة</a></li>
+                                <li><a class="dropdown-item" href="#" data-sr-print-mode="3" onclick="if(window.__doSalesReturnPrint){window.__doSalesReturnPrint(3);} return false;">طباعة أصل وصورتين</a></li>
+                            </ul>
+                        </div>
 
 
 
@@ -412,7 +413,7 @@
             @* =========================
                العمود الرئيسي (الهيدر + العميل + الأصناف + الإجماليات)
                ========================= *@
-            <div class="col-lg-10 order-first">
+            <div class="col-lg-10 order-first erp-print-area">
 
                 @* ====================================================
                    1) كارت بيانات مرتجع البيع + العميل + المخزن
@@ -461,6 +462,7 @@
                                        readonly />
                                 <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                 <input type="hidden" id="SRId" value="@Model.SRId" />
+                                <input type="hidden" id="ReturnCreatedByDisplay" value="@Model.CreatedBy" />
                             </div>
                             <div class="col-lg-5 col-md-6 min-w-0">
                                 <label for="CustomerNameInput" class="form-label form-label-sm">اسم العميل</label>
@@ -469,9 +471,13 @@
                                         <span class="product-dropdown-arrow-inside" id="srCustomerDropdownArrow" title="افتح القائمة">▼</span>
                                         <input id="CustomerNameInput"
                                                type="text"
+                                               name="sr_customer_search_no_autofill"
                                                class="form-control form-control-sm product-dropdown-input"
                                                placeholder="اكتب اسم العميل"
-                                               autocomplete="off"
+                                               autocomplete="new-password"
+                                               autocorrect="off"
+                                               autocapitalize="off"
+                                               spellcheck="false"
                                                data-lock-posted="1" />
                                     </div>
                                     <div id="srCustomerDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
@@ -507,9 +513,9 @@
                                     string statusDisplayValue = Model.Status switch
                                     {
                                         "Draft" => "غير مرحلة",
-                                        "Posted" => (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل"),
+                                        "Posted" => (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحلة 1"),
                                         "Cancelled" => "ملغى",
-                                        _ => string.IsNullOrWhiteSpace(Model.Status) ? (Model.IsPosted ? (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل") : "غير مرحلة") : Model.Status
+                                        _ => string.IsNullOrWhiteSpace(Model.Status) ? (Model.IsPosted ? (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحلة 1") : "غير مرحلة") : Model.Status
                                     };
                                 }
                                 <input id="ReturnStatusDisplay" class="form-control form-control-sm text-center" value="@statusDisplayValue" readonly />
@@ -606,7 +612,16 @@
                                         <div class="position-relative" id="srStandaloneProductDropdownWrap">
                                             <div class="product-dropdown-onebox" id="srStandaloneProductDropdownInputGroup">
                                                 <span class="product-dropdown-arrow-inside" id="srStandaloneProductDropdownArrow" title="افتح القائمة">▼</span>
-                                                <input type="text" id="srStandaloneProdNameInput" class="form-control form-control-sm product-dropdown-input" placeholder="اختر صنفاً..." autocomplete="off" data-lock-posted="1" />
+                                                <input type="text"
+                                                       id="srStandaloneProdNameInput"
+                                                       name="sr_standalone_product_search_no_autofill"
+                                                       class="form-control form-control-sm product-dropdown-input"
+                                                       placeholder="اختر صنفاً..."
+                                                       autocomplete="new-password"
+                                                       autocorrect="off"
+                                                       autocapitalize="off"
+                                                       spellcheck="false"
+                                                       data-lock-posted="1" />
                                             </div>
                                             <div id="srStandaloneProductDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
                                         </div>
@@ -614,7 +629,7 @@
                                     </div>
                                     <div class="col-auto">
                                         <label class="form-label form-label-sm">سعر الجمهور</label>
-                                        <input type="number" step="0.01" min="0" id="srStandalonePriceRetail" class="form-control form-control-sm text-center" value="0" data-lock-posted="1" />
+                                        <input type="number" step="0.01" min="0" id="srStandalonePriceRetail" class="form-control form-control-sm text-center bg-light" value="0" readonly data-lock-posted="1" />
                                     </div>
                                     <div class="col-auto">
                                         <label class="form-label form-label-sm">خصم %</label>
@@ -718,6 +733,59 @@
                                 <span id="NetTotalBadge" class="invoice-summary-value invoice-summary-value-main fw-bold">@Model.NetTotal.ToString("0.00")</span>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div id="piPrintWrapper" class="erp-print-area print-only">
+                    <div id="piPrintArea" class="pi-print-copy">
+                        <table class="pi-print-master-table table table-bordered table-sm mb-0 w-100">
+                            <thead>
+                                <tr>
+                                    <td colspan="9" class="p-0 border-0 pi-print-thead-banner-cell">
+                                        <div class="pi-print-header mb-2">
+                                            <div class="pi-print-company-row d-flex justify-content-between align-items-center">
+                                                <div class="pi-print-logo-placeholder">
+                                                    @if (!string.IsNullOrWhiteSpace(ViewBag.PrintHeaderLogoUrl as string))
+                                                    {
+                                                        <img src="@((string)ViewBag.PrintHeaderLogoUrl)" alt="logo" style="max-width:80px; max-height:36px;" />
+                                                    }
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <h2 class="pi-print-company-name mb-0 fw-bold">@((string?)ViewBag.PrintHeaderCompanyName ?? "شركة الهدى")</h2>
+                                                    <span class="pi-print-doc-title">ERP — مرتجع بيع</span>
+                                                </div>
+                                            </div>
+                                            <hr class="pi-print-company-underline my-1" />
+                                            <div class="pi-print-details-grid small w-100" role="presentation">
+                                                <div>اسم العميل: <strong id="piPrintSupplier"></strong></div>
+                                                <div>الكاتب: <strong id="piPrintAuthor"></strong></div>
+                                                <div>المخزن: <strong id="piPrintWarehouse"></strong></div>
+                                                <div>التاريخ: <strong id="piPrintInvoiceDate"></strong></div>
+                                                <div>الهاتف: <strong id="piPrintCustomerPhone"></strong></div>
+                                                <div>رقم المرتجع: <strong id="piPrintInvoiceNo"></strong></div>
+                                                <div class="pi-print-details-cell-span2" aria-hidden="true"></div>
+                                                <div class="pi-print-details-span-row">العنوان: <strong id="piPrintCustomerAddress"></strong></div>
+                                                <div class="pi-print-details-span-row text-muted small" id="piPrintNow"></div>
+                                            </div>
+                                        </div>
+                                        <hr class="my-1 pi-print-hr-after-banner" />
+                                    </td>
+                                </tr>
+                                <tr class="pi-print-column-head-row table-light">
+                                    <th class="text-center">#</th>
+                                    <th class="text-center">الموقع</th>
+                                    <th>اسم الصنف</th>
+                                    <th class="text-center">التشغيلة</th>
+                                    <th class="text-center">الصلاحية</th>
+                                    <th class="text-center">الكمية</th>
+                                    <th class="text-center">سعر الجمهور</th>
+                                    <th class="text-center">خصم البيع %</th>
+                                    <th class="text-center">قيمة السطر</th>
+                                </tr>
+                            </thead>
+                            <tbody id="piPrintMasterTbody" class="pi-print-master-tbody"></tbody>
+                        </table>
+                        <div id="piPrintTotalsWrap" class="pi-print-totals-block mt-2"></div>
                     </div>
                 </div>
 
@@ -835,8 +903,26 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
-            // فتح شاشة المرتجع: فوكس مباشر على اسم العميل لتسريع الإدخال
+            // فتح شاشة المرتجع: عند الطلب من فاتورة البيع يكون الفوكس على الصنف مباشرة
             setTimeout(function () {
+                var qs = new URLSearchParams(window.location.search || '');
+                var focusProduct = (qs.get('focusProduct') || '').toString() === '1';
+                if (focusProduct) {
+                    var standaloneProdName = document.getElementById('srStandaloneProdNameInput');
+                    if (standaloneProdName) {
+                        standaloneProdName.focus();
+                        if (typeof standaloneProdName.select === 'function') standaloneProdName.select();
+                        return;
+                    }
+
+                    var invoiceItemSelect = document.getElementById('InvoiceItemSelect');
+                    if (invoiceItemSelect) {
+                        invoiceItemSelect.focus();
+                        if (typeof invoiceItemSelect.click === 'function') invoiceItemSelect.click();
+                        return;
+                    }
+                }
+
                 var custName = document.getElementById('CustomerNameInput');
                 if (custName) {
                     custName.focus();
@@ -901,7 +987,7 @@
                 if (!status) return 'غير مرحلة';
                 switch (String(status)) {
                     case 'Draft': return 'غير مرحلة';
-                    case 'Posted': return 'مرحّل';
+                    case 'Posted': return 'مرحلة 1';
                     case 'Cancelled': return 'ملغى';
                     default: return status;
                 }
@@ -1179,6 +1265,29 @@
                     if (!keepOpen) closeCustomerDropdown();
                     return true;
                 }
+                function moveStandaloneFlowAfterCustomerEnter() {
+                    if (!(typeof isStandaloneMode === 'function' && isStandaloneMode())) return;
+                    var customerIdVal = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
+                    if (customerIdVal <= 0) return;
+                    var warehouseEl = document.getElementById('WarehouseId');
+                    if (!warehouseEl) return;
+                    warehouseEl.focus();
+                }
+                function moveStandaloneFlowAfterWarehouseEnter() {
+                    if (!(typeof isStandaloneMode === 'function' && isStandaloneMode())) return;
+                    var customerIdVal = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
+                    if (customerIdVal <= 0) return;
+                    var warehouseIdVal = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
+                    if (warehouseIdVal <= 0) return;
+                    var srIdVal = parseInt((document.getElementById('SRId')?.value || '0'), 10) || 0;
+                    if (srIdVal > 0) {
+                        var standaloneInput = document.getElementById('srStandaloneProdNameInput');
+                        if (standaloneInput) standaloneInput.focus();
+                        return;
+                    }
+                    var btnSave = document.getElementById('btnSaveReturnHeader');
+                    if (btnSave) btnSave.focus();
+                }
 
                 custNameInput.addEventListener('change', function () {
                     fillCustomerFromRecord(findByName(custNameInput.value));
@@ -1227,13 +1336,33 @@
                     }
                     if (e.key === 'Enter') {
                         e.preventDefault();
+                        var selectedByEnter = false;
                         if (isOpen && customerDropdownHighlightedIndex >= 0 && customerDropdownSelectableCustomers.length > 0) {
-                            selectHighlightedCustomer(false);
-                            return;
+                            selectedByEnter = selectHighlightedCustomer(false);
                         }
-                        fillCustomerFromRecord(findByName(custNameInput.value));
+                        if (!selectedByEnter) {
+                            var bestMatches = getFilteredCustomerOptions((custNameInput.value || '').trim(), 1);
+                            if (bestMatches && bestMatches.length > 0) {
+                                fillCustomerFromRecord(bestMatches[0]);
+                                custNameInput.value = (bestMatches[0].name || '').trim();
+                                selectedByEnter = true;
+                            }
+                        }
+                        if (!selectedByEnter) {
+                            fillCustomerFromRecord(findByName(custNameInput.value));
+                        }
+                        moveStandaloneFlowAfterCustomerEnter();
                     }
                 });
+                var warehouseInputForStandaloneFlow = document.getElementById('WarehouseId');
+                if (warehouseInputForStandaloneFlow && !warehouseInputForStandaloneFlow.dataset.boundStandaloneFlowEnter) {
+                    warehouseInputForStandaloneFlow.dataset.boundStandaloneFlowEnter = '1';
+                    warehouseInputForStandaloneFlow.addEventListener('keydown', function (e) {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        moveStandaloneFlowAfterWarehouseEnter();
+                    });
+                }
                 custNameInput.addEventListener('blur', function () {
                     try {
                         closeCustomerDropdown();
@@ -1277,11 +1406,11 @@
             var srAllowStandalone = @(allowStandaloneMode ? "true" : "false");
             function isStandaloneMode() {
                 var ch = document.getElementById('srChkStandalone');
-                return srAllowStandalone === 'true' && ch && ch.checked;
+                return srAllowStandalone === true && ch && ch.checked;
             }
 
             // داتاليست + أوتوكومبليت أصناف «مرتجع بدون فاتورة» — نمط فاتورة المبيعات
-            if (srAllowStandalone === 'true') {
+            if (srAllowStandalone === true) {
                 (function () {
                     var prodDataList = document.getElementById('srStandaloneProductsList');
                     if (!prodDataList) return;
@@ -1511,6 +1640,39 @@
                             prodPriceEl.value = (isNaN(n) ? 0 : n).toFixed(2);
                         }
                     }
+                    function selectBestStandaloneProductFromSearch() {
+                        var searchTerm = (prodNameInput.value || '').trim();
+                        var filterQuery = getProductDropdownFilterQuery(searchTerm);
+                        var list = getFilteredProductOptions(filterQuery, 1, searchTerm);
+                        if (list && list.length > 0) {
+                            fillStandaloneProductFromOption(list[0]);
+                            return true;
+                        }
+                        return false;
+                    }
+                    window.__srResolveStandaloneProductSelection = function () {
+                        var currentId = (prodHiddenId && prodHiddenId.value) ? prodHiddenId.value.toString().trim() : '';
+                        var opt = currentId ? findProductByCode(currentId) : null;
+                        if (!opt && prodNameInput) {
+                            opt = findProductByName(prodNameInput.value);
+                        }
+                        if (opt) {
+                            fillStandaloneProductFromOption(opt);
+                            return true;
+                        }
+                        return false;
+                    };
+                    window.__srGetStandaloneResolvedPrice = function () {
+                        var currentId = (prodHiddenId && prodHiddenId.value) ? prodHiddenId.value.toString().trim() : '';
+                        var opt = currentId ? findProductByCode(currentId) : null;
+                        if (!opt && prodNameInput) {
+                            opt = findProductByName(prodNameInput.value);
+                        }
+                        if (!opt) return 0;
+                        var price = opt.getAttribute('data-price');
+                        var n = parseFloat((price || '0').toString().replace(',', '.'));
+                        return isNaN(n) ? 0 : n;
+                    };
 
                     var productDropdownHighlightedIndex = -1;
                     var productDropdownSelectableItems = [];
@@ -1639,8 +1801,13 @@
                                 selectHighlightedStandaloneProduct();
                                 return;
                             }
-                            var fo = findProductByName(prodNameInput.value);
-                            fillStandaloneProductFromOption(fo);
+                            var selected = selectBestStandaloneProductFromSearch();
+                            if (!selected) {
+                                var fo = findProductByName(prodNameInput.value);
+                                fillStandaloneProductFromOption(fo);
+                            }
+                            var qInp = document.getElementById('srStandaloneQtyInput');
+                            if (qInp) qInp.focus();
                         }
                     });
                     prodNameInput.addEventListener('blur', function () {
@@ -1665,7 +1832,7 @@
             }
 
             function applySrModeUi() {
-                if (srAllowStandalone !== 'true') return;
+                if (srAllowStandalone !== true) return;
                 var st = isStandaloneMode();
                 var invPanel = document.getElementById('srInvoiceAddPanel');
                 var stPanel = document.getElementById('srStandaloneAddPanel');
@@ -2001,14 +2168,50 @@
             });
 
             var btnAddStandaloneLine = document.getElementById('btnAddStandaloneLine');
+            var srStandaloneQtyInput = document.getElementById('srStandaloneQtyInput');
+            var srStandaloneBatchInput = document.getElementById('srStandaloneBatchInput');
+            var srStandaloneExpiryInput = document.getElementById('srStandaloneExpiryInput');
+
+            var standaloneEnterFields = [srStandaloneQtyInput, srStandaloneBatchInput, srStandaloneExpiryInput];
+            standaloneEnterFields.forEach(function (el) {
+                if (!el) return;
+                if (el.dataset.enterBoundStandalone === '1') return;
+                el.dataset.enterBoundStandalone = '1';
+                el.addEventListener('keydown', function (e) {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    var idx = standaloneEnterFields.indexOf(el);
+                    var next = standaloneEnterFields[idx + 1];
+                    if (next) {
+                        next.focus();
+                        if (typeof next.select === 'function') next.select();
+                    } else if (btnAddStandaloneLine) {
+                        btnAddStandaloneLine.focus();
+                    }
+                });
+            });
+            if (btnAddStandaloneLine && !btnAddStandaloneLine.dataset.enterClickBoundStandalone) {
+                btnAddStandaloneLine.dataset.enterClickBoundStandalone = '1';
+                btnAddStandaloneLine.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        btnAddStandaloneLine.click();
+                    }
+                });
+            }
 
             if (btnAddStandaloneLine) {
                 btnAddStandaloneLine.addEventListener('click', async function () {
                     if (!isStandaloneMode()) return;
+                    if (typeof window.__srResolveStandaloneProductSelection === 'function') {
+                        window.__srResolveStandaloneProductSelection();
+                    }
                     var prodId = parseInt(document.getElementById('srStandaloneProdId').value || '0', 10);
                     var returnQty = parseInt(document.getElementById('srStandaloneQtyInput').value || '0', 10);
                     var returnId = parseInt(document.getElementById('SRId').value || '0', 10);
-                    var priceRetail = parseFloat(document.getElementById('srStandalonePriceRetail').value || '0') || 0;
+                    var priceRetail = (typeof window.__srGetStandaloneResolvedPrice === 'function')
+                        ? (window.__srGetStandaloneResolvedPrice() || 0)
+                        : (parseFloat(document.getElementById('srStandalonePriceRetail').value || '0') || 0);
                     var disc1 = parseFloat(document.getElementById('srStandaloneDisc1').value || '0') || 0;
                     if (disc1 < 0) disc1 = 0;
                     if (disc1 > 100) disc1 = 100;
@@ -2265,6 +2468,7 @@
                     btnPost.innerHTML = "✅ تم ترحيل المرتجع";
                     if (typeof setReturnPosted === "function") setReturnPosted(true);
                     if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                    if (typeof syncReturnPrintButton === "function") syncReturnPrintButton();
                     if (postMsg) {
                         postMsg.textContent = "هذا المرتجع مترحّل بالفعل.";
                         postMsg.className = "small mt-2 text-muted";
@@ -2334,6 +2538,7 @@
                         // تحديث الفلاج + تطبيق القفل
                         if (typeof setReturnPosted === "function") setReturnPosted(true);
                         if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                        if (typeof syncReturnPrintButton === "function") syncReturnPrintButton();
 
                         // تحديث زر الترحيل
                         btnPost.innerHTML = "✅ تم ترحيل المرتجع";
@@ -2414,6 +2619,7 @@
                         // نجاح: تحديث الفلاج + الواجهة (مثل المبيعات)
                         if (typeof setReturnPosted === "function") setReturnPosted(false);
                         if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                        if (typeof syncReturnPrintButton === "function") syncReturnPrintButton();
                         if (statusDisplay) {
                             statusDisplay.value = "مفتوحة للتعديل";
                         }
@@ -2443,6 +2649,184 @@
             }
 
             // =========================================================
+            // زر طباعة مرتجع البيع (نفس نمط فاتورة المبيعات)
+            // =========================================================
+            const btnPrintReturn = document.getElementById("btnPrintReturnDropdown");
+            let srPrinting = false;
+            let srPrintWrapperParent = null;
+            let srPrintWrapperNext = null;
+
+            function syncReturnPrintButton() {
+                if (!btnPrintReturn) return;
+                const posted = (typeof isReturnPosted === "function") ? isReturnPosted() : false;
+                btnPrintReturn.disabled = !posted;
+                btnPrintReturn.title = posted ? "اختر نوع الطباعة" : "يتاح بعد ترحيل المرتجع";
+            }
+            window.syncReturnPrintButton = syncReturnPrintButton;
+
+            function prepareSalesReturnPrint() {
+                const printArea = document.getElementById("piPrintArea");
+                if (!printArea) return false;
+
+                const el = (id) => document.getElementById(id);
+                const returnId = (el("SRId")?.value || "").trim();
+                const returnDate = (el("ReturnDateDisplay")?.value || "").trim();
+                const customerName = (el("CustomerNameInput")?.value || "").trim();
+                const warehouseSel = el("WarehouseId");
+                const warehouseName = warehouseSel && warehouseSel.options && warehouseSel.selectedIndex >= 0
+                    ? String(warehouseSel.options[warehouseSel.selectedIndex].text || "").trim()
+                    : "";
+
+                if (el("piPrintNow")) el("piPrintNow").textContent = new Date().toLocaleString();
+                if (el("piPrintInvoiceNo")) el("piPrintInvoiceNo").textContent = returnId || "";
+                if (el("piPrintInvoiceDate")) el("piPrintInvoiceDate").textContent = returnDate || "";
+                if (el("piPrintSupplier")) el("piPrintSupplier").textContent = customerName || "";
+                if (el("piPrintWarehouse")) el("piPrintWarehouse").textContent = warehouseName || "";
+                if (el("piPrintCustomerPhone")) el("piPrintCustomerPhone").textContent = (el("CustomerPhone")?.value || "").trim() || "—";
+                if (el("piPrintCustomerAddress")) el("piPrintCustomerAddress").textContent = (el("CustomerAddress")?.value || "").trim() || "—";
+                if (el("piPrintAuthor")) el("piPrintAuthor").textContent = (el("ReturnCreatedByDisplay")?.value || "").trim() || "—";
+
+                const destTbody = el("piPrintMasterTbody");
+                const srcTbody = el("SalesReturnLinesTableBody");
+                if (!destTbody || !srcTbody) return false;
+                destTbody.innerHTML = "";
+
+                const srcRows = Array.from(srcTbody.querySelectorAll("tr.erp-list-selectable-row"));
+                if (!srcRows.length) {
+                    destTbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-2">لا توجد سطور للطباعة.</td></tr>';
+                } else {
+                    srcRows.forEach(function (tr) {
+                        const c = tr.cloneNode(true);
+                        c.querySelectorAll("button, a, .no-print").forEach(x => x.remove());
+                        c.querySelectorAll("th.no-print, td.no-print").forEach(x => x.remove());
+                        destTbody.appendChild(c);
+                    });
+                }
+
+                const parseNum = (txt) => {
+                    const n = parseFloat(String(txt || "").replace(/,/g, "").trim());
+                    return Number.isFinite(n) ? n : 0;
+                };
+
+                let totalLines = 0;
+                let totalQty = 0;
+                srcRows.forEach(function (r) {
+                    totalLines += 1;
+                    totalQty += parseNum(r.children?.[5]?.textContent);
+                });
+
+                const totalBeforeTax = (el("TotalBeforeTaxBadge")?.textContent || "0").trim();
+                const taxAmount = (el("TaxAmountBadge")?.textContent || "0").trim();
+                const netTotal = (el("NetTotalBadge")?.textContent || "0").trim();
+                const totalsWrap = el("piPrintTotalsWrap");
+                if (!totalsWrap) return false;
+                totalsWrap.innerHTML = `
+<div class="card shadow-sm invoice-totals-card mb-0">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row invoice-summary-row-boxes">
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">عدد السطور</span><span class="invoice-summary-value">${totalLines}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي الكمية</span><span class="invoice-summary-value">${totalQty}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">الإجمالي قبل الضريبة</span><span class="invoice-summary-value">${totalBeforeTax}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">قيمة الضريبة</span><span class="invoice-summary-value">${taxAmount}</span></div>
+            <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main"><span class="invoice-summary-label">الإجمالي بعد الضريبة</span><span class="invoice-summary-value invoice-summary-value-main fw-bold">${netTotal}</span></div>
+        </div>
+    </div>
+</div>`;
+                return true;
+            }
+
+            function doSalesReturnPrint(mode) {
+                const returnId = parseInt((document.getElementById("SRId")?.value || "0"), 10) || 0;
+                if (returnId <= 0) {
+                    showToast("⚠️ لا يمكن طباعة مرتجع قبل حفظه.", "warning");
+                    return;
+                }
+                if (typeof isReturnPosted === "function" && !isReturnPosted()) {
+                    showToast("❌ يجب ترحيل المرتجع قبل الطباعة", "danger");
+                    document.getElementById("btnPostReturn")?.focus();
+                    return;
+                }
+                if (srPrinting) return;
+                srPrinting = true;
+
+                if (!prepareSalesReturnPrint()) {
+                    srPrinting = false;
+                    showToast("تعذر تجهيز الطباعة.", "danger");
+                    return;
+                }
+
+                const wrapper = document.getElementById("piPrintWrapper");
+                const printArea = document.getElementById("piPrintArea");
+                if (!wrapper || !printArea) {
+                    srPrinting = false;
+                    return;
+                }
+
+                wrapper.classList.remove("print-mode-1", "print-mode-2", "print-mode-3");
+                wrapper.querySelectorAll(".pi-print-copy:not(#piPrintArea)").forEach(c => c.remove());
+
+                if (mode === 2 || mode === 3) {
+                    const copies = mode === 2 ? 2 : 3;
+                    for (let i = 1; i < copies; i++) {
+                        const clone = printArea.cloneNode(true);
+                        clone.id = "";
+                        clone.classList.add("pi-print-copy");
+                        clone.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));
+                        wrapper.appendChild(clone);
+                    }
+                    wrapper.classList.add("print-mode-" + mode);
+                } else {
+                    wrapper.classList.add("print-mode-1");
+                }
+
+                srPrintWrapperParent = null;
+                srPrintWrapperNext = null;
+                if (wrapper.parentNode !== document.body) {
+                    srPrintWrapperParent = wrapper.parentNode;
+                    srPrintWrapperNext = wrapper.nextSibling;
+                    document.body.appendChild(wrapper);
+                }
+
+                document.body.classList.add("printing-invoice");
+                setTimeout(() => window.print(), 50);
+            }
+            window.__doSalesReturnPrint = doSalesReturnPrint;
+
+            if (btnPrintReturn) {
+                syncReturnPrintButton();
+            }
+
+            if (!window.__srPrintDelegatedBound__) {
+                document.addEventListener("click", function (e) {
+                    const item = e.target && e.target.closest ? e.target.closest("[data-sr-print-mode]") : null;
+                    if (!item) return;
+                    e.preventDefault();
+                    const mode = parseInt(item.getAttribute("data-sr-print-mode") || "1", 10);
+                    doSalesReturnPrint(mode);
+                });
+                window.__srPrintDelegatedBound__ = true;
+            }
+
+            window.addEventListener("afterprint", function () {
+                document.body.classList.remove("printing-invoice");
+                srPrinting = false;
+                const wrapper = document.getElementById("piPrintWrapper");
+                if (wrapper) {
+                    wrapper.classList.remove("print-mode-1", "print-mode-2", "print-mode-3");
+                    wrapper.querySelectorAll(".pi-print-copy:not(#piPrintArea)").forEach(c => c.remove());
+                    if (srPrintWrapperParent) {
+                        if (srPrintWrapperNext) {
+                            srPrintWrapperParent.insertBefore(wrapper, srPrintWrapperNext);
+                        } else {
+                            srPrintWrapperParent.appendChild(wrapper);
+                        }
+                        srPrintWrapperParent = null;
+                        srPrintWrapperNext = null;
+                    }
+                }
+            });
+
+            // =========================================================
             // سكربت التنقل (داخل نفس التاب)
             // =========================================================
 
@@ -2466,27 +2850,9 @@
 
                 // ✅ مهم: Edit عندك بالمسار /Edit/{id}
                 const base = editBaseUrl.replace(/\/$/, '');
-                const url = base + '/' + encodeURIComponent(id);
+                const url = base + '/' + encodeURIComponent(id) + '?frame=1&_ts=' + Date.now();
                 window.location.href = url;
             }
-
-            function bindNavButton(btnId) {
-                const btn = document.getElementById(btnId);
-                if (!btn) return;
-
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    if (btn.disabled) return;
-
-                    const id = btn.getAttribute('data-id');
-                    openReturn(id);
-                });
-            }
-
-            bindNavButton('btnFirstReturn');
-            bindNavButton('btnPrevReturn');
-            bindNavButton('btnNextReturn');
-            bindNavButton('btnLastReturn');
 
             // ==============================
             // (3) البحث برقم المرتجع
@@ -2521,5 +2887,172 @@
             };
 
         });
+    </script>
+    <script>
+        // =========================================================
+        // طباعة مرتجع البيع — نسخة مستقلة (بنفس نمط فاتورة المبيعات)
+        // تعمل حتى لو حدث خطأ في سكربتات أخرى داخل الصفحة
+        // =========================================================
+        (function () {
+            if (window.__srPrintInitV2__) return;
+            window.__srPrintInitV2__ = true;
+
+            function isPostedSafe() {
+                var flag = document.getElementById("ReturnIsPostedFlag");
+                return !!(flag && flag.value === "1");
+            }
+
+            function prepareSalesReturnPrintV2() {
+                const wrapper = document.getElementById("piPrintWrapper");
+                const printArea = document.getElementById("piPrintArea");
+                if (!wrapper || !printArea) return false;
+
+                const el = (id) => document.getElementById(id);
+                const returnId = (el("SRId")?.value || "").trim();
+                const returnDate = (el("ReturnDateDisplay")?.value || "").trim();
+                const customerName = (el("CustomerNameInput")?.value || "").trim();
+
+                const warehouseSel = el("WarehouseId");
+                const warehouseName = warehouseSel && warehouseSel.options && warehouseSel.selectedIndex >= 0
+                    ? String(warehouseSel.options[warehouseSel.selectedIndex].text || "").trim()
+                    : "";
+
+                if (el("piPrintNow")) el("piPrintNow").textContent = new Date().toLocaleString();
+                if (el("piPrintInvoiceNo")) el("piPrintInvoiceNo").textContent = returnId || "";
+                if (el("piPrintInvoiceDate")) el("piPrintInvoiceDate").textContent = returnDate || "";
+                if (el("piPrintSupplier")) el("piPrintSupplier").textContent = customerName || "";
+                if (el("piPrintWarehouse")) el("piPrintWarehouse").textContent = warehouseName || "";
+                if (el("piPrintCustomerPhone")) el("piPrintCustomerPhone").textContent = (el("CustomerPhone")?.value || "").trim() || "—";
+                if (el("piPrintCustomerAddress")) el("piPrintCustomerAddress").textContent = (el("CustomerAddress")?.value || "").trim() || "—";
+                if (el("piPrintAuthor")) el("piPrintAuthor").textContent = (el("ReturnCreatedByDisplay")?.value || "").trim() || "—";
+
+                const destTbody = el("piPrintMasterTbody");
+                const srcTbody = el("SalesReturnLinesTableBody");
+                if (!destTbody || !srcTbody) return false;
+                destTbody.innerHTML = "";
+
+                const srcRows = Array.from(srcTbody.querySelectorAll("tr.erp-list-selectable-row"));
+                if (!srcRows.length) {
+                    destTbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-2">لا توجد سطور للطباعة.</td></tr>';
+                } else {
+                    srcRows.forEach(function (tr) {
+                        const c = tr.cloneNode(true);
+                        c.querySelectorAll("button, a, .no-print").forEach(x => x.remove());
+                        c.querySelectorAll("th.no-print, td.no-print").forEach(x => x.remove());
+                        destTbody.appendChild(c);
+                    });
+                }
+
+                const parseNum = (txt) => {
+                    const n = parseFloat(String(txt || "").replace(/,/g, "").trim());
+                    return Number.isFinite(n) ? n : 0;
+                };
+
+                let totalLines = 0;
+                let totalQty = 0;
+                srcRows.forEach(function (r) {
+                    totalLines += 1;
+                    totalQty += parseNum(r.children?.[5]?.textContent);
+                });
+
+                const totalBeforeTax = (el("TotalBeforeTaxBadge")?.textContent || "0").trim();
+                const taxAmount = (el("TaxAmountBadge")?.textContent || "0").trim();
+                const netTotal = (el("NetTotalBadge")?.textContent || "0").trim();
+                const totalsWrap = el("piPrintTotalsWrap");
+                if (!totalsWrap) return false;
+                totalsWrap.innerHTML = `
+<div class="card shadow-sm invoice-totals-card mb-0">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row invoice-summary-row-boxes">
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">عدد السطور</span><span class="invoice-summary-value">${totalLines}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي الكمية</span><span class="invoice-summary-value">${totalQty}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">الإجمالي قبل الضريبة</span><span class="invoice-summary-value">${totalBeforeTax}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">قيمة الضريبة</span><span class="invoice-summary-value">${taxAmount}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">الإجمالي بعد الضريبة</span><span class="invoice-summary-value fw-bold">${netTotal}</span></div>
+        </div>
+    </div>
+</div>`;
+                return true;
+            }
+
+            let srPrinting = false;
+            let srPrintWrapperParent = null;
+            let srPrintWrapperNext = null;
+
+            function doSalesReturnPrintV2(mode) {
+                const returnId = parseInt((document.getElementById("SRId")?.value || "0"), 10) || 0;
+                if (returnId <= 0) {
+                    if (typeof showToast === "function") showToast("⚠️ لا يمكن طباعة مرتجع قبل حفظه.", "warning");
+                    return;
+                }
+                if (!isPostedSafe()) {
+                    if (typeof showToast === "function") showToast("❌ يجب ترحيل المرتجع قبل الطباعة", "danger");
+                    document.getElementById("btnPostReturn")?.focus();
+                    return;
+                }
+                if (srPrinting) return;
+                srPrinting = true;
+
+                if (!prepareSalesReturnPrintV2()) {
+                    srPrinting = false;
+                    if (typeof showToast === "function") showToast("تعذر تجهيز الطباعة.", "danger");
+                    return;
+                }
+
+                const wrapper = document.getElementById("piPrintWrapper");
+                const printArea = document.getElementById("piPrintArea");
+                if (!wrapper || !printArea) {
+                    srPrinting = false;
+                    return;
+                }
+
+                wrapper.classList.remove("print-mode-1", "print-mode-2", "print-mode-3");
+                wrapper.querySelectorAll(".pi-print-copy:not(#piPrintArea)").forEach(c => c.remove());
+
+                const normalizedMode = (mode === 2 || mode === 3) ? mode : 1;
+                if (normalizedMode === 2 || normalizedMode === 3) {
+                    const copies = normalizedMode === 2 ? 2 : 3;
+                    for (let i = 1; i < copies; i++) {
+                        const clone = printArea.cloneNode(true);
+                        clone.id = "";
+                        clone.classList.add("pi-print-copy");
+                        clone.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));
+                        wrapper.appendChild(clone);
+                    }
+                }
+                wrapper.classList.add("print-mode-" + normalizedMode);
+
+                srPrintWrapperParent = null;
+                srPrintWrapperNext = null;
+                if (wrapper.parentNode !== document.body) {
+                    srPrintWrapperParent = wrapper.parentNode;
+                    srPrintWrapperNext = wrapper.nextSibling;
+                    document.body.appendChild(wrapper);
+                }
+
+                document.body.classList.add("printing-invoice");
+                setTimeout(() => window.print(), 50);
+            }
+
+            window.__doSalesReturnPrint = doSalesReturnPrintV2;
+
+            window.addEventListener("afterprint", function () {
+                document.body.classList.remove("printing-invoice");
+                srPrinting = false;
+                const wrapper = document.getElementById("piPrintWrapper");
+                if (!wrapper) return;
+                wrapper.classList.remove("print-mode-1", "print-mode-2", "print-mode-3");
+                wrapper.querySelectorAll(".pi-print-copy:not(#piPrintArea)").forEach(c => c.remove());
+                if (srPrintWrapperParent) {
+                    if (srPrintWrapperNext) {
+                        srPrintWrapperParent.insertBefore(wrapper, srPrintWrapperNext);
+                    } else {
+                        srPrintWrapperParent.appendChild(wrapper);
+                    }
+                    srPrintWrapperParent = null;
+                    srPrintWrapperNext = null;
+                }
+            });
+        })();
     </script>
 }

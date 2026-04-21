@@ -25,7 +25,7 @@ namespace ERP.Models
         public DateTime OrderDate { get; set; }
 
         [StringLength(30)]
-        public string Status { get; set; } = "Draft"; // Draft, SentToWhatsApp, Confirmed, Modified, ConvertedToErp
+        public string Status { get; set; } = "غير مرحلة"; // غير مرحلة, SentToWhatsApp, Confirmed, Modified, ConvertedToErp
 
         public DateTime? SentAt { get; set; }
         public DateTime? ConfirmedAt { get; set; }

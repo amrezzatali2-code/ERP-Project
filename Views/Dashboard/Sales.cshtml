@@ -23,7 +23,7 @@
                 @if (Model.Level == "sales")
                 {
                     <span>أضف عملاءك، ثم أنشئ أول فاتورة مبيعات. ستظهر إحصائياتك الشخصية هنا تلقائياً.</span>
-                    <span class="d-block mt-2 small">إن وُجدت فواتير بالفعل ولا تظهر: تأكد أن <strong>من تاريخ / إلى تاريخ</strong> يشمل أيام إصدار فواتيرك؛ واعلم أن <strong>إجمالي المبيعات</strong> و<strong>عدد الفواتير</strong> يحسبان <strong>الفواتير المرحّلة</strong> فقط، بينما «أحدث العمليات» يعرض المسودات والمرحّلة ضمن الفترة.</span>
+                    <span class="d-block mt-2 small">إن وُجدت فواتير بالفعل ولا تظهر: تأكد أن <strong>من تاريخ / إلى تاريخ</strong> يشمل أيام إصدار فواتيرك؛ واعلم أن <strong>إجمالي المبيعات</strong> و<strong>عدد الفواتير</strong> يحسبان <strong>الفواتير المرحلة</strong> فقط، بينما «أحدث العمليات» يعرض غير المرحلة والمرحلة ضمن الفترة.</span>
                 }
                 else
                 {
@@ -85,7 +85,7 @@
                     <div class="dashboard-kpi-card__body">
                         <div class="dashboard-kpi-card__label">عدد الفواتير</div>
                         <div class="dashboard-kpi-card__value">@Model.SalesInvoicesMonthCount.ToString("N0")</div>
-                        <div class="dashboard-kpi-card__hint">فواتير مرحّلة — @periodHint</div>
+                        <div class="dashboard-kpi-card__hint">فواتير مرحلة — @periodHint</div>
                     </div>
                 </div>
             </div>
@@ -257,7 +257,7 @@
     <div class="recent-purchase-panel-body flex-grow-1 overflow-auto p-0" style="min-height: 0;">
         @if (Model.RegionSalesRows.Any())
         {
-            <p class="text-muted small px-3 pt-3 mb-2">الفترة: <strong>@Model.FromDate?.ToString("yyyy-MM-dd")</strong> — <strong>@Model.ToDate?.ToString("yyyy-MM-dd")</strong> — فواتير مرحّلة فقط.</p>
+            <p class="text-muted small px-3 pt-3 mb-2">الفترة: <strong>@Model.FromDate?.ToString("yyyy-MM-dd")</strong> — <strong>@Model.ToDate?.ToString("yyyy-MM-dd")</strong> — فواتير مرحلة فقط.</p>
             <div class="table-responsive">
                 <table class="table table-hover mb-0 dashboard-modal-table align-middle">
                     <thead>

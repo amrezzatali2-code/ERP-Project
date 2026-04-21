@@ -24,8 +24,9 @@
     int page = Model.PageNumber;
     int pages = Model.TotalPages;
 
-    int start = total == 0 ? 0 : ((page - 1) * ps) + 1;
-    int end = Math.Min(total, page * ps);
+    int start = Model.StartIndex;
+    int end = Model.EndIndex;
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
 
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
@@ -166,11 +167,6 @@
 
 <div dir="rtl" class="container-fluid">
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0">@ViewData["Title"]</h4>
-        <small class="text-muted d-none d-md-inline">إجمالي التسويات (بعد الفلتر): @total</small>
-    </div>
-
     @* ===== شريط الفلاتر — ثلاثة أعمدة مثل قائمة فواتير المبيعات (بحث | كود | أدوات) ===== *@
     <div class="erp-list-filter-bar d-print-none mt-2">
         <div class="row g-3 align-items-center flex-wrap justify-content-center">
@@ -246,13 +242,13 @@
                            type="number"
                            class="form-control erp-filter-input"
                            placeholder="من"
-                           value="@(ViewBag.CodeFrom?.ToString() ?? "")" />
+                           value="@(fromCode?.ToString() ?? "")" />
 
                     <input id="saCodeToInput"
                            type="number"
                            class="form-control erp-filter-input"
                            placeholder="إلى"
-                           value="@(ViewBag.CodeTo?.ToString() ?? "")" />
+                           value="@(toCode?.ToString() ?? "")" />
 
                     <button type="button"
                             id="btnSaApplyCodeFilter"
@@ -273,6 +269,12 @@
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
+                        <a class="btn btn-erp btn-erp-success btn-erp-sm"
+                           asp-action="Show"
+                           asp-route-id="0"
+                           asp-route-frame="1">
+                            تسوية جديدة
+                        </a>
                         <button type="button"
                                 class="btn btn-erp btn-erp-secondary btn-erp-sm"
                                 data-bs-toggle="modal"
@@ -290,11 +292,11 @@
                                 class="btn btn-erp btn-erp-secondary btn-erp-sm">
                             🖨️ طباعة
                         </button>
+                    </div>
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
                         <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات التسوية المحددة">
                             <button type="button" id="btnShowSA" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض التسوية">عرض</button>
                         </span>
-                    </div>
-                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
                         <div class="dropdown d-inline">
                             <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle"
                                     type="button"
@@ -338,13 +340,13 @@
                             {
                                 <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" />
                             }
-                            @if (ViewBag.CodeFrom != null)
+                            @if (fromCode.HasValue)
                             {
-                                <input type="hidden" name="codeFrom" value="@ViewBag.CodeFrom" />
+                                <input type="hidden" name="codeFrom" value="@fromCode" />
                             }
-                            @if (ViewBag.CodeTo != null)
+                            @if (toCode.HasValue)
                             {
-                                <input type="hidden" name="codeTo" value="@ViewBag.CodeTo" />
+                                <input type="hidden" name="codeTo" value="@toCode" />
                             }
                             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
@@ -386,6 +388,18 @@
         </div>
     </div>
 
+    @* كارت إجمالي العدد (بعد الفلترة) — مثل قائمة العملاء *@
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mt-2" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي التسويات</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @* ===== جدول تسويات الجرد داخل حاوية تمرير ===== *@
     <div class="erp-table-scroll-container mt-3 ps-0 pe-0">
         <div id="saTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
@@ -399,23 +413,21 @@
                     <th data-col="id">@filterableCol("id", "id", "كود التسوية")</th>
                     <th data-col="date">@filterableCol("date", "date", "تاريخ التسوية")</th>
                     <th data-col="warehouse">@filterableCol("warehouse", "warehouse", "كود المخزن")</th>
+                    <th data-col="warehouseName">اسم المخزن</th>
                     <th data-col="reference">@filterableCol("reference", "reference", "رقم مرجعي")</th>
                     <th data-col="reason">@filterableCol("reason", "reason", "السبب")</th>
-                    <th data-col="products">@filterableCol("products", "id", "اسم الصنف")</th>
                     <th data-col="qtyBefore" class="text-center">@filterableCol("qtyBefore", "id", "الكمية قبل")</th>
                     <th data-col="qtyAfter" class="text-center">@filterableCol("qtyAfter", "id", "الكمية بعد")</th>
                     <th data-col="costBefore" class="text-end">@filterableCol("costBefore", "id", "التكلفة قبل")</th>
                     <th data-col="costAfter" class="text-end">@filterableCol("costAfter", "id", "التكلفة بعد")</th>
                     <th data-col="created">@filterableCol("created", "created", "تاريخ الإنشاء")</th>
-
-                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:200px;"></th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="13" class="text-center text-muted py-4">
+                        <td colspan="12" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -430,14 +442,6 @@
                         var totalQtyAfter = lines.Sum(l => l.QtyAfter);
                         var totalCostBefore = lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyBefore * l.CostPerUnit.Value : 0);
                         var totalCostAfter = lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyAfter * l.CostPerUnit.Value : 0);
-                        var productNames = lines
-                            .Select(l => l.Product?.ProdName ?? $"صنف #{l.ProductId}")
-                            .Where(n => !string.IsNullOrEmpty(n))
-                            .Distinct()
-                            .ToList();
-                        var productsDisplay = productNames.Count > 3
-                            ? string.Join("، ", productNames.Take(2)) + $" و{productNames.Count - 2} أصناف أخرى"
-                            : (productNames.Any() ? string.Join("، ", productNames) : "-");
                         <tr class="erp-list-selectable-row"
                             data-adjustment-id="@a.Id"
                             data-show-url="@showUrl"
@@ -452,33 +456,14 @@
                             <td data-col="id">@a.Id</td>
                             <td data-col="date">@a.AdjustmentDate.ToString("yyyy-MM-dd")</td>
                             <td data-col="warehouse">@a.WarehouseId</td>
+                            <td data-col="warehouseName">@(a.Warehouse?.WarehouseName ?? "-")</td>
                             <td data-col="reference">@a.ReferenceNo</td>
                             <td data-col="reason">@a.Reason</td>
-                            <td data-col="products" style="max-width:180px;" title="@productsDisplay">@productsDisplay</td>
                             <td data-col="qtyBefore" class="text-center">@totalQtyBefore</td>
                             <td data-col="qtyAfter" class="text-center">@totalQtyAfter</td>
                             <td data-col="costBefore" class="text-end">@totalCostBefore.ToString("N2")</td>
                             <td data-col="costAfter" class="text-end">@totalCostAfter.ToString("N2")</td>
                             <td data-col="created">@a.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
-                                   href="@showUrl"
-                                   data-tab-id="stock-adjustment-create"
-                                   data-tab-title="تسوية جردية"
-                                   data-url="@showUrl">
-                                    عرض
-                                </a>
-                                <form asp-action="Delete"
-                                      asp-controller="StockAdjustments"
-                                      asp-route-id="@a.Id"
-                                      method="post"
-                                      class="d-inline"
-                                      onsubmit="return confirm('تأكيد حذف التسوية رقم @a.Id؟');">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">حذف</button>
-                                </form>
-                            </td>
                         </tr>
                     }
                 }
@@ -542,6 +527,7 @@
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
     </div>

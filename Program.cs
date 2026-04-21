@@ -166,6 +166,73 @@ namespace ERP
                     logger.LogInformation("Database Migrate skipped (RunMigrationsOnStartup=false).");
                 }
 
+                // توحيد التشغيلة/الصلاحية الافتراضية للسجلات القديمة إن كانت فارغة
+                try
+                {
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [SalesInvoiceLines] SET [BatchNo] = N'55555'
+WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [SalesInvoiceLines] SET [Expiry] = '20280101'
+WHERE [Expiry] IS NULL;");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [SalesReturnLines] SET [BatchNo] = N'55555'
+WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [SalesReturnLines] SET [Expiry] = '20280101'
+WHERE [Expiry] IS NULL;");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [PILines] SET [BatchNo] = N'55555'
+WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [PILines] SET [Expiry] = '20280101'
+WHERE [Expiry] IS NULL;");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [PurchaseReturnLines] SET [BatchNo] = N'55555'
+WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [PurchaseReturnLines] SET [Expiry] = '20280101'
+WHERE [Expiry] IS NULL;");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [StockLedger] SET [BatchNo] = N'55555'
+WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [StockLedger] SET [Expiry] = '20280101'
+WHERE [Expiry] IS NULL;");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [Stock_Batches] SET [BatchNo] = N'55555'
+WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [Stock_Batches] SET [Expiry] = '20280101'
+WHERE [Expiry] IS NULL;");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [Batches] SET [BatchNo] = N'55555'
+WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
+
+                    await db.Database.ExecuteSqlRawAsync(@"
+UPDATE [Batches] SET [Expiry] = '20280101'
+WHERE [Expiry] < '19000101';");
+
+                    logger.LogInformation("Default batch/expiry backfill completed (BatchNo=55555, Expiry=2028-01-01).");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Default batch/expiry backfill failed on startup.");
+                    throw;
+                }
+
                 if (runSeed)
                 {
                     try

@@ -446,7 +446,7 @@
                             <div class="row g-3 align-items-end mt-2">
                                 <div class="col-md-6 col-lg-3">
                                     <label class="form-label form-label-sm">حالة الأمر</label>
-                                    <input id="StatusDisplay" class="form-control form-control-sm text-center" value="@(Model?.IsConverted == true ? "محول" : (Model?.Status ?? "Draft"))" readonly />
+                                    <input id="StatusDisplay" class="form-control form-control-sm text-center" value="@(Model?.IsConverted == true ? "محول" : (Model?.Status ?? "غير مرحلة"))" readonly />
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label class="form-label form-label-sm">سياسة العميل</label>
@@ -661,7 +661,7 @@
                                     <span class="invoice-summary-label">الحساب السابق للعميل</span>
                                     <span id="CustomerPreviousBalanceValue" class="invoice-summary-value">@(Model?.Customer != null ? Model.Customer.CurrentBalance.ToString("0.00") : "—")</span>
                                 </div>
-                                <div class="invoice-summary-item invoice-summary-box" title="تقديري — أمر بيع غير مرحّل">
+                                <div class="invoice-summary-item invoice-summary-box" title="تقديري — أمر بيع غير مرحلة">
                                     <span class="invoice-summary-label">المبلغ المتبقى من الحد الائتماني</span>
                                     <span id="CreditRemainingValue" class="invoice-summary-value">@(Model?.Customer != null ? Math.Max(0m, (Model.Customer.CreditLimit) - Model.Customer.CurrentBalance - expectedTotal).ToString("0.00") : "—")</span>
                                 </div>
@@ -703,9 +703,14 @@
                                         <td colspan="9" class="p-0 border-0 pi-print-thead-banner-cell">
                                             <div class="pi-print-header mb-2">
                                                 <div class="pi-print-company-row d-flex justify-content-between align-items-center">
-                                                    <div class="pi-print-logo-placeholder"></div>
+                                                    <div class="pi-print-logo-placeholder">
+                                                        @if (!string.IsNullOrWhiteSpace(ViewBag.PrintHeaderLogoUrl as string))
+                                                        {
+                                                            <img src="@((string)ViewBag.PrintHeaderLogoUrl)" alt="logo" style="max-width:80px; max-height:36px;" />
+                                                        }
+                                                    </div>
                                                     <div class="text-center flex-grow-1">
-                                                        <h2 class="pi-print-company-name mb-0 fw-bold">شركة الهدى</h2>
+                                                        <h2 class="pi-print-company-name mb-0 fw-bold">@((string?)ViewBag.PrintHeaderCompanyName ?? "شركة الهدى")</h2>
                                                         <span class="pi-print-doc-title">ERP — أمر بيع</span>
                                                     </div>
                                                     <div style="width:48px"></div>
@@ -1876,7 +1881,7 @@
                             document.getElementById('OrderNumberDisplay').value = data.orderNumber || soId;
                             document.getElementById('OrderDateDisplay').value = data.orderDate || '';
                             document.getElementById('OrderTimeDisplay').value = data.orderTime || '';
-                            document.getElementById('StatusDisplay').value = data.isConverted ? 'محول' : (data.status || 'Draft');
+                            document.getElementById('StatusDisplay').value = data.isConverted ? 'محول' : (data.status || 'غير مرحلة');
                             if (data.createdBy) document.getElementById('OrderCreatedByDisplay').value = data.createdBy;
                             if (data.isConverted) { document.getElementById('SOIsConverted').value = '1'; isLocked = true; }
                             var btnPrintSo = document.getElementById('btnPrintSoDropdown');

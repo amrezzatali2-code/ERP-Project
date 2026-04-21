@@ -119,6 +119,7 @@ namespace ERP.Data.Seed
             "UserActivityLogs.Index", "UserActivityLogs.Details", "UserActivityLogs.Export");
 
         private static readonly string[] SettingsRead = M(
+            "Settings.PrintHeader",
             "DocumentSeries.Index", "DocumentSeries.Details",
             "Policies.Index", "Policies.Details", "Policies.Export",
             "ProductGroups.Index", "ProductGroups.Details", "ProductGroups.Export",

@@ -13,6 +13,8 @@
     // قيم البحث/الترتيب الحالية
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "all";
+    var searchMode = ((string?)ViewBag.SearchMode ?? "contains").ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "SRDate";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "desc");
 
@@ -61,6 +63,7 @@
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -96,6 +99,7 @@
         {
             search,
             searchBy,
+            searchMode,
             sort = col,
             dir = newDir,
             page = 1,
@@ -178,6 +182,15 @@
             overflow: hidden;
         }
         .erp-sr-index .erp-sr-summary-stat .card-body { text-align: right; }
+        .erp-sr-index .erp-sr-export-format-select {
+            width: 85px;
+            min-width: 85px;
+            font-size: .95rem;
+            font-weight: 500;
+            padding-left: 1.6rem !important; /* مسافة أكبر بين النص وسهم الـ select */
+            padding-right: .55rem !important;
+            background-position: left .45rem center !important;
+        }
     </style>
 
     <div class="d-flex justify-content-between align-items-center mb-2">
@@ -193,6 +206,11 @@
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في مرتجعات البيع</label>
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
                         <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
@@ -266,6 +284,8 @@
                         <form method="get" asp-action="Export" asp-controller="SalesReturns" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
+                            <input type="hidden" name="visibleCols" value="" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
@@ -286,7 +306,7 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_posted))   { <input type="hidden" name="filterCol_posted"   value="@filterCol_posted" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_region))   { <input type="hidden" name="filterCol_region"   value="@filterCol_region" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_createdby)) { <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" /> }
-                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="اختر صيغة التصدير">
+                            <select name="format" class="form-select form-select-arrow erp-filter-input erp-sr-export-format-select" title="اختر صيغة التصدير">
                                 <option value="excel" selected>Excel</option>
                                 <option value="pdf">PDF</option>
                             </select>
@@ -348,7 +368,7 @@
                         <th data-col="ref">@filterableCol("ref", "Ref", "مرجع فاتورة البيع")</th>
                         <th data-col="net">@filterableCol("net", "NetTotal", "الصافي")</th>
                         <th data-col="status">@filterableCol("status", "Status", "الحالة")</th>
-                        <th data-col="posted">@filterableCol("posted", "Posted", "مرحل؟")</th>
+                        <th data-col="posted">@filterableCol("posted", "Posted", "حالة الترحيل")</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -386,8 +406,10 @@
                                 <td data-col="createdby">@(sr.CreatedBy ?? "")</td>
                                 <td data-col="ref">@sr.SalesInvoiceId</td>
                                 <td data-col="net">@sr.NetTotal.ToString("0.00")</td>
-                                <td data-col="status">@sr.Status</td>
-                                <td data-col="posted">@(sr.IsPosted ? "نعم" : "لا")</td>
+                                <td data-col="status">
+                                    @(sr.Status == "Draft" ? "غير مرحلة" : (sr.Status == "Posted" ? "مرحلة 1" : sr.Status))
+                                </td>
+                                <td data-col="posted">@(sr.IsPosted ? "مرحلة 1" : "غير مرحلة")</td>
                             </tr>
                         }
                     }
@@ -424,6 +446,7 @@
               class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -516,6 +539,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -840,6 +864,31 @@
                     const modal   = bootstrap.Modal.getInstance(modalEl);
                     modal?.hide();
                 });
+
+            function getVisibleColsInTableOrder() {
+                const headerCells = Array.from(table.querySelectorAll("thead th[data-col]"));
+                const ordered = headerCells
+                    .filter(th => !th.hasAttribute("data-col-fixed"))
+                    .map(th => th.getAttribute("data-col"))
+                    .filter(Boolean);
+
+                let hiddenCols = [];
+                try {
+                    const saved = localStorage.getItem(storageKey);
+                    if (saved) hiddenCols = JSON.parse(saved) || [];
+                } catch { hiddenCols = []; }
+
+                const hiddenSet = new Set(hiddenCols.map(x => String(x)));
+                return ordered.filter(k => !hiddenSet.has(String(k)));
+            }
+
+            document.querySelectorAll("form.erp-export-form").forEach(function (form) {
+                form.addEventListener("submit", function () {
+                    const inp = form.querySelector("input[name='visibleCols']");
+                    if (!inp) return;
+                    inp.value = getVisibleColsInTableOrder().join(",");
+                });
+            });
         })();
 
         // =========================

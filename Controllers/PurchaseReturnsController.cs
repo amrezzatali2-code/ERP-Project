@@ -494,11 +494,17 @@ namespace ERP.Controllers
                 var q = visibleReturns.Where(p => p.Status != null).Select(p => p.Status!);
                 if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
                 var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
-                return Json(list.Select(v => new { value = v, display = v }));
+                return Json(list.Select(v => new
+                {
+                    value = v,
+                    display = v.Equals("Draft", StringComparison.OrdinalIgnoreCase) ? "غير مرحلة"
+                        : v.Equals("Posted", StringComparison.OrdinalIgnoreCase) ? "مرحلة 1"
+                        : v
+                }));
             }
             if (columnLower == "posted")
             {
-                var items = new[] { new { value = "true", display = "نعم" }, new { value = "false", display = "لا" } };
+                var items = new[] { new { value = "true", display = "مرحلة 1" }, new { value = "false", display = "غير مرحلة" } };
                 return Json(items);
             }
             if (columnLower == "postedat")

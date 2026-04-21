@@ -1084,10 +1084,11 @@
                         <a class="btn btn-erp btn-erp-outline-warning btn-erp-sm open-same-tab w-100 text-decoration-none"
                            id="btnCreateEmptyReturnFromCustomer"
                            data-lock-posted="1"
+                           data-keep-active-posted="1"
                            data-tab-id="sales-return-show-tab"
                            data-tab-title="مرتجع بيع"
-                           data-base-url="@Url.Action("Create", "SalesReturns", new { salesInvoiceId = 0, customerId = 0, standalone = false, frame = 1 })"
-                           data-url="@Url.Action("Create", "SalesReturns", new { salesInvoiceId = Model?.SIId, customerId = Model?.CustomerId, standalone = false, frame = 1 })">
+                           data-base-url="@Url.Action("Create", "SalesReturns", new { salesInvoiceId = 0, customerId = 0, standalone = false, autoCreate = true, focusProduct = true, frame = 1 })"
+                           data-url="@Url.Action("Create", "SalesReturns", new { salesInvoiceId = Model?.SIId, customerId = Model?.CustomerId, standalone = false, autoCreate = true, focusProduct = true, frame = 1 })">
                             ↩️ مرتجع جديد باسم العميل
                         </a>
 
@@ -1839,9 +1840,14 @@
                     <td colspan="9" class="p-0 border-0 pi-print-thead-banner-cell">
                         <div class="pi-print-header mb-2">
                             <div class="pi-print-company-row d-flex justify-content-between align-items-center">
-                                <div class="pi-print-logo-placeholder"></div>
+                                <div class="pi-print-logo-placeholder">
+                                    @if (!string.IsNullOrWhiteSpace(ViewBag.PrintHeaderLogoUrl as string))
+                                    {
+                                        <img src="@((string)ViewBag.PrintHeaderLogoUrl)" alt="logo" style="max-width:80px; max-height:36px;" />
+                                    }
+                                </div>
                                 <div class="d-flex align-items-center gap-2">
-                                    <h2 class="pi-print-company-name mb-0 fw-bold">شركة الهدى</h2>
+                                    <h2 class="pi-print-company-name mb-0 fw-bold">@((string?)ViewBag.PrintHeaderCompanyName ?? "شركة الهدى")</h2>
                                     <span class="pi-print-doc-title">ERP — فاتورة مبيعات</span>
                                 </div>
                             </div>
@@ -2374,11 +2380,14 @@
                         if (policyIdBox)   policyIdBox.value   = '';
                         if (policyTextBox) policyTextBox.value = '';
 
-                        // إخفاء رسالة العميل الموقوف وتفعيل زر الحفظ
+                        // إخفاء رسالة العميل الموقوف وتفعيل زر الحفظ (إلا إذا كان مقفولاً بعد حفظ ناجح)
                         const suspendedMsg = document.getElementById('customerSuspendedMsg');
                         const saveBtn = document.getElementById('btnSaveInvoiceHeader');
                         if (suspendedMsg) suspendedMsg.classList.add('d-none');
-                        if (saveBtn) saveBtn.disabled = false;
+                        if (saveBtn) {
+                            const lockedAfterSave = saveBtn.dataset.lockedAfterSuccess === '1';
+                            saveBtn.disabled = lockedAfterSave ? true : false;
+                        }
 
                         // ✅ تحديث زر حجم التعامل (تفعيله عند إلغاء اختيار العميل)
                         if (typeof window.__refreshSideNavButtons === 'function') {
@@ -2454,12 +2463,15 @@
                 window.__refreshSideNavButtons();
             }
 
-                    // ✅ العميل الموقوف: إظهار الرسالة ومنع الحفظ
+                    // ✅ العميل الموقوف: إظهار الرسالة ومنع الحفظ (إلا إذا كان الزر مقفولاً بعد حفظ ناجح)
                     const isActive = ((opt.isActive || '1') === '1');
                     const suspendedMsg = document.getElementById('customerSuspendedMsg');
                     const saveBtn = document.getElementById('btnSaveInvoiceHeader');
                     if (suspendedMsg) suspendedMsg.classList.toggle('d-none', isActive);
-                    if (saveBtn) saveBtn.disabled = !isActive;
+                    if (saveBtn) {
+                        const lockedAfterSave = saveBtn.dataset.lockedAfterSuccess === '1';
+                        saveBtn.disabled = lockedAfterSave ? true : !isActive;
+                    }
 
                 }
 
@@ -5452,6 +5464,7 @@
                         saveBtn.type = 'button'; // تعليق: منع submit الافتراضي
 
                         let busy = false; // متغير: يمنع الضغط المتكرر
+                        let lockAfterSuccess = false; // متغير: بعد أول إنشاء رقم فاتورة نقفل الزر
 
                         saveBtn.addEventListener('click', async (e) => {
                             e.preventDefault();
@@ -5554,11 +5567,10 @@
                                 const statusHidden = document.getElementById('InvoiceStatusHidden');
                                 if (statusHidden && data.status) statusHidden.value = data.status;
 
-                              const isPostedDisplay = document.getElementById('InvoiceIsPostedDisplay');
-                             if (isPostedDisplay) {
-                              // تعليق: نعرض الحالة النصية (مرحلة 1/2/...) بدل نعم/لا
-                                 isPostedDisplay.value = (data && data.status) ? data.status : 'مسودة';
-                             }
+                                const invoiceStatusDisplay = document.getElementById('InvoiceStatusDisplay');
+                                if (invoiceStatusDisplay) {
+                                    invoiceStatusDisplay.value = (data && data.status) ? data.status : 'غير مرحلة';
+                                }
 
                                 const createdByDisplay = document.getElementById('InvoiceCreatedByDisplay');
                                 if (createdByDisplay && data.createdBy) createdByDisplay.value = data.createdBy;
@@ -5620,12 +5632,19 @@
                                     ProdNameInput?.select?.();
                                 }, 400);
 
+                                // ✅ حسب الطلب: قفل زر الحفظ فقط بعد أول ضغطة ناجحة تُنشئ رقم الفاتورة
+                                if (invoiceId <= 0 && newId > 0) {
+                                    lockAfterSuccess = true;
+                                    saveBtn.dataset.lockedAfterSuccess = '1';
+                                    saveBtn.title = 'تم حفظ الهيدر وإنشاء رقم الفاتورة';
+                                }
+
                             } catch (err) {
                                 console.error(err);
                                 alert('تعذر الاتصال بالخادم لحفظ الفاتورة.');
                             } finally {
                                 busy = false;
-                                saveBtn.disabled = false;
+                                saveBtn.disabled = lockAfterSuccess ? true : false;
                             }
                         });
 
@@ -5920,7 +5939,7 @@
                         document.addEventListener("DOMContentLoaded", function () {
 
                             const btnPost = document.getElementById("btnPostInvoice");              // متغير: زر الترحيل
-                            const isPostedBox = document.getElementById("InvoiceIsPostedDisplay");  // متغير: خانة "مرحّلة؟" (عرض فقط)
+                            const invoiceStatusBox = document.getElementById("InvoiceStatusDisplay");  // متغير: خانة حالة الفاتورة (عرض فقط)
 
                             if (!btnPost) return;
 
@@ -6033,8 +6052,8 @@
                                     // =========================
                                     // 4) تحديث البوكس (عرض فقط)
                                     // =========================
-                                    if (isPostedBox) {
-                                        isPostedBox.value = (data && data.postedLabel) ? data.postedLabel : "نعم";
+                                    if (invoiceStatusBox) {
+                                        invoiceStatusBox.value = (data && data.postedLabel) ? data.postedLabel : "مرحلة 1";
                                     }
 
                                     // =========================
@@ -6110,8 +6129,8 @@
                                     if (data && data.invoiceReposted) {
                                         if (typeof setInvoicePosted === "function") setInvoicePosted(true);
                                         if (typeof applyPostedUiLock === "function") applyPostedUiLock();
-                                        const isPostedDisplay = document.getElementById("InvoiceIsPostedDisplay");
-                                        if (isPostedDisplay && data.invoiceStatus) isPostedDisplay.value = data.invoiceStatus;
+                                        const invoiceStatusDisplay = document.getElementById("InvoiceStatusDisplay");
+                                        if (invoiceStatusDisplay && data.invoiceStatus) invoiceStatusDisplay.value = data.invoiceStatus;
                                         const statusHidden = document.getElementById("InvoiceStatusHidden");
                                         if (statusHidden && data.invoiceStatus) statusHidden.value = data.invoiceStatus;
                                         const btnPost = document.getElementById("btnPostInvoice");
@@ -6159,7 +6178,7 @@
 
                             const btnOpen = document.getElementById("btnOpenInvoice");              // متغير: زر الفتح
                             const btnPost = document.getElementById("btnPostInvoice");              // متغير: زر الترحيل (لو موجود)
-                            const isPostedBox = document.getElementById("InvoiceIsPostedDisplay");  // متغير: خانة مُرحَّلة؟ (لو موجودة)
+                            const invoiceStatusBox = document.getElementById("InvoiceStatusDisplay");  // متغير: خانة حالة الفاتورة (لو موجودة)
 
                             if (!btnOpen) return;
 
@@ -6248,7 +6267,7 @@
                         }
 
                         // ✅ تحديث نفس البوكس لحالة واحدة: "مفتوحة للتعديل"
-                        if (isPostedBox) isPostedBox.value = "مفتوحة للتعديل";
+                        if (invoiceStatusBox) invoiceStatusBox.value = "مفتوحة للتعديل";
 
                         showToast(okMsg, "success");
 
@@ -6603,7 +6622,10 @@
                             setBtnState(btnNext, canNext);
 
                             // ✅ تحديث زر حجم تعامل العميل (نفس طلب الشراء: base + id في query ليتيح كتابة أي عميل في صفحة حجم التعامل)
-                            const customerId = getInt('CustomerId');
+                            let customerId = getInt('CustomerId');
+                            if (customerId <= 0) {
+                                customerId = getInt('CustomerCodeDisplay');
+                            }
                             const btnVolume = document.getElementById('btnCustomerVolume');
                             if (btnVolume) {
                                 const volBase = btnVolume.getAttribute('data-base-url') || '';
@@ -6616,13 +6638,19 @@
                             const btnEmptyReturn = document.getElementById('btnCreateEmptyReturnFromCustomer');
                             if (btnEmptyReturn) {
                                 const retBase = btnEmptyReturn.getAttribute('data-base-url')
-                                    || '@Url.Action("Create", "SalesReturns", new { salesInvoiceId = 0, customerId = 0, standalone = false, frame = 1 })';
+                                    || '@Url.Action("Create", "SalesReturns", new { salesInvoiceId = 0, customerId = 0, standalone = false, autoCreate = true, focusProduct = true, frame = 1 })';
                                 let returnUrl = setOrReplaceParam(retBase, 'customerId', customerId > 0 ? customerId : 0);
                                 returnUrl = setOrReplaceParam(returnUrl, 'salesInvoiceId', currentId > 0 ? currentId : 0);
-                                const postedNow = (typeof isInvoicePosted === 'function') ? isInvoicePosted() : false;
-                                const isEnabled = customerId > 0 && currentId > 0 && !postedNow;
-                                btnEmptyReturn.setAttribute('data-url', isEnabled ? returnUrl : '#');
-                                btnEmptyReturn.setAttribute('href', isEnabled ? returnUrl : '#');
+                                returnUrl = setOrReplaceParam(returnUrl, 'autoCreate', 'true');
+                                returnUrl = setOrReplaceParam(returnUrl, 'focusProduct', 'true');
+                                // يكفي وجود فاتورة مفتوحة (SIId > 0). customerId يُعتبر fallback فقط.
+                                const isEnabled = currentId > 0;
+                                btnEmptyReturn.setAttribute('data-url', isEnabled ? returnUrl : '');
+                                if (isEnabled) {
+                                    btnEmptyReturn.setAttribute('href', returnUrl);
+                                } else {
+                                    btnEmptyReturn.removeAttribute('href');
+                                }
                                 btnEmptyReturn.classList.toggle('disabled', !isEnabled);
                                 btnEmptyReturn.setAttribute('aria-disabled', isEnabled ? 'false' : 'true');
                             }
@@ -6695,8 +6723,8 @@
                                 }
                                 if (typeof setInvoicePosted === "function") setInvoicePosted(bodyIsPosted);
                                 if (typeof applyPostedUiLock === "function") applyPostedUiLock();
-                                const isPostedDisplay = document.getElementById("InvoiceIsPostedDisplay");
-                                if (isPostedDisplay && bodyStatus) isPostedDisplay.value = bodyStatus;
+                                const invoiceStatusDisplay = document.getElementById("InvoiceStatusDisplay");
+                                if (invoiceStatusDisplay && bodyStatus) invoiceStatusDisplay.value = bodyStatus;
                                 const statusHidden = document.getElementById("InvoiceStatusHidden");
                                 if (statusHidden && bodyStatus) statusHidden.value = bodyStatus;
                                 const btnPost = document.getElementById("btnPostInvoice");
@@ -6948,7 +6976,6 @@
 
                     const totalsWrap = el("piPrintTotalsWrap");
                     if (!totalsWrap) return false;
-                    const totalLines = el("TotalLinesValue")?.textContent?.trim() || "0";
                     const totalItems = el("TotalItemsValue")?.textContent?.trim() || "0";
                     const totalQty = el("TotalQtyValue")?.textContent?.trim() || "0";
                     const totalRetail = el("TotalRetailValue")?.textContent?.trim() || "0";
@@ -6959,23 +6986,20 @@
                     const netTotal = el("NetTotalValue")?.textContent?.trim() || "0";
                     const grandWithPrev = el("GrandTotalWithPreviousValue")?.textContent?.trim() || totalAfterDiscountAndTax;
                     const prevBalance = el("CustomerPreviousBalanceValue")?.textContent?.trim() || "0";
-                    const creditRemaining = el("CreditRemainingValue")?.textContent?.trim() || "0";
                     totalsWrap.innerHTML = `
 <div class="card shadow-sm invoice-totals-card mb-0">
     <div class="card-body py-2">
         <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row invoice-summary-row-boxes">
-            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">عدد السطور</span><span class="invoice-summary-value">${totalLines}</span></div>
             <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">عدد الأصناف</span><span class="invoice-summary-value">${totalItems}</span></div>
             <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي الكمية</span><span class="invoice-summary-value">${totalQty}</span></div>
             <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">الحساب السابق للعميل</span><span class="invoice-summary-value">${prevBalance}</span></div>
-            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">المبلغ المتبقى من الحد الائتماني</span><span class="invoice-summary-value">${creditRemaining}</span></div>
         </div>
         <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row invoice-summary-row-totals mt-2">
-            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي سعر الجمهور</span><span class="invoice-summary-value">${totalRetail}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">اجمالي الجمهور</span><span class="invoice-summary-value">${totalRetail}</span></div>
             <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي الفاتورة</span><span class="invoice-summary-value">${totalAfterDiscount}</span></div>
             <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">نسبة الضريبة %</span><span class="invoice-summary-value">${taxPct}</span></div>
             <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">قيمة الضريبة</span><span class="invoice-summary-value">${tax}</span></div>
-            <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main"><span class="invoice-summary-label">الإجمالي</span><span class="invoice-summary-value invoice-summary-value-main fw-bold">${grandWithPrev}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">الإجمالي</span><span class="invoice-summary-value fw-bold">${grandWithPrev}</span></div>
         </div>
     </div>
 </div>`;

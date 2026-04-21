@@ -112,9 +112,10 @@ namespace ERP.Controllers
             {
                 "siid", "line", "lineno", "prodid", "prodname", "customername", "region", "createdby",
                 "qty", "price", "unit", "total", "net", "disc1", "disc2", "disc3", "discval",
+                "itemreturnqty", "finalnetafterall",
                 "batch", "expiry", "رقم الفاتورة", "رقم السطر", "كود الصنف", "اسم الصنف",
                 "اسم العميل", "المنطقة", "الكاتب", "الكمية", "سعر الجمهور", "التشغيلة", "الصلاحية",
-                "الخصم", "قيمة الخصم"
+                "الخصم", "قيمة الخصم", "مرتجع الصنف", "الصافي النهائي بعد كل حاجة"
             };
 
             // إذا كان search مطابق تماماً لأي اسم عمود، نرجعه null
@@ -381,6 +382,7 @@ namespace ERP.Controllers
             int? siId,
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -506,10 +508,62 @@ namespace ERP.Controllers
                 intFields: intFields,
                 orderFields: orderFields,
                 defaultSearchBy: "all",
-                defaultSortBy: "LineNo"
+                defaultSortBy: "LineNo",
+                searchMode: searchMode
             );
 
             return q;
+        }
+
+        private static string BuildLineReturnKey(int siId, int lineNo, int prodId) =>
+            $"{siId}:{lineNo}:{prodId}";
+
+        private async Task<(Dictionary<string, int> returnQtyByLine, Dictionary<string, decimal> finalNetByLine)> BuildLineReturnMapsAsync(
+            IReadOnlyList<SalesInvoiceLine> lines)
+        {
+            var returnQtyByLine = new Dictionary<string, int>();
+            var finalNetByLine = new Dictionary<string, decimal>();
+            if (lines.Count == 0)
+                return (returnQtyByLine, finalNetByLine);
+
+            var invoiceIds = lines.Select(l => l.SIId).Distinct().ToList();
+            var lineNos = lines.Select(l => l.LineNo).Distinct().ToList();
+            var prodIds = lines.Select(l => l.ProdId).Distinct().ToList();
+
+            var returns = await _context.SalesReturnLines
+                .AsNoTracking()
+                .Where(r =>
+                    r.SalesInvoiceId.HasValue &&
+                    r.SalesInvoiceLineNo.HasValue &&
+                    invoiceIds.Contains(r.SalesInvoiceId.Value) &&
+                    lineNos.Contains(r.SalesInvoiceLineNo.Value) &&
+                    prodIds.Contains(r.ProdId))
+                .Select(r => new
+                {
+                    SIId = r.SalesInvoiceId!.Value,
+                    LineNo = r.SalesInvoiceLineNo!.Value,
+                    r.ProdId,
+                    r.Qty,
+                    r.LineNetTotal
+                })
+                .ToListAsync();
+
+            var returnNetByLine = returns
+                .GroupBy(r => BuildLineReturnKey(r.SIId, r.LineNo, r.ProdId))
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.LineNetTotal));
+
+            returnQtyByLine = returns
+                .GroupBy(r => BuildLineReturnKey(r.SIId, r.LineNo, r.ProdId))
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
+
+            foreach (var line in lines)
+            {
+                var key = BuildLineReturnKey(line.SIId, line.LineNo, line.ProdId);
+                var returnNet = returnNetByLine.TryGetValue(key, out var rn) ? rn : 0m;
+                finalNetByLine[key] = line.LineNetTotal - returnNet;
+            }
+
+            return (returnQtyByLine, finalNetByLine);
         }
 
         // =========================================================
@@ -519,6 +573,7 @@ namespace ERP.Controllers
             int? siId,
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "LineNo",
             string? dir = "asc",
             int page = 1,
@@ -581,9 +636,12 @@ namespace ERP.Controllers
             ViewBag.DateField = dateField;
 
             var cleanedSearch = CleanSearchFromColumnNames(search);
+            searchMode ??= "contains";
+            var sm = searchMode.Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
 
             var q = BuildQuery(
-                siId, search, searchBy, sort, dir,
+                siId, search, searchBy, sm, sort, dir,
                 useDateRange, fromDate, toDate, finalFromCode, finalToCode,
                 filterCol_siid, filterCol_lineno, filterCol_prodid, filterCol_prodname, filterCol_customername,
                 filterCol_qty, filterCol_price, filterCol_disc1, filterCol_disc2, filterCol_disc3, filterCol_discval,
@@ -737,6 +795,7 @@ namespace ERP.Controllers
 
                 ViewBag.Search = cleanedSearch ?? "";
                 ViewBag.SearchBy = searchBy ?? "all";
+                ViewBag.SearchMode = sm;
                 ViewBag.Sort = sortNorm;
                 ViewBag.Dir = dirNorm;
                 ViewBag.Page = page;
@@ -749,6 +808,9 @@ namespace ERP.Controllers
                 ViewBag.TotalNet = allItems.Sum(line => line.LineNetTotal);
                 ViewBag.CategoriesCount = allItems.Where(l => l.Product?.CategoryId != null)
                     .Select(l => l.Product!.CategoryId!.Value).Distinct().Count();
+                var (returnQtyByLinePaged, finalNetByLinePaged) = await BuildLineReturnMapsAsync(pagedItems);
+                ViewBag.ReturnQtyByLine = returnQtyByLinePaged;
+                ViewBag.FinalNetByLine = finalNetByLinePaged;
                 BagColumnFilters();
                 BagSearchSortLists(sortNorm);
                 return View(model);
@@ -772,6 +834,7 @@ namespace ERP.Controllers
 
             ViewBag.Search = cleanedSearch ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = sort ?? "LineNo";
             ViewBag.Dir = dirNorm;
             ViewBag.Page = page;
@@ -783,6 +846,9 @@ namespace ERP.Controllers
             ViewBag.TotalAfterDiscount = totalAfterDiscount;
             ViewBag.TotalNet = totalNet;
             ViewBag.CategoriesCount = categoriesCount;
+            var (returnQtyByLine, finalNetByLine) = await BuildLineReturnMapsAsync(items);
+            ViewBag.ReturnQtyByLine = returnQtyByLine;
+            ViewBag.FinalNetByLine = finalNetByLine;
             BagColumnFilters();
             BagSearchSortLists(sort ?? "LineNo");
             return View(model);
@@ -1105,6 +1171,7 @@ namespace ERP.Controllers
             int? siId,
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "LineNo",
             string? dir = "asc",
             int page = 1,
@@ -1142,6 +1209,7 @@ namespace ERP.Controllers
             string? filterCol_discvalExpr = null,
             string? filterCol_totalExpr = null,
             string? filterCol_netExpr = null,
+            string? visibleCols = null,
             string format = "excel")
         {
             int? codeFromQ = Request.Query.ContainsKey("codeFrom")
@@ -1152,9 +1220,12 @@ namespace ERP.Controllers
                 : null;
             var finalFromCode = fromCode ?? codeFromQ;
             var finalToCode = toCode ?? codeToQ;
+            searchMode ??= "contains";
+            var sm = searchMode.Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
 
             var q = BuildQuery(
-                siId, search, searchBy, sort, dir,
+                siId, search, searchBy, sm, sort, dir,
                 useDateRange, fromDate, toDate, finalFromCode, finalToCode,
                 filterCol_siid, filterCol_lineno, filterCol_prodid, filterCol_prodname, filterCol_customername,
                 filterCol_qty, filterCol_price, filterCol_disc1, filterCol_disc2, filterCol_disc3, filterCol_discval,
@@ -1169,6 +1240,122 @@ namespace ERP.Controllers
                 .OrderBy(l => l.SIId)
                 .ThenBy(l => l.LineNo)
                 .ToListAsync();
+            var (returnQtyByLine, finalNetByLine) = await BuildLineReturnMapsAsync(list);
+
+            var allCols = new[]
+            {
+                "siid","lineno","prodid","prodname","customername","region","createdby",
+                "qty","price","disc1","disc2","disc3","discval","total","net",
+                "itemreturnqty","finalnetafterall","batch","expiry"
+            };
+            var requested = (visibleCols ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+            var requestedSet = requested.Count > 0
+                ? new HashSet<string>(requested, StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(allCols, StringComparer.OrdinalIgnoreCase);
+            var exportCols = allCols.Where(k => requestedSet.Contains(k)).ToList();
+            if (exportCols.Count == 0)
+                exportCols = allCols.ToList();
+
+            static string HeaderFor(string key) => key.ToLowerInvariant() switch
+            {
+                "siid" => "رقم الفاتورة",
+                "lineno" => "رقم السطر",
+                "prodid" => "كود الصنف",
+                "prodname" => "اسم الصنف",
+                "customername" => "اسم العميل",
+                "region" => "المنطقة",
+                "createdby" => "الكاتب",
+                "qty" => "الكمية",
+                "price" => "سعر الجمهور",
+                "disc1" => "خصم البيع 1 %",
+                "disc2" => "خصم البيع 2 %",
+                "disc3" => "خصم البيع 3 %",
+                "discval" => "قيمة الخصم",
+                "total" => "إجمالي السطر بعد الخصم",
+                "net" => "صافي السطر",
+                "itemreturnqty" => "مرتجع الصنف",
+                "finalnetafterall" => "الصافي النهائي بعد كل حاجة",
+                "batch" => "التشغيلة",
+                "expiry" => "الصلاحية",
+                _ => key
+            };
+            static string CsvEscape(string? value)
+            {
+                if (string.IsNullOrEmpty(value)) return "";
+                if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+                    return "\"" + value.Replace("\"", "\"\"") + "\"";
+                return value;
+            }
+            string ExcelValueFor(SalesInvoiceLine l, string key)
+            {
+                var rowKey = BuildLineReturnKey(l.SIId, l.LineNo, l.ProdId);
+                var returnedQty = returnQtyByLine.TryGetValue(rowKey, out var rq) ? rq : 0;
+                var finalNet = finalNetByLine.TryGetValue(rowKey, out var fn) ? fn : l.LineNetTotal;
+                return key.ToLowerInvariant() switch
+                {
+                    "siid" => l.SIId.ToString(CultureInfo.InvariantCulture),
+                    "lineno" => l.LineNo.ToString(CultureInfo.InvariantCulture),
+                    "prodid" => l.ProdId.ToString(CultureInfo.InvariantCulture),
+                    "prodname" => l.Product?.ProdName ?? "",
+                    "customername" => l.SalesInvoice?.Customer?.CustomerName ?? "",
+                    "region" => l.SalesInvoice?.Customer == null
+                        ? ""
+                        : (!string.IsNullOrWhiteSpace(l.SalesInvoice.Customer.RegionName)
+                            ? l.SalesInvoice.Customer.RegionName
+                            : (l.SalesInvoice.Customer.Area?.AreaName ?? "")),
+                    "createdby" => l.SalesInvoice?.CreatedBy ?? "",
+                    "qty" => l.Qty.ToString(CultureInfo.InvariantCulture),
+                    "price" => l.PriceRetail.ToString("0.00", CultureInfo.InvariantCulture),
+                    "disc1" => l.Disc1Percent.ToString("0.##", CultureInfo.InvariantCulture),
+                    "disc2" => l.Disc2Percent.ToString("0.##", CultureInfo.InvariantCulture),
+                    "disc3" => l.Disc3Percent.ToString("0.##", CultureInfo.InvariantCulture),
+                    "discval" => l.DiscountValue.ToString("0.00", CultureInfo.InvariantCulture),
+                    "total" => l.LineTotalAfterDiscount.ToString("0.00", CultureInfo.InvariantCulture),
+                    "net" => l.LineNetTotal.ToString("0.00", CultureInfo.InvariantCulture),
+                    "itemreturnqty" => returnedQty.ToString(CultureInfo.InvariantCulture),
+                    "finalnetafterall" => finalNet.ToString("0.00", CultureInfo.InvariantCulture),
+                    "batch" => l.BatchNo ?? "",
+                    "expiry" => l.Expiry?.ToString("yyyy-MM-dd") ?? "",
+                    _ => ""
+                };
+            }
+            string CsvValueFor(SalesInvoiceLine l, string key)
+            {
+                var rowKey = BuildLineReturnKey(l.SIId, l.LineNo, l.ProdId);
+                var returnedQty = returnQtyByLine.TryGetValue(rowKey, out var rq) ? rq : 0;
+                var finalNet = finalNetByLine.TryGetValue(rowKey, out var fn) ? fn : l.LineNetTotal;
+                return key.ToLowerInvariant() switch
+                {
+                    "siid" => l.SIId.ToString(),
+                    "lineno" => l.LineNo.ToString(),
+                    "prodid" => l.ProdId.ToString(),
+                    "prodname" => l.Product?.ProdName ?? "",
+                    "customername" => l.SalesInvoice?.Customer?.CustomerName ?? "",
+                    "region" => l.SalesInvoice?.Customer == null
+                        ? ""
+                        : (!string.IsNullOrWhiteSpace(l.SalesInvoice.Customer.RegionName)
+                            ? l.SalesInvoice.Customer.RegionName
+                            : (l.SalesInvoice.Customer.Area?.AreaName ?? "")),
+                    "createdby" => l.SalesInvoice?.CreatedBy ?? "",
+                    "qty" => l.Qty.ToString(CultureInfo.InvariantCulture),
+                    "price" => l.PriceRetail.ToString("0.00", CultureInfo.InvariantCulture),
+                    "disc1" => l.Disc1Percent.ToString("0.##", CultureInfo.InvariantCulture),
+                    "disc2" => l.Disc2Percent.ToString("0.##", CultureInfo.InvariantCulture),
+                    "disc3" => l.Disc3Percent.ToString("0.##", CultureInfo.InvariantCulture),
+                    "discval" => l.DiscountValue.ToString("0.00", CultureInfo.InvariantCulture),
+                    "total" => l.LineTotalAfterDiscount.ToString("0.00", CultureInfo.InvariantCulture),
+                    "net" => l.LineNetTotal.ToString("0.00", CultureInfo.InvariantCulture),
+                    "itemreturnqty" => returnedQty.ToString(CultureInfo.InvariantCulture),
+                    "finalnetafterall" => finalNet.ToString("0.00", CultureInfo.InvariantCulture),
+                    "batch" => l.BatchNo ?? "",
+                    "expiry" => l.Expiry?.ToString("yyyy-MM-dd") ?? "",
+                    _ => ""
+                };
+            }
 
             format = (format ?? "excel").ToLowerInvariant();
 
@@ -1176,33 +1363,10 @@ namespace ERP.Controllers
             {
                 // ===== تصدير CSV يفتح فى Excel =====
                 var sb = new StringBuilder();
-
-                // عناوين الأعمدة (عربي كما في القائمة)
-                sb.AppendLine("رقم الفاتورة,رقم السطر,كود الصنف,الكمية,سعر الجمهور,خصم البيع 1 %,خصم البيع 2 %,خصم البيع 3 %,قيمة الخصم,سعر بيع الوحدة,إجمالي السطر بعد الخصم,نسبة الضريبة %,قيمة الضريبة,صافي السطر,التشغيلة,الصلاحية");
-
-                // كل سطر فى CSV
+                sb.AppendLine(string.Join(",", exportCols.Select(c => CsvEscape(HeaderFor(c)))));
                 foreach (var l in list)
                 {
-                    string line = string.Join(",",
-                        l.SIId,
-                        l.LineNo,
-                        l.ProdId,
-                        l.Qty,
-                        l.PriceRetail.ToString("0.00", CultureInfo.InvariantCulture),
-                        l.Disc1Percent.ToString("0.##", CultureInfo.InvariantCulture),
-                        l.Disc2Percent.ToString("0.##", CultureInfo.InvariantCulture),
-                        l.Disc3Percent.ToString("0.##", CultureInfo.InvariantCulture),
-                        l.DiscountValue.ToString("0.00", CultureInfo.InvariantCulture),
-                        l.UnitSalePrice.ToString("0.00", CultureInfo.InvariantCulture),
-                        l.LineTotalAfterDiscount.ToString("0.00", CultureInfo.InvariantCulture),
-                        l.TaxPercent.ToString("0.##", CultureInfo.InvariantCulture),
-                        l.TaxValue.ToString("0.00", CultureInfo.InvariantCulture),
-                        l.LineNetTotal.ToString("0.00", CultureInfo.InvariantCulture),
-                        (l.BatchNo ?? "").Replace(",", " "),
-                        l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : ""
-                    );
-
-                    sb.AppendLine(line);
+                    sb.AppendLine(string.Join(",", exportCols.Select(c => CsvEscape(CsvValueFor(l, c)))));
                 }
 
                 var bytesCsv = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
@@ -1219,48 +1383,17 @@ namespace ERP.Controllers
 
                 int row = 1;   // متغير: رقم الصف الحالي فى الشيت
 
-                // عناوين الأعمدة (عربي كما في القائمة)
-                worksheet.Cell(row, 1).Value = "رقم الفاتورة";
-                worksheet.Cell(row, 2).Value = "رقم السطر";
-                worksheet.Cell(row, 3).Value = "كود الصنف";
-                worksheet.Cell(row, 4).Value = "الكمية";
-                worksheet.Cell(row, 5).Value = "سعر الجمهور";
-                worksheet.Cell(row, 6).Value = "خصم البيع 1 %";
-                worksheet.Cell(row, 7).Value = "خصم البيع 2 %";
-                worksheet.Cell(row, 8).Value = "خصم البيع 3 %";
-                worksheet.Cell(row, 9).Value = "قيمة الخصم";
-                worksheet.Cell(row, 10).Value = "سعر بيع الوحدة";
-                worksheet.Cell(row, 11).Value = "إجمالي السطر بعد الخصم";
-                worksheet.Cell(row, 12).Value = "نسبة الضريبة %";
-                worksheet.Cell(row, 13).Value = "قيمة الضريبة";
-                worksheet.Cell(row, 14).Value = "صافي السطر";
-                worksheet.Cell(row, 15).Value = "التشغيلة";
-                worksheet.Cell(row, 16).Value = "الصلاحية";
-
-                var headerRange = worksheet.Range(row, 1, row, 16);
+                for (int i = 0; i < exportCols.Count; i++)
+                    worksheet.Cell(row, i + 1).Value = HeaderFor(exportCols[i]);
+                var headerRange = worksheet.Range(row, 1, row, exportCols.Count);
                 headerRange.Style.Font.Bold = true;
 
                 // إضافة البيانات
                 foreach (var l in list)
                 {
                     row++;
-
-                    worksheet.Cell(row, 1).Value = l.SIId;
-                    worksheet.Cell(row, 2).Value = l.LineNo;
-                    worksheet.Cell(row, 3).Value = l.ProdId;
-                    worksheet.Cell(row, 4).Value = l.Qty;
-                    worksheet.Cell(row, 5).Value = l.PriceRetail;
-                    worksheet.Cell(row, 6).Value = l.Disc1Percent;
-                    worksheet.Cell(row, 7).Value = l.Disc2Percent;
-                    worksheet.Cell(row, 8).Value = l.Disc3Percent;
-                    worksheet.Cell(row, 9).Value = l.DiscountValue;
-                    worksheet.Cell(row, 10).Value = l.UnitSalePrice;
-                    worksheet.Cell(row, 11).Value = l.LineTotalAfterDiscount;
-                    worksheet.Cell(row, 12).Value = l.TaxPercent;
-                    worksheet.Cell(row, 13).Value = l.TaxValue;
-                    worksheet.Cell(row, 14).Value = l.LineNetTotal;
-                    worksheet.Cell(row, 15).Value = l.BatchNo ?? "";
-                    worksheet.Cell(row, 16).Value = l.Expiry?.ToString("yyyy-MM-dd") ?? "";
+                    for (int i = 0; i < exportCols.Count; i++)
+                        worksheet.Cell(row, i + 1).Value = ExcelValueFor(l, exportCols[i]);
                 }
 
                 // ضبط عرض الأعمدة تلقائياً

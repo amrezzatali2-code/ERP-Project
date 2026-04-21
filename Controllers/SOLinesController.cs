@@ -56,6 +56,7 @@ namespace ERP.Controllers
             int? soId,
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange,
@@ -147,9 +148,14 @@ namespace ERP.Controllers
 
             // 8) تطبيق البحث + الترتيب بالدالة الموحّدة ApplySearchSort
             q = q.ApplySearchSort(
-                    search, searchBy,
-                    sort, dir,
-                    stringFields, intFields, orderFields,
+                    search: search,
+                    searchBy: searchBy,
+                    searchMode: searchMode,
+                    sort: sort,
+                    dir: dir,
+                    stringFields: stringFields,
+                    intFields: intFields,
+                    orderFields: orderFields,
                     defaultSearchBy: "all",
                     defaultSortBy: "SOId"
                 );
@@ -164,6 +170,7 @@ namespace ERP.Controllers
             int? soId,
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "SOId",
             string? dir = "asc",
             int page = 1,
@@ -175,13 +182,20 @@ namespace ERP.Controllers
             int? toCode = null,
             string? dateField = "SODate",
             string? filterCol_soid = null,
+            string? filterCol_soidExpr = null,
             string? filterCol_lineno = null,
+            string? filterCol_linenoExpr = null,
             string? filterCol_prod = null,
+            string? filterCol_prodExpr = null,
             string? filterCol_prodname = null,
             string? filterCol_qty = null,
+            string? filterCol_qtyExpr = null,
             string? filterCol_reqretail = null,
+            string? filterCol_reqretailExpr = null,
             string? filterCol_disc = null,
+            string? filterCol_discExpr = null,
             string? filterCol_linetotal = null,
+            string? filterCol_linetotalExpr = null,
             string? filterCol_batch = null,
             string? filterCol_expiry = null,
             string? filterCol_writer = null,
@@ -195,24 +209,38 @@ namespace ERP.Controllers
             if (pageSize < 0) pageSize = 10;
             if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
                 pageSize = 10;
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
 
-            var q = BuildQuery(soId, search, searchBy, sort, dir, useDateRange, fromDate, toDate, fromCode, toCode);
+            var q = BuildQuery(soId, search, searchBy, sm, sort, dir, useDateRange, fromDate, toDate, fromCode, toCode);
 
-            if (!string.IsNullOrWhiteSpace(filterCol_soid))
+            if (!string.IsNullOrWhiteSpace(filterCol_soidExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "soid", filterCol_soidExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_soid))
             {
                 var ids = filterCol_soid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(v => v.HasValue).Select(v => v!.Value).ToList();
                 if (ids.Count > 0) q = q.Where(x => ids.Contains(x.SOId));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_lineno))
+            if (!string.IsNullOrWhiteSpace(filterCol_linenoExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "lineno", filterCol_linenoExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_lineno))
             {
                 var ids = filterCol_lineno.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(v => v.HasValue).Select(v => v!.Value).ToList();
                 if (ids.Count > 0) q = q.Where(x => ids.Contains(x.LineNo));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            if (!string.IsNullOrWhiteSpace(filterCol_prodExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "prod", filterCol_prodExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_prod))
             {
                 var ids = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -225,28 +253,44 @@ namespace ERP.Controllers
                     .Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToList();
                 if (vals.Count > 0) q = q.Where(x => x.Product != null && vals.Contains(x.Product.ProdName ?? ""));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "qty", filterCol_qtyExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_qty))
             {
                 var ids = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(v => v.HasValue).Select(v => v!.Value).ToList();
                 if (ids.Count > 0) q = q.Where(x => ids.Contains(x.QtyRequested));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_reqretail))
+            if (!string.IsNullOrWhiteSpace(filterCol_reqretailExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "reqretail", filterCol_reqretailExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_reqretail))
             {
                 var vals = filterCol_reqretail.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
                     .Where(d => d.HasValue).Select(d => d!.Value).ToList();
                 if (vals.Count > 0) q = q.Where(x => vals.Contains(x.RequestedRetailPrice));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_disc))
+            if (!string.IsNullOrWhiteSpace(filterCol_discExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "disc", filterCol_discExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_disc))
             {
                 var vals = filterCol_disc.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
                     .Where(d => d.HasValue).Select(d => d!.Value).ToList();
                 if (vals.Count > 0) q = q.Where(x => vals.Contains(x.SalesDiscountPct));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_linetotal))
+            if (!string.IsNullOrWhiteSpace(filterCol_linetotalExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "linetotal", filterCol_linetotalExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_linetotal))
             {
                 var vals = filterCol_linetotal.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
@@ -354,6 +398,7 @@ namespace ERP.Controllers
             // إعدادات البحث/الترتيب الحالية
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = sort ?? "SOId";
             ViewBag.Dir = dirNorm;
 
@@ -362,13 +407,20 @@ namespace ERP.Controllers
             ViewBag.Total = model.TotalCount;
 
             ViewBag.FilterCol_soid = filterCol_soid ?? "";
+            ViewBag.FilterCol_soidExpr = filterCol_soidExpr ?? "";
             ViewBag.FilterCol_lineno = filterCol_lineno ?? "";
+            ViewBag.FilterCol_linenoExpr = filterCol_linenoExpr ?? "";
             ViewBag.FilterCol_prod = filterCol_prod ?? "";
+            ViewBag.FilterCol_prodExpr = filterCol_prodExpr ?? "";
             ViewBag.FilterCol_prodname = filterCol_prodname ?? "";
             ViewBag.FilterCol_qty = filterCol_qty ?? "";
+            ViewBag.FilterCol_qtyExpr = filterCol_qtyExpr ?? "";
             ViewBag.FilterCol_reqretail = filterCol_reqretail ?? "";
+            ViewBag.FilterCol_reqretailExpr = filterCol_reqretailExpr ?? "";
             ViewBag.FilterCol_disc = filterCol_disc ?? "";
+            ViewBag.FilterCol_discExpr = filterCol_discExpr ?? "";
             ViewBag.FilterCol_linetotal = filterCol_linetotal ?? "";
+            ViewBag.FilterCol_linetotalExpr = filterCol_linetotalExpr ?? "";
             ViewBag.FilterCol_batch = filterCol_batch ?? "";
             ViewBag.FilterCol_expiry = filterCol_expiry ?? "";
             ViewBag.FilterCol_writer = filterCol_writer ?? "";
@@ -655,6 +707,7 @@ namespace ERP.Controllers
             int? soId,
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "SOId",
             string? dir = "asc",
             bool useDateRange = false,
@@ -663,38 +716,60 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_soid = null,
+            string? filterCol_soidExpr = null,
             string? filterCol_lineno = null,
+            string? filterCol_linenoExpr = null,
             string? filterCol_prod = null,
+            string? filterCol_prodExpr = null,
             string? filterCol_prodname = null,
             string? filterCol_qty = null,
+            string? filterCol_qtyExpr = null,
             string? filterCol_reqretail = null,
+            string? filterCol_reqretailExpr = null,
             string? filterCol_disc = null,
+            string? filterCol_discExpr = null,
             string? filterCol_linetotal = null,
+            string? filterCol_linetotalExpr = null,
             string? filterCol_batch = null,
             string? filterCol_expiry = null,
             string? filterCol_writer = null,
             string? filterCol_region = null,
             string? filterCol_date = null,
+            string? visibleCols = null,
             string format = "excel"
         )
         {
-            var q = BuildQuery(soId, search, searchBy, sort, dir, useDateRange, fromDate, toDate, fromCode, toCode);
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
+            var q = BuildQuery(soId, search, searchBy, sm, sort, dir, useDateRange, fromDate, toDate, fromCode, toCode);
 
-            if (!string.IsNullOrWhiteSpace(filterCol_soid))
+            if (!string.IsNullOrWhiteSpace(filterCol_soidExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "soid", filterCol_soidExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_soid))
             {
                 var ids = filterCol_soid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(v => v.HasValue).Select(v => v!.Value).ToList();
                 if (ids.Count > 0) q = q.Where(x => ids.Contains(x.SOId));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_lineno))
+            if (!string.IsNullOrWhiteSpace(filterCol_linenoExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "lineno", filterCol_linenoExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_lineno))
             {
                 var ids = filterCol_lineno.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(v => v.HasValue).Select(v => v!.Value).ToList();
                 if (ids.Count > 0) q = q.Where(x => ids.Contains(x.LineNo));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            if (!string.IsNullOrWhiteSpace(filterCol_prodExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "prod", filterCol_prodExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_prod))
             {
                 var ids = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -707,28 +782,44 @@ namespace ERP.Controllers
                     .Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToList();
                 if (vals.Count > 0) q = q.Where(x => x.Product != null && vals.Contains(x.Product.ProdName ?? ""));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "qty", filterCol_qtyExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_qty))
             {
                 var ids = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(v => v.HasValue).Select(v => v!.Value).ToList();
                 if (ids.Count > 0) q = q.Where(x => ids.Contains(x.QtyRequested));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_reqretail))
+            if (!string.IsNullOrWhiteSpace(filterCol_reqretailExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "reqretail", filterCol_reqretailExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_reqretail))
             {
                 var vals = filterCol_reqretail.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
                     .Where(d => d.HasValue).Select(d => d!.Value).ToList();
                 if (vals.Count > 0) q = q.Where(x => vals.Contains(x.RequestedRetailPrice));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_disc))
+            if (!string.IsNullOrWhiteSpace(filterCol_discExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "disc", filterCol_discExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_disc))
             {
                 var vals = filterCol_disc.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
                     .Where(d => d.HasValue).Select(d => d!.Value).ToList();
                 if (vals.Count > 0) q = q.Where(x => vals.Contains(x.SalesDiscountPct));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_linetotal))
+            if (!string.IsNullOrWhiteSpace(filterCol_linetotalExpr))
+            {
+                q = SOLineListNumericExpr.ApplyForColumn(q, "linetotal", filterCol_linetotalExpr);
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_linetotal))
             {
                 var vals = filterCol_linetotal.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)

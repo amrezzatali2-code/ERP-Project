@@ -34,7 +34,7 @@ namespace ERP.Models
         [Required]
         [StringLength(20)]
         [Display(Name = "حالة الأمر")]
-        public string Status { get; set; } = "Draft";            // Draft / Converted / Cancelled (مثل طلب الشراء)
+        public string Status { get; set; } = "غير مرحلة";            // غير مرحلة / محول / ملغى (مثل طلب الشراء)
 
         [Display(Name = "محوّل إلى فاتورة مبيعات؟")]
         public bool IsConverted { get; set; }                     // true بعد التحويل إلى فاتورة مبيعات

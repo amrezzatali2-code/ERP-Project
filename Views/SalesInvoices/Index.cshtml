@@ -20,6 +20,8 @@
     // قيم البحث/الترتيب الحالية
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "id";          // البحث الافتراضي برقم الفاتورة
+    var searchMode = ((string?)ViewBag.SearchMode ?? "contains").ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "SIDate";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "desc");
 
@@ -60,12 +62,15 @@
     string? filterCol_posted = ViewBag.FilterCol_Posted as string;
     string? filterCol_region = ViewBag.FilterCol_Region as string;
     string? filterCol_createdby = ViewBag.FilterCol_CreatedBy as string;
+    var returnNetByInvoice = ViewBag.ReturnNetByInvoice as IReadOnlyDictionary<int, decimal> ?? new Dictionary<int, decimal>();
+    var calculatedNetByInvoice = ViewBag.CalculatedNetByInvoice as IReadOnlyDictionary<int, decimal> ?? new Dictionary<int, decimal>();
 
     // دالة توليد لينكات الترقيم مع الحفاظ على الفلاتر
     string Link(int p) => Url.Action(action, controller, new
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -100,6 +105,7 @@
         {
             search,
             searchBy,
+            searchMode,
             sort = col,
             dir = newDir,
             page = 1,
@@ -185,6 +191,11 @@
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في الفواتير</label>
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
                         <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
@@ -247,6 +258,7 @@
                         </span>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
+                        <button type="button" id="btnCustomerEngagementSI" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حجم تعامل العميل">حجم تعامل</button>
                         <div class="dropdown d-inline">
                             <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
@@ -259,6 +271,8 @@
                             @if (isMySalesList) { <input type="hidden" name="scope" value="mine" /> }
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
+                            <input type="hidden" name="visibleCols" value="" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
@@ -343,7 +357,9 @@
                     <th data-col="customer">@filterableCol("customer", "customer", "العميل")</th>
                     <th data-col="region">@filterableCol("region", "region", "المنطقة")</th>
                     <th data-col="warehouse">@filterableCol("warehouse", "warehouse", "المخزن")</th>
-                    <th data-col="net">@filterableCol("net", "net", "الصافي")</th>
+                    <th data-col="net">@filterableCol("net", "net", "الإجمالي")</th>
+                    <th data-col="customerReturn">مرتجع العميل</th>
+                    <th data-col="calculatedNetSale">صافي البيع</th>
                     <th data-col="createdby">@filterableCol("createdby", "createdby", "الكاتب")</th>
                     <th data-col="status">@filterableCol("status", "status", "الحالة")</th>
                     <th data-col="posted">@filterableCol("posted", "posted", "مرحل؟")</th>
@@ -354,7 +370,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="12" class="text-center text-muted py-4">
+                        <td colspan="14" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -364,6 +380,7 @@
                     foreach (var si in Model.Items)
                     {
                         var showUrl = Url.Action("Show", "SalesInvoices", new { id = si.SIId }) + "?frame=1";
+                        var customerEngagementUrl = Url.Action("Show", "Customers", new { id = si.CustomerId, frame = 1 });
                         var regionDisplay = si.Customer == null
                             ? ""
                             : (!string.IsNullOrWhiteSpace(si.Customer.RegionName)
@@ -371,7 +388,7 @@
                                 : (si.Customer.Area != null && si.Customer.Area.AreaName != null
                                     ? si.Customer.Area.AreaName
                                     : ""));
-                        <tr class="erp-list-selectable-row" data-si-id="@si.SIId" data-show-url="@showUrl" data-tab-title="فاتورة مبيعات">
+                        <tr class="erp-list-selectable-row" data-si-id="@si.SIId" data-customer-id="@si.CustomerId" data-show-url="@showUrl" data-tab-title="فاتورة مبيعات" data-movement-url="@customerEngagementUrl">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select"
@@ -385,6 +402,8 @@
                             <td data-col="region">@regionDisplay</td>
                             <td data-col="warehouse">@(si.Warehouse?.WarehouseName ?? si.WarehouseId.ToString())</td>
                             <td data-col="net">@si.NetTotal.ToString("0.00")</td>
+                            <td data-col="customerReturn">@((returnNetByInvoice.TryGetValue(si.SIId, out var retNet) ? retNet : 0m).ToString("0.00"))</td>
+                            <td data-col="calculatedNetSale">@((calculatedNetByInvoice.TryGetValue(si.SIId, out var calcNet) ? calcNet : si.NetTotal).ToString("0.00"))</td>
                             <td data-col="createdby">@(si.CreatedBy ?? "")</td>
                             <td data-col="status">@si.Status</td>
                             <td data-col="posted">@(si.IsPosted ? "نعم" : "لا")</td>
@@ -410,6 +429,8 @@
                     <td data-col="region"></td>
                     <td data-col="warehouse"></td>
                     <td data-col="net">@((ViewBag.TotalNet != null ? (decimal)ViewBag.TotalNet : 0m).ToString("0.00"))</td>
+                    <td data-col="customerReturn"></td>
+                    <td data-col="calculatedNetSale"></td>
                     <td data-col="createdby"></td>
                     <td data-col="status"></td>
                     <td data-col="posted"></td>
@@ -432,6 +453,7 @@
               class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -528,6 +550,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -706,16 +729,108 @@
 
             const chkAll = document.getElementById("chkAllRows");
             const rowsChk = () => table.querySelectorAll("tbody .row-select");
+            const btnShow = document.getElementById("btnShowSI");
+            const btnCustomerEngagement = document.getElementById("btnCustomerEngagementSI");
+            let rowClickSelectedTr = null;
+
+            function openInTab(tabId, url, title) {
+                if (!url) return;
+                const inFrame = (window.top !== window);
+                try {
+                    if (inFrame) {
+                        window.top.postMessage({ type: "erp-open-tab", tabId: tabId, url: url, title: title || "تبويب" }, "*");
+                        return;
+                    }
+                    if (window.erpTabs && typeof window.erpTabs.openTab === "function") {
+                        window.erpTabs.openTab(tabId, url, title || "تبويب");
+                    } else {
+                        window.location.href = url;
+                    }
+                } catch (e) {
+                    if (!inFrame) window.location.href = url;
+                }
+            }
+
+            function countChecked() {
+                return table.querySelectorAll("tbody input.row-select:checked").length;
+            }
+
+            function primaryRowForToolbar() {
+                const n = countChecked();
+                if (n > 1) return null;
+                if (n === 1) {
+                    const cb = table.querySelector("tbody input.row-select:checked");
+                    return cb ? cb.closest("tr.erp-list-selectable-row") : null;
+                }
+                if (rowClickSelectedTr && table.contains(rowClickSelectedTr)) return rowClickSelectedTr;
+                return null;
+            }
+
+            function refreshToolbarSelection() {
+                const n = countChecked();
+                table.querySelectorAll("tbody tr.erp-list-selectable-row").forEach(r => r.classList.remove("selected"));
+                let highlight = null;
+                if (n === 1) {
+                    const cb = table.querySelector("tbody input.row-select:checked");
+                    highlight = cb ? cb.closest("tr.erp-list-selectable-row") : null;
+                } else if (n === 0 && rowClickSelectedTr && table.contains(rowClickSelectedTr)) {
+                    highlight = rowClickSelectedTr;
+                }
+                if (highlight) highlight.classList.add("selected");
+
+                const tr = primaryRowForToolbar();
+                const showUrl = tr ? (tr.getAttribute("data-show-url") || "").trim() : "";
+                const movementUrl = tr ? (tr.getAttribute("data-movement-url") || "").trim() : "";
+                if (btnShow) btnShow.disabled = !showUrl;
+                if (btnCustomerEngagement) btnCustomerEngagement.disabled = !movementUrl;
+            }
 
             chkAll?.addEventListener("change", function () {
                 rowsChk().forEach(cb => cb.checked = chkAll.checked);
+                if (chkAll.checked) rowClickSelectedTr = null;
+                refreshToolbarSelection();
             });
 
             table.addEventListener("change", function (e) {
                 const target = e.target;
                 if (target && target.classList.contains("row-select")) {
                     if (!target.checked && chkAll) chkAll.checked = false;
+                    const n = countChecked();
+                    if (n > 1) rowClickSelectedTr = null;
+                    else if (n === 1) {
+                        const cb = table.querySelector("tbody input.row-select:checked");
+                        rowClickSelectedTr = cb ? cb.closest("tr.erp-list-selectable-row") : null;
+                    }
+                    refreshToolbarSelection();
                 }
+            });
+
+            table.addEventListener("click", function (e) {
+                if (e.target.closest("input.row-select")) return;
+                const tr = e.target.closest("tr.erp-list-selectable-row");
+                if (!tr) return;
+                if (e.target.closest("a, button, textarea, select, label")) return;
+                rowClickSelectedTr = tr;
+                refreshToolbarSelection();
+            });
+
+            btnShow?.addEventListener("click", function (e) {
+                e.preventDefault();
+                const tr = primaryRowForToolbar();
+                if (!tr) return;
+                const url = (tr.getAttribute("data-show-url") || "").trim();
+                if (!url) return;
+                openInTab("si-show-tab", url, tr.getAttribute("data-tab-title") || "فاتورة مبيعات");
+            });
+
+            btnCustomerEngagement?.addEventListener("click", function (e) {
+                e.preventDefault();
+                const tr = primaryRowForToolbar();
+                if (!tr) return;
+                const url = (tr.getAttribute("data-movement-url") || "").trim();
+                if (!url) return;
+                const customerId = tr.getAttribute("data-customer-id") || tr.getAttribute("data-si-id") || "";
+                openInTab("si-customer-engagement-" + customerId, url, "حجم تعامل عميل");
             });
 
             const btnDeleteSelected = document.getElementById("btnDeleteSelected");
@@ -828,19 +943,9 @@
                     else alert("حدث خطأ أثناء الترحيل.");
                 }
             });
-        })();
 
-        // =========================
-        // اختيار صف + زر عرض (سكربت مشترك — نمط الخزينة)
-        // =========================
-        ERP.initListSelection({
-            showButtonId: 'btnShowSI',
-            idAttribute: 'data-si-id',
-            showUrlAttribute: 'data-show-url',
-            tabTitleAttribute: 'data-tab-title',
-            showTabId: 'si-show-tab',
-            multiSelectCheckboxes: true
-        });
+            refreshToolbarSelection();
+        })();
 
         // =========================
         // اختيار الأعمدة + حفظها في localStorage
@@ -924,6 +1029,31 @@
                     const modal   = bootstrap.Modal.getInstance(modalEl);
                     modal?.hide();
                 });
+
+            function getVisibleColsInTableOrder() {
+                const headerCells = Array.from(table.querySelectorAll("thead th[data-col]"));
+                const ordered = headerCells
+                    .filter(th => !th.hasAttribute("data-col-fixed"))
+                    .map(th => th.getAttribute("data-col"))
+                    .filter(Boolean);
+
+                let hiddenCols = [];
+                try {
+                    const saved = localStorage.getItem(storageKey);
+                    if (saved) hiddenCols = JSON.parse(saved) || [];
+                } catch { hiddenCols = []; }
+
+                const hiddenSet = new Set(hiddenCols.map(x => String(x)));
+                return ordered.filter(k => !hiddenSet.has(String(k)));
+            }
+
+            document.querySelectorAll("form.erp-export-form").forEach(function (form) {
+                form.addEventListener("submit", function () {
+                    const inp = form.querySelector("input[name='visibleCols']");
+                    if (!inp) return;
+                    inp.value = getVisibleColsInTableOrder().join(",");
+                });
+            });
         })();
 
         // =========================

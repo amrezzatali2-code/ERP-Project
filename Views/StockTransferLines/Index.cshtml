@@ -372,8 +372,8 @@
                             <td data-col="id">@l.Id</td>
                             <td data-col="transfer">@l.StockTransferId</td>
                             <td data-col="date">@transferDate</td>
-                            <td data-col="fromwh">@(l.StockTransfer?.FromWarehouse?.WarehouseName ?? l.StockTransfer?.FromWarehouseId.ToString() ?? "—")</td>
-                            <td data-col="towh">@(l.StockTransfer?.ToWarehouse?.WarehouseName ?? l.StockTransfer?.ToWarehouseId.ToString() ?? "—")</td>
+                            <td data-col="fromwh">@(l.StockTransfer?.FromWarehouseId.ToString() ?? "—")</td>
+                            <td data-col="towh">@(l.StockTransfer?.ToWarehouseId.ToString() ?? "—")</td>
                             <td data-col="product">@l.ProductId</td>
                             <td data-col="qty">@l.Qty</td>
                             <td data-col="note">@l.Note</td>

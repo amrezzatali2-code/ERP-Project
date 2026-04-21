@@ -11,7 +11,10 @@
 
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "all";
-    var searchMode = (string?)ViewBag.SearchMode ?? "contains";
+    var searchMode = ((string?)ViewBag.SearchMode ?? "contains").Trim().ToLowerInvariant();
+    if (searchMode == "startswith") searchMode = "starts";
+    else if (searchMode == "endswith") searchMode = "ends";
+    else if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "PRetDate";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
@@ -147,7 +150,7 @@
 <div dir="rtl" class="container-fluid">
 
     <div class="d-flex justify-content-between align-items-center mb-2">
-        <h4 class="mb-0">@ViewData["Title"]</h4>
+        <h5 class="mb-0 fs-6 text-secondary">@ViewData["Title"]</h5>
     </div>
 
     @* ===== شريط الفلاتر الموحد (نمط قائمة فواتير المشتريات) ===== *@
@@ -166,9 +169,9 @@
                             <option value="customer"@Html.Raw(searchBy == "customer" ? " selected" : "")>اسم الجهة</option>
                             <option value="status"@Html.Raw(searchBy == "status" ? " selected" : "")>الحالة</option>
                         </select>
-                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input" style="max-width:130px;min-width:100px" title="طريقة المطابقة">
-                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input order-first flex-shrink-0" style="max-width:130px;min-width:100px" title="طريقة المطابقة">
                             <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
                             <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
                         </select>
                     </div>
@@ -240,6 +243,7 @@
                             </ul>
                         </div>
                         <form method="get" asp-action="Export" asp-controller="PurchaseReturns" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
+                            <input type="hidden" name="visibleCols" value="" />
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
                             <input type="hidden" name="searchMode" value="@searchMode" />
@@ -324,7 +328,7 @@
                     <th data-col="refpi">@filterableCol("refpi", "RefPIId", "فاتورة الشراء المرجعية")</th>
                     <th data-col="net">@filterableCol("net", "NetTotal", "قيمة المرتجع")</th>
                     <th data-col="status">@filterableCol("status", "Status", "الحالة")</th>
-                    <th data-col="posted">@filterableCol("posted", "IsPosted", "مرحّل؟")</th>
+                    <th data-col="posted">@filterableCol("posted", "IsPosted", "حالة الترحيل")</th>
                     <th data-col="postedAt">@filterableCol("postedAt", "PostedAt", "تاريخ الترحيل")</th>
                     <th data-col="createdBy">@filterableCol("createdBy", "CreatedBy", "أنشأه")</th>
                     <th data-col="createdAt">@filterableCol("createdAt", "CreatedAt", "تاريخ الإنشاء")</th>
@@ -359,10 +363,10 @@
                             <td data-col="warehouse">@(string.IsNullOrWhiteSpace(whName) ? pr.WarehouseId.ToString() : whName)</td>
                             <td data-col="refpi">@pr.RefPIId</td>
                             <td data-col="net">@pr.NetTotal.ToString("0.00")</td>
-                            <td data-col="status">@pr.Status</td>
-                            <td data-col="posted">
-                                @(pr.IsPosted ? "✓" : "✗")
+                            <td data-col="status">
+                                @(pr.Status == "Draft" ? "غير مرحلة" : (pr.Status == "Posted" ? "مرحلة 1" : pr.Status))
                             </td>
+                            <td data-col="posted">@(pr.IsPosted ? "مرحلة 1" : "غير مرحلة")</td>
                             <td data-col="postedAt">
                                 @(pr.PostedAt.HasValue? pr.PostedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")
                             </td>
@@ -825,6 +829,36 @@
                     const modal = bootstrap.Modal.getInstance(modalEl);
                     modal?.hide();
                 });
+
+            function getVisibleColsInTableOrder() {
+                const ordered = Array.from(table.querySelectorAll("thead th[data-col]"))
+                    .filter(th => !th.hasAttribute("data-col-fixed"))
+                    .map(th => th.getAttribute("data-col"))
+                    .filter(Boolean);
+
+                let hiddenCols = [];
+                try {
+                    const saved = localStorage.getItem(storageKey);
+                    if (saved) hiddenCols = JSON.parse(saved) || [];
+                } catch { hiddenCols = []; }
+
+                const hiddenSet = new Set(hiddenCols.map(x => String(x)));
+                return ordered.filter(k => !hiddenSet.has(String(k)));
+            }
+
+            document.querySelectorAll("form.erp-export-form").forEach(function (form) {
+                form.addEventListener("submit", function () {
+                    const inp = form.querySelector("input[name='visibleCols']");
+                    if (!inp) return;
+                    inp.value = getVisibleColsInTableOrder().join(",");
+                });
+            });
         })();
     </script>
 }
+
+
+
+
+
+

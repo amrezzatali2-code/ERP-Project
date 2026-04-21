@@ -280,7 +280,7 @@
 
                                 <div class="col-lg-2">
                                     <label class="form-label form-label-sm">الحالة</label>
-                                    <input id="TransferStatusDisplay" class="form-control form-control-sm text-center" value="@(string.IsNullOrWhiteSpace(Model.Status) ? "مسودة" : Model.Status)" readonly />
+                                    <input id="TransferStatusDisplay" class="form-control form-control-sm text-center" value="@(string.IsNullOrWhiteSpace(Model.Status) ? "غير مرحلة" : Model.Status)" readonly />
                                 </div>
                             </div>
 
@@ -1560,7 +1560,7 @@
                     setTransferPosted(false);
                     applyPostedUiLock();
                     const statusDisplay = document.getElementById('TransferStatusDisplay');
-                    if (statusDisplay) statusDisplay.value = 'مسودة';
+                    if (statusDisplay) statusDisplay.value = 'غير مرحلة';
                     const btnPost = document.getElementById('btnPostTransfer');
                     if (btnPost) { btnPost.disabled = false; btnPost.innerHTML = '📤 ترحيل التحويل'; }
                     const btnOpen = document.getElementById('btnOpenTransfer');

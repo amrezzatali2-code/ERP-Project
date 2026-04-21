@@ -13,6 +13,8 @@
     // قيم البحث/الترتيب الحالية
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = Model.SearchBy ?? (string?)ViewBag.SearchBy ?? "id";        // افتراضي: البحث برقم الأمر
+    var searchMode = ((string?)ViewBag.SearchMode ?? "contains").ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "SODate";    // افتراضي: التاريخ
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "desc");
 
@@ -53,6 +55,7 @@
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -122,6 +125,11 @@
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في أوامر البيع</label>
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
                         <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
@@ -191,6 +199,8 @@
                         <form method="get" asp-action="Export" asp-controller="SalesOrders" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
+                            <input type="hidden" name="visibleCols" value="" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
@@ -325,6 +335,7 @@
         <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -401,6 +412,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -704,6 +716,31 @@
                     const modal   = bootstrap.Modal.getInstance(modalEl);
                     modal?.hide();
                 });
+
+            function getVisibleColsInTableOrder() {
+                const headerCells = Array.from(table.querySelectorAll("thead th[data-col]"));
+                const ordered = headerCells
+                    .filter(th => !th.hasAttribute("data-col-fixed"))
+                    .map(th => th.getAttribute("data-col"))
+                    .filter(Boolean);
+
+                let hiddenCols = [];
+                try {
+                    const saved = localStorage.getItem(storageKey);
+                    if (saved) hiddenCols = JSON.parse(saved) || [];
+                } catch { hiddenCols = []; }
+
+                const hiddenSet = new Set(hiddenCols.map(x => String(x)));
+                return ordered.filter(k => !hiddenSet.has(String(k)));
+            }
+
+            document.querySelectorAll("form.erp-export-form").forEach(function (form) {
+                form.addEventListener("submit", function () {
+                    const inp = form.querySelector("input[name='visibleCols']");
+                    if (!inp) return;
+                    inp.value = getVisibleColsInTableOrder().join(",");
+                });
+            });
         })();
 
         // =========================

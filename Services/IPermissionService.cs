@@ -25,5 +25,15 @@ namespace ERP.Services
         /// هل للمستخدم الحالي أي صلاحية يبدأ كودها بالبادئة المعطاة؟ (مثل "Sales." لفتح المبيعات)
         /// </summary>
         Task<bool> HasAnyPermissionWithPrefixAsync(string codePrefix);
+
+        /// <summary>
+        /// مسح كاش صلاحيات مستخدم محدد.
+        /// </summary>
+        void InvalidateUserPermissionCache(int userId);
+
+        /// <summary>
+        /// مسح كاش صلاحيات كل المستخدمين.
+        /// </summary>
+        void InvalidateAllPermissionCaches();
     }
 }

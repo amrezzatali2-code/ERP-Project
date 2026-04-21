@@ -319,7 +319,7 @@
                     <th data-col="cashAccount">@filterableCol("cashAccount", "CashAccount", "حساب الصندوق/البنك")</th>
                     <th data-col="counterAccount">@filterableCol("counterAccount", "CounterAccount", "حساب الطرف")</th>
                     <th data-col="amount">@filterableCol("amount", "Amount", "المبلغ")</th>
-                    <th data-col="posted">@filterableCol("posted", "IsPosted", "مرحّل؟")</th>
+                    <th data-col="posted">@filterableCol("posted", "IsPosted", "حالة الترحيل")</th>
                     <th data-col="created">@filterableCol("created", "CreatedAt", "تاريخ الإنشاء")</th>
                     <th data-col="updated">@filterableCol("updated", "UpdatedAt", "آخر تعديل")</th>
                     <th data-col="description">@filterableCol("desc", "Description", "البيان")</th>
@@ -350,7 +350,7 @@
                             <td data-col="cashAccount">@r.CashAccount?.AccountName</td>
                             <td data-col="counterAccount">@r.CounterAccount?.AccountName</td>
                             <td data-col="amount">@r.Amount.ToString("N2")</td>
-                            <td data-col="posted">@(r.IsPosted ? "مرحّل" : "مسودة")</td>
+                            <td data-col="posted">@(r.IsPosted ? "مرحلة 1" : "غير مرحلة")</td>
                             <td data-col="created">@(r.CreatedAt == default ? "" : r.CreatedAt.ToString("yyyy-MM-dd HH:mm"))</td>
                             <td data-col="updated">@(r.UpdatedAt.HasValue ? r.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</td>
                             <td data-col="description">@descShort</td>

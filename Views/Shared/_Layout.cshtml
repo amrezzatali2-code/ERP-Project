@@ -221,6 +221,16 @@
 
                                 <li>
                                     <a class="dropdown-item app-menu-link"
+                                       asp-controller="PrintHeaderSettings"
+                                       asp-action="Index"
+                                       data-tab-id="print-header-settings"
+                                       data-tab-title="هيدر الطباعة">
+                                        إعداد هيدر الطباعة
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
                                        asp-controller="UserActivityLogs"
                                        asp-action="Index"
                                        data-tab-id="user-activity-logs"
@@ -659,6 +669,16 @@
                                        data-tab-id="sr-show-tab"
                                        data-tab-title="مرتجع مبيعات">
                                         مرتجع مبيعات جديد
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SalesReturns"
+                                       asp-action="Create"
+                                       asp-route-standalone="true"
+                                       data-tab-id="sr-standalone-show-tab"
+                                       data-tab-title="مرتجع بدون فاتورة">
+                                        مرتجع بيع بدون فاتورة
                                     </a>
                                 </li>
                                 <li>

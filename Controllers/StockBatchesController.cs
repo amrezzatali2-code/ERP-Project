@@ -121,6 +121,55 @@ namespace ERP.Controllers
             return q;
         }
 
+        private static string PairKey(int prodId, int warehouseId) => $"{prodId}|{warehouseId}";
+
+        /// <summary>
+        /// فلتر رقمي عشري (للخصم المرجح %) بنفس صيغة الأعمدة الرقمية.
+        /// </summary>
+        private static bool MatchesDecimalExpr(decimal value, string? expr)
+        {
+            if (string.IsNullOrWhiteSpace(expr)) return true;
+            expr = expr.Trim();
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            const decimal eps = 0.0001m;
+
+            if (expr.StartsWith("<=") && expr.Length > 2 && decimal.TryParse(expr.Substring(2), System.Globalization.NumberStyles.Any, inv, out var maxLe))
+                return value <= maxLe;
+            if (expr.StartsWith(">=") && expr.Length > 2 && decimal.TryParse(expr.Substring(2), System.Globalization.NumberStyles.Any, inv, out var minGe))
+                return value >= minGe;
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && decimal.TryParse(expr.Substring(1), System.Globalization.NumberStyles.Any, inv, out var maxLt))
+                return value < maxLt;
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && decimal.TryParse(expr.Substring(1), System.Globalization.NumberStyles.Any, inv, out var minGt))
+                return value > minGt;
+            if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith('-'))
+            {
+                var separator = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 &&
+                    decimal.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Any, inv, out var from) &&
+                    decimal.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Any, inv, out var to))
+                {
+                    if (from > to) (from, to) = (to, from);
+                    return value >= from && value <= to;
+                }
+            }
+            if (decimal.TryParse(expr, System.Globalization.NumberStyles.Any, inv, out var exact))
+                return Math.Abs(value - exact) <= eps;
+
+            return true;
+        }
+
+        private async Task<Dictionary<string, decimal>> BuildWeightedDiscountMapAsync(System.Collections.Generic.IEnumerable<(int ProdId, int WarehouseId)> pairs)
+        {
+            var map = new Dictionary<string, decimal>();
+            foreach (var pair in pairs.Distinct())
+            {
+                var d = await _stockAnalysis.GetWeightedPurchaseDiscountForWarehouseAsync(pair.ProdId, pair.WarehouseId);
+                map[PairKey(pair.ProdId, pair.WarehouseId)] = d;
+            }
+            return map;
+        }
+
         public StockBatchesController(AppDbContext context, StockAnalysisService stockAnalysis)
         {
             _db = context;
@@ -165,6 +214,42 @@ namespace ERP.Controllers
                     .ToListAsync();
                 items = rows
                     .Select(x => (x.ProdId.ToString(), (x.ProdName ?? "").Trim() + " (" + x.ProdId + ")"))
+                    .ToList();
+            }
+            else if (col == "prodname")
+            {
+                var prodIds = await q.Select(x => x.ProdId).Distinct().ToListAsync();
+                var rows = await _db.Products
+                    .AsNoTracking()
+                    .Where(p => prodIds.Contains(p.ProdId))
+                    .OrderBy(p => p.ProdName)
+                    .Take(500)
+                    .Select(p => p.ProdName)
+                    .ToListAsync();
+                items = rows
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Select(n => (n!, n!))
+                    .Distinct()
+                    .ToList();
+            }
+            else if (col == "wdisc")
+            {
+                var pairs = await q
+                    .Select(x => new { x.ProdId, x.WarehouseId })
+                    .Distinct()
+                    .Take(1000)
+                    .ToListAsync();
+
+                var map = await BuildWeightedDiscountMapAsync(pairs.Select(p => (p.ProdId, p.WarehouseId)));
+                items = map.Values
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(300)
+                    .Select(v =>
+                    {
+                        var s = v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                        return (s, s);
+                    })
                     .ToList();
             }
             else
@@ -223,6 +308,8 @@ namespace ERP.Controllers
             string? filterCol_id = null,
             string? filterCol_wh = null,
             string? filterCol_prod = null,
+            string? filterCol_prodname = null,
+            string? filterCol_wdisc = null,
             string? filterCol_batchno = null,
             string? filterCol_expiry = null,
             string? filterCol_qty = null,
@@ -234,6 +321,7 @@ namespace ERP.Controllers
             string? filterCol_prodExpr = null,
             string? filterCol_qtyExpr = null,
             string? filterCol_reservedExpr = null,
+            string? filterCol_wdiscExpr = null,
             string? searchMode = null)
         {
             // الاستعلام الأساسي (AsNoTracking للسرعة)
@@ -282,6 +370,23 @@ namespace ERP.Controllers
                     .ToList();
                 if (ids.Count > 0)
                     q = q.Where(x => ids.Contains(x.ProdId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_prodname))
+            {
+                var names = filterCol_prodname.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct()
+                    .ToList();
+                if (names.Count > 0)
+                {
+                    var prodIdsByName = _db.Products
+                        .AsNoTracking()
+                        .Where(p => p.ProdName != null && names.Contains(p.ProdName))
+                        .Select(p => p.ProdId);
+                    q = q.Where(x => prodIdsByName.Contains(x.ProdId));
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(filterCol_batchno))
@@ -380,6 +485,46 @@ namespace ERP.Controllers
                     .ToList();
                 if (vals.Count > 0)
                     q = q.Where(x => x.Note != null && vals.Any(v => x.Note.Contains(v)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_wdiscExpr) || !string.IsNullOrWhiteSpace(filterCol_wdisc))
+            {
+                var candidates = q.Select(x => new { x.Id, x.ProdId, x.WarehouseId }).ToList();
+                var pairMap = BuildWeightedDiscountMapAsync(candidates.Select(c => (c.ProdId, c.WarehouseId)))
+                    .GetAwaiter()
+                    .GetResult();
+
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                var filterVals = new HashSet<decimal>();
+                if (!string.IsNullOrWhiteSpace(filterCol_wdisc))
+                {
+                    foreach (var token in filterCol_wdisc.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()))
+                    {
+                        if (decimal.TryParse(token, System.Globalization.NumberStyles.Any, inv, out var dec))
+                            filterVals.Add(dec);
+                    }
+                }
+
+                bool useExpr = !string.IsNullOrWhiteSpace(filterCol_wdiscExpr);
+                bool useList = filterVals.Count > 0;
+
+                var allowedIds = candidates
+                    .Where(c =>
+                    {
+                        var key = PairKey(c.ProdId, c.WarehouseId);
+                        var val = pairMap.TryGetValue(key, out var d) ? d : 0m;
+                        var listOk = !useList || filterVals.Any(v => Math.Abs(v - val) <= 0.0001m);
+                        var exprOk = !useExpr || MatchesDecimalExpr(val, filterCol_wdiscExpr);
+                        return listOk && exprOk;
+                    })
+                    .Select(c => c.Id)
+                    .Distinct()
+                    .ToList();
+
+                if (allowedIds.Count == 0)
+                    q = q.Where(_ => false);
+                else
+                    q = q.Where(x => allowedIds.Contains(x.Id));
             }
 
             // ------------------------------
@@ -588,6 +733,8 @@ namespace ERP.Controllers
             string? filterCol_id = null,
             string? filterCol_wh = null,
             string? filterCol_prod = null,
+            string? filterCol_prodname = null,
+            string? filterCol_wdisc = null,
             string? filterCol_batchno = null,
             string? filterCol_expiry = null,
             string? filterCol_qty = null,
@@ -598,7 +745,8 @@ namespace ERP.Controllers
             string? filterCol_whExpr = null,
             string? filterCol_prodExpr = null,
             string? filterCol_qtyExpr = null,
-            string? filterCol_reservedExpr = null)
+            string? filterCol_reservedExpr = null,
+            string? filterCol_wdiscExpr = null)
         {
             searchBy ??= "all";
             sort ??= "id";
@@ -622,6 +770,8 @@ namespace ERP.Controllers
                 filterCol_id,
                 filterCol_wh,
                 filterCol_prod,
+                filterCol_prodname,
+                filterCol_wdisc,
                 filterCol_batchno,
                 filterCol_expiry,
                 filterCol_qty,
@@ -633,6 +783,7 @@ namespace ERP.Controllers
                 filterCol_prodExpr,
                 filterCol_qtyExpr,
                 filterCol_reservedExpr,
+                filterCol_wdiscExpr,
                 searchMode);
 
             // (3) Count
@@ -679,12 +830,7 @@ namespace ERP.Controllers
             ViewBag.ProdNames = prodNames;
             ViewBag.WarehouseNames = warehouseNames;
 
-            var wdMap = new Dictionary<string, decimal>();
-            foreach (var pair in items.Select(x => (x.ProdId, x.WarehouseId)).Distinct())
-            {
-                var d = await _stockAnalysis.GetWeightedPurchaseDiscountForWarehouseAsync(pair.ProdId, pair.WarehouseId);
-                wdMap[$"{pair.ProdId}|{pair.WarehouseId}"] = d;
-            }
+            var wdMap = await BuildWeightedDiscountMapAsync(items.Select(x => (x.ProdId, x.WarehouseId)));
             ViewBag.WeightedDiscounts = wdMap;
 
             // (6) تجهيز PagedResult
@@ -717,6 +863,8 @@ namespace ERP.Controllers
             ViewBag.FilterCol_Id = filterCol_id;
             ViewBag.FilterCol_Wh = filterCol_wh;
             ViewBag.FilterCol_Prod = filterCol_prod;
+            ViewBag.FilterCol_ProdName = filterCol_prodname;
+            ViewBag.FilterCol_WDisc = filterCol_wdisc;
             ViewBag.FilterCol_BatchNo = filterCol_batchno;
             ViewBag.FilterCol_Expiry = filterCol_expiry;
             ViewBag.FilterCol_Qty = filterCol_qty;
@@ -728,6 +876,7 @@ namespace ERP.Controllers
             ViewBag.FilterCol_ProdExpr = filterCol_prodExpr;
             ViewBag.FilterCol_QtyExpr = filterCol_qtyExpr;
             ViewBag.FilterCol_ReservedExpr = filterCol_reservedExpr;
+            ViewBag.FilterCol_WDiscExpr = filterCol_wdiscExpr;
             ViewBag.PageSize = pageSize;
 
             return View(model);
@@ -806,6 +955,8 @@ namespace ERP.Controllers
             string? filterCol_id = null,
             string? filterCol_wh = null,
             string? filterCol_prod = null,
+            string? filterCol_prodname = null,
+            string? filterCol_wdisc = null,
             string? filterCol_batchno = null,
             string? filterCol_expiry = null,
             string? filterCol_qty = null,
@@ -817,6 +968,7 @@ namespace ERP.Controllers
             string? filterCol_prodExpr = null,
             string? filterCol_qtyExpr = null,
             string? filterCol_reservedExpr = null,
+            string? filterCol_wdiscExpr = null,
             string format = "excel")
         {
             var query = SearchSortFilter(
@@ -826,6 +978,8 @@ namespace ERP.Controllers
                 filterCol_id,
                 filterCol_wh,
                 filterCol_prod,
+                filterCol_prodname,
+                filterCol_wdisc,
                 filterCol_batchno,
                 filterCol_expiry,
                 filterCol_qty,
@@ -837,6 +991,7 @@ namespace ERP.Controllers
                 filterCol_prodExpr,
                 filterCol_qtyExpr,
                 filterCol_reservedExpr,
+                filterCol_wdiscExpr,
                 searchMode);
 
             var data = await query.ToListAsync();
@@ -857,12 +1012,7 @@ namespace ERP.Controllers
                 .Select(w => new { w.WarehouseId, w.WarehouseName })
                 .ToDictionaryAsync(x => x.WarehouseId, x => x.WarehouseName ?? "");
 
-            var wdMap = new Dictionary<string, decimal>();
-            foreach (var pair in data.Select(x => (x.ProdId, x.WarehouseId)).Distinct())
-            {
-                var d = await _stockAnalysis.GetWeightedPurchaseDiscountForWarehouseAsync(pair.ProdId, pair.WarehouseId);
-                wdMap[$"{pair.ProdId}|{pair.WarehouseId}"] = d;
-            }
+            var wdMap = await BuildWeightedDiscountMapAsync(data.Select(x => (x.ProdId, x.WarehouseId)));
 
             if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
             {

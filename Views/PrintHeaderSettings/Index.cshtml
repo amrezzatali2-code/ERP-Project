@@ -1,0 +1,70 @@
+@model ERP.Models.PrintHeaderSetting
+@{
+    ViewData["Title"] = "إعداد هيدر الطباعة";
+}
+
+<div class="container-fluid py-2">
+    <div class="card shadow-sm">
+        <div class="card-header bg-white">
+            <h6 class="mb-0">إعداد هيدر الطباعة</h6>
+        </div>
+        <div class="card-body">
+            @if (TempData["Success"] != null)
+            {
+                <div class="alert alert-success py-2">@TempData["Success"]</div>
+            }
+            @if (TempData["Error"] != null)
+            {
+                <div class="alert alert-danger py-2">@TempData["Error"]</div>
+            }
+
+            <form asp-action="Index" asp-controller="PrintHeaderSettings" method="post" enctype="multipart/form-data" class="row g-3">
+                @Html.AntiForgeryToken()
+
+                <div class="col-lg-6">
+                    <label for="companyName" class="form-label">اسم الشركة في الهيدر</label>
+                    <input type="text"
+                           id="companyName"
+                           name="companyName"
+                           class="form-control"
+                           maxlength="200"
+                           value="@Model.CompanyName"
+                           placeholder="مثال: شركة الهدى" />
+                    @Html.ValidationMessage("companyName", null, new { @class = "text-danger small" })
+                </div>
+
+                <div class="col-lg-6">
+                    <label for="logoFile" class="form-label">لوجو الطباعة</label>
+                    <input type="file"
+                           id="logoFile"
+                           name="logoFile"
+                           class="form-control"
+                           accept=".png,.jpg,.jpeg,.webp,.gif" />
+                    @Html.ValidationMessage("logoFile", null, new { @class = "text-danger small" })
+                    <small class="text-muted d-block mt-1">الصيغ المسموحة: PNG/JPG/JPEG/WEBP/GIF</small>
+                </div>
+
+                <div class="col-12">
+                    @if (!string.IsNullOrWhiteSpace(Model.LogoPath))
+                    {
+                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                            <img src="@Url.Content(Model.LogoPath)" alt="Logo" style="max-height:80px; border:1px solid #e5e7eb; border-radius:6px; padding:4px;" />
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="removeLogo" name="removeLogo" value="true" />
+                                <label class="form-check-label" for="removeLogo">حذف اللوجو الحالي</label>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="text-muted">لا يوجد لوجو مرفوع حالياً.</span>
+                    }
+                </div>
+
+                <div class="col-12">
+                    <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">حفظ الإعدادات</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

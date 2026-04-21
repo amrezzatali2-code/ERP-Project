@@ -51,6 +51,7 @@ namespace ERP.Controllers
             int? srId,
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange,
@@ -156,6 +157,7 @@ namespace ERP.Controllers
             q = q.ApplySearchSort(
                     search: search,
                     searchBy: searchBy,
+                    searchMode: searchMode,
                     sort: sort,
                     dir: dir,
                     stringFields: stringFields,
@@ -692,6 +694,7 @@ namespace ERP.Controllers
             int? srId,                      // رقم مرتجع معين (لو جاي من شاشة الهيدر)
             string? search,                 // نص البحث
             string? searchBy = "all",       // اسم الحقل الذي نبحث فيه
+            string? searchMode = "contains", // starts | contains | ends
             string? sort = "SRId",          // عمود الترتيب
             string? dir = "asc",            // اتجاه الترتيب asc/desc
             bool useDateRange = false,      // هل نفعّل فلتر التاريخ؟
@@ -732,10 +735,12 @@ namespace ERP.Controllers
             if (pageSize < 0) pageSize = 10;
             if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
                 pageSize = 10;
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
 
             var q = BuildQuery(
                 srId,
-                search, searchBy,
+                search, searchBy, sm,
                 sort, dir,
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);
@@ -813,6 +818,7 @@ namespace ERP.Controllers
 
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = sort ?? "SRId";
             ViewBag.Dir = dirNorm;
 
@@ -869,11 +875,12 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Index), new { srId });
             }
 
-            // التحقق من أن حالة المرتجع Draft فقط
+            // التحقق من أن حالة المرتجع "غير مرحلة" (مع دعم القيمة القديمة Draft)
             var status = line.SalesReturn?.Status ?? "";
-            if (!string.Equals(status, "Draft", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(status, "Draft", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(status, "غير مرحلة", StringComparison.OrdinalIgnoreCase))
             {
-                TempData["error"] = "لا يمكن حذف سطر من مرتجع حالته ليست Draft.";
+                TempData["error"] = "لا يمكن حذف سطر من مرتجع حالته ليست غير مرحلة.";
                 return RedirectToAction(nameof(Index), new { srId });
             }
 
@@ -950,7 +957,8 @@ namespace ERP.Controllers
                 foreach (var line in lines)
                 {
                     var status = line.SalesReturn?.Status ?? "";
-                    if (string.Equals(status, "Draft", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(status, "Draft", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(status, "غير مرحلة", StringComparison.OrdinalIgnoreCase))
                     {
                         _context.SalesReturnLines.Remove(line);
                         deleted++;
@@ -976,9 +984,9 @@ namespace ERP.Controllers
                 if (deleted > 0 && blocked == 0)
                     TempData["ok"] = $"تم حذف {deleted} سطر/أسطر بنجاح.";
                 else if (deleted > 0 && blocked > 0)
-                    TempData["ok"] = $"تم حذف {deleted} سطر، وتم منع حذف {blocked} سطر لأن حالة المرتجع ليست Draft.";
+                    TempData["ok"] = $"تم حذف {deleted} سطر، وتم منع حذف {blocked} سطر لأن حالة المرتجع ليست غير مرحلة.";
                 else if (blocked > 0)
-                    TempData["error"] = "تم منع الحذف لأن جميع الأسطر مرتبطة بمرتجعات ليست Draft.";
+                    TempData["error"] = "تم منع الحذف لأن جميع الأسطر مرتبطة بمرتجعات ليست غير مرحلة.";
                 else
                     TempData["error"] = "لم يتم العثور على الأسطر المطلوبة.";
 
@@ -992,7 +1000,7 @@ namespace ERP.Controllers
         }
 
         // =========================
-        // DELETE ALL: حذف جميع الأسطر (للمرتجعات Draft فقط)
+        // DELETE ALL: حذف جميع الأسطر (للمرتجعات غير مرحلة فقط)
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -1011,14 +1019,17 @@ namespace ERP.Controllers
             var deletable = all
                 .Where(l => string.Equals(l.SalesReturn?.Status ?? "",
                                           "Draft",
-                                          StringComparison.OrdinalIgnoreCase))
+                                          StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(l.SalesReturn?.Status ?? "",
+                                     "غير مرحلة",
+                                     StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             var blocked = all.Count - deletable.Count;
 
             if (deletable.Count == 0)
             {
-                TempData["error"] = "كل السطور مرتبطة بمرتجعات ليست Draft، لا يمكن حذفها.";
+                TempData["error"] = "كل السطور مرتبطة بمرتجعات ليست غير مرحلة، لا يمكن حذفها.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -1037,9 +1048,9 @@ namespace ERP.Controllers
             }
 
             if (blocked > 0)
-                TempData["ok"] = $"تم حذف {deletable.Count} سطر/أسطر، وتم منع حذف {blocked} سطر لأن حالة المرتجع ليست Draft.";
+                TempData["ok"] = $"تم حذف {deletable.Count} سطر/أسطر، وتم منع حذف {blocked} سطر لأن حالة المرتجع ليست غير مرحلة.";
             else
-                TempData["ok"] = "تم حذف جميع سطور مرتجعات البيع (الخاصة بمرتجعات Draft).";
+                TempData["ok"] = "تم حذف جميع سطور مرتجعات البيع (الخاصة بمرتجعات غير مرحلة).";
 
             return RedirectToAction(nameof(Index));
         }
@@ -1053,6 +1064,7 @@ namespace ERP.Controllers
             int? srId,
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "SRId",
             string? dir = "asc",
             bool useDateRange = false,
@@ -1086,9 +1098,11 @@ namespace ERP.Controllers
             string format = "excel"
         )
         {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
             var q = BuildQuery(
                 srId,
-                search, searchBy,
+                search, searchBy, sm,
                 sort, dir,
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);

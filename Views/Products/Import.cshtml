@@ -223,6 +223,36 @@
         </div>
     </div>
 
+    <div class="card mb-3 border-danger">
+        <div class="card-header bg-danger text-white"><strong>مسح البيانات المستوردة</strong></div>
+        <div class="card-body">
+            <p class="text-danger small mb-3">
+                تحذير: هذه الأزرار تحذف البيانات المستوردة نهائياً (غير قابل للتراجع).
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+                <form asp-action="DeleteImportedCustomersAndBalances" asp-controller="Products" method="post" onsubmit="return confirm('سيتم مسح كل العملاء المستوردين وكل أرصدتهم/حركاتهم المرتبطة. هل تريد المتابعة؟');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-danger">مسح العملاء المستوردين + الأرصدة</button>
+                </form>
+
+                <form asp-action="DeleteImportedProductsAndBalances" asp-controller="Products" method="post" onsubmit="return confirm('سيتم مسح كل الأصناف المستوردة وكل أرصدتها/حركاتها المرتبطة. هل تريد المتابعة؟');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-danger">مسح الأصناف المستوردة + الأرصدة</button>
+                </form>
+
+                <form asp-action="DeleteAllCustomersAndBalances" asp-controller="Products" method="post" onsubmit="return confirm('تحذير شديد: سيتم مسح كل العملاء في النظام وكل الأرصدة/الحركات المرتبطة بهم. لا يمكن التراجع. هل تريد المتابعة؟');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-danger">مسح كل العملاء + الأرصدة</button>
+                </form>
+
+                <form asp-action="DeleteAllProductsAndBalances" asp-controller="Products" method="post" onsubmit="return confirm('تحذير شديد: سيتم مسح كل الأصناف في النظام وكل الأرصدة/الحركات المرتبطة بها. لا يمكن التراجع. هل تريد المتابعة؟');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-danger">مسح كل الأصناف + الأرصدة</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     }
     <div class="alert alert-warning">
         بعد انتهاء التجارب، يمكنك مسح كل الأصناف التجريبية من جدول <strong>Products</strong> وإعادة الاستيراد من جديد قبل تشغيل البرنامج في الشركة.

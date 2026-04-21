@@ -586,7 +586,7 @@
 
                                 <div class="col-lg-2">
                                     <label class="form-label form-label-sm">الحالة</label>
-                                    <input id="AdjustmentStatusDisplay" class="form-control form-control-sm text-center" value="@(string.IsNullOrWhiteSpace(Model.Status) ? "مسودة" : Model.Status)" readonly />
+                                    <input id="AdjustmentStatusDisplay" class="form-control form-control-sm text-center" value="@(string.IsNullOrWhiteSpace(Model.Status) ? "غير مرحلة" : Model.Status)" readonly />
                                 </div>
                             </div>
                             <input type="hidden" asp-for="ReferenceNo" id="ReferenceNoHidden" />
@@ -778,9 +778,16 @@
                                     <td colspan="11" class="p-0 border-0 pi-print-thead-banner-cell">
                                         <div class="pi-print-header mb-2">
                                             <div class="pi-print-company-row d-flex justify-content-between align-items-center">
-                                                <div class="pi-print-logo-placeholder"></div>
+                                                @if (!string.IsNullOrWhiteSpace(ViewBag.PrintHeaderLogoUrl as string))
+                                                {
+                                                    <img src="@((string)ViewBag.PrintHeaderLogoUrl)" alt="logo" style="max-width:80px; max-height:36px;" />
+                                                }
+                                                else
+                                                {
+                                                    <div class="pi-print-logo-placeholder"></div>
+                                                }
                                                 <div class="text-center flex-grow-1">
-                                                    <h2 class="pi-print-company-name mb-0 fw-bold">شركة الهدى</h2>
+                                                    <h2 class="pi-print-company-name mb-0 fw-bold">@((string?)ViewBag.PrintHeaderCompanyName ?? "شركة الهدى")</h2>
                                                     <span class="pi-print-doc-title">ERP — تسوية جردية</span>
                                                 </div>
                                                 <div style="width:48px"></div>
@@ -2160,7 +2167,7 @@
                     setAdjustmentPosted(false);
                     applyPostedUiLock();
                     var statusDisplay = document.getElementById('AdjustmentStatusDisplay');
-                    if (statusDisplay) statusDisplay.value = 'مسودة';
+                    if (statusDisplay) statusDisplay.value = 'غير مرحلة';
                     var btnPost = document.getElementById('btnPostAdjustment');
                     if (btnPost) { btnPost.disabled = false; btnPost.innerHTML = '📤 ترحيل التسوية'; }
                     var btnOpen = document.getElementById('btnOpenAdjustment');

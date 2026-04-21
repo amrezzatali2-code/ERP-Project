@@ -177,6 +177,43 @@ namespace ERP.Controllers
             _stockAnalysisService = stockAnalysisService;
         }
 
+        private async Task LoadPrintHeaderSettingsAsync()
+        {
+            try
+            {
+                var printHeader = await _context.PrintHeaderSettings
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.Id)
+                    .FirstOrDefaultAsync();
+
+                ViewBag.PrintHeaderCompanyName = string.IsNullOrWhiteSpace(printHeader?.CompanyName)
+                    ? "شركة الهدى"
+                    : printHeader!.CompanyName.Trim();
+                ViewBag.PrintHeaderLogoUrl = string.IsNullOrWhiteSpace(printHeader?.LogoPath)
+                    ? null
+                    : Url.Content(printHeader!.LogoPath!);
+            }
+            catch (Exception ex) when (IsMissingPrintHeaderSettingsTable(ex))
+            {
+                ViewBag.PrintHeaderCompanyName = "شركة الهدى";
+                ViewBag.PrintHeaderLogoUrl = null;
+            }
+        }
+
+        private static bool IsMissingPrintHeaderSettingsTable(Exception ex)
+        {
+            Exception? current = ex;
+            while (current != null)
+            {
+                var msg = current.Message ?? string.Empty;
+                if (msg.Contains("Invalid object name", StringComparison.OrdinalIgnoreCase) &&
+                    msg.Contains("PrintHeaderSettings", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                current = current.InnerException;
+            }
+            return false;
+        }
+
         // =========================
         // دالة خاصة لبناء استعلام التسويات
         // (بحث + فلتر كود من/إلى + فلتر تاريخ + ترتيب)
@@ -268,7 +305,7 @@ namespace ERP.Controllers
             string? dir = "asc",            // asc | desc
             string? searchMode = "contains",
             int page = 1,
-            int pageSize = 25,
+            int pageSize = 10,
             int? fromCode = null,           // فلتر كود من
             int? toCode = null,             // فلتر كود إلى
             bool useDateRange = false,      // تفعيل فلتر التاريخ
@@ -288,6 +325,13 @@ namespace ERP.Controllers
             string? filterCol_costBeforeExpr = null,
             string? filterCol_costAfterExpr = null)
         {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
             var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
             if (sm != "starts" && sm != "ends") sm = "contains";
 
@@ -381,6 +425,7 @@ namespace ERP.Controllers
 
             // تضمين السطور بعد تطبيق الفلاتر
             var q = qBase
+                .Include(a => a.Warehouse)
                 .Include(a => a.Lines)
                 .ThenInclude(l => l.Product);
 
@@ -688,7 +733,7 @@ namespace ERP.Controllers
                     AdjustmentDate = DateTime.Today,
                     WarehouseId = 0,
                     IsPosted = false,
-                    Status = "مسودة",
+                    Status = "غير مرحلة",
                     Lines = new List<StockAdjustmentLine>()
                 };
             }
@@ -738,6 +783,7 @@ namespace ERP.Controllers
 
             ViewBag.IsLocked = adjustment.IsPosted || adjustment.Status == "Posted" || adjustment.Status == "Closed";
             ViewBag.Frame = (!isBodyOnly) ? 1 : 0;
+            await LoadPrintHeaderSettingsAsync();
 
             return View("Show", adjustment);
         }
@@ -1120,7 +1166,7 @@ namespace ERP.Controllers
                 Reason = dto.Reason,
                 CreatedAt = DateTime.UtcNow,
                 IsPosted = false,
-                Status = "مسودة"
+                Status = "غير مرحلة"
             };
 
             _context.StockAdjustments.Add(adjustment);

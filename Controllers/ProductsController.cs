@@ -4232,6 +4232,307 @@ namespace ERP.Controllers
         }
 
         // =====================
+        // مسح كل العملاء المستوردين + أرصدتهم/حركاتهم المرتبطة
+        // معيار "المستورد": العميل الذي لديه ExternalCode غير فارغ
+        // =====================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public async Task<IActionResult> DeleteImportedCustomersAndBalances()
+        {
+            var importedCustomers = _db.Customers
+                .Where(c => c.ExternalCode != null && c.ExternalCode.Trim() != "");
+
+            var importedCount = await importedCustomers.CountAsync();
+            if (importedCount == 0)
+            {
+                TempData["Error"] = "لا توجد بيانات عملاء مستوردة للمسح.";
+                return RedirectToAction(nameof(Import));
+            }
+
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                var importedCustomerIds = importedCustomers.Select(c => c.CustomerId);
+
+                // فك الربط الاختياري قبل الحذف
+                await _db.Users
+                    .Where(u => u.CustomerId.HasValue && importedCustomerIds.Contains(u.CustomerId.Value))
+                    .ExecuteUpdateAsync(s => s.SetProperty(u => u.CustomerId, (int?)null));
+
+                await _db.Batches
+                    .Where(b => b.CustomerId.HasValue && importedCustomerIds.Contains(b.CustomerId.Value))
+                    .ExecuteUpdateAsync(s => s.SetProperty(b => b.CustomerId, (int?)null));
+
+                // حذف المستندات المرتبطة بالعملاء المستوردين (الهيدر؛ السطور تُحذف Cascade حسب الإعداد)
+                var deletedCashReceipts = await _db.CashReceipts
+                    .Where(x => x.CustomerId.HasValue && importedCustomerIds.Contains(x.CustomerId.Value))
+                    .ExecuteDeleteAsync();
+
+                var deletedCashPayments = await _db.CashPayments
+                    .Where(x => x.CustomerId.HasValue && importedCustomerIds.Contains(x.CustomerId.Value))
+                    .ExecuteDeleteAsync();
+
+                var deletedDebitNotes = await _db.DebitNotes
+                    .Where(x => x.CustomerId.HasValue && importedCustomerIds.Contains(x.CustomerId.Value))
+                    .ExecuteDeleteAsync();
+
+                var deletedCreditNotes = await _db.CreditNotes
+                    .Where(x => x.CustomerId.HasValue && importedCustomerIds.Contains(x.CustomerId.Value))
+                    .ExecuteDeleteAsync();
+
+                var deletedSalesOrders = await _db.SalesOrders
+                    .Where(x => importedCustomerIds.Contains(x.CustomerId))
+                    .ExecuteDeleteAsync();
+
+                var deletedPurchaseRequests = await _db.PurchaseRequests
+                    .Where(x => importedCustomerIds.Contains(x.CustomerId))
+                    .ExecuteDeleteAsync();
+
+                var deletedSalesReturns = await _db.SalesReturns
+                    .Where(x => importedCustomerIds.Contains(x.CustomerId))
+                    .ExecuteDeleteAsync();
+
+                var deletedSalesInvoices = await _db.SalesInvoices
+                    .Where(x => importedCustomerIds.Contains(x.CustomerId))
+                    .ExecuteDeleteAsync();
+
+                var deletedPurchaseReturns = await _db.PurchaseReturns
+                    .Where(x => importedCustomerIds.Contains(x.CustomerId))
+                    .ExecuteDeleteAsync();
+
+                var deletedPurchaseInvoices = await _db.PurchaseInvoices
+                    .Where(x => importedCustomerIds.Contains(x.CustomerId))
+                    .ExecuteDeleteAsync();
+
+                // أرصدة وقيود مرتبطة بالعميل
+                var deletedLedgerEntries = await _db.LedgerEntries
+                    .Where(x => x.CustomerId.HasValue && importedCustomerIds.Contains(x.CustomerId.Value))
+                    .ExecuteDeleteAsync();
+
+                // أخيراً حذف العملاء أنفسهم
+                var deletedCustomers = await _db.Customers
+                    .Where(c => c.ExternalCode != null && c.ExternalCode.Trim() != "")
+                    .ExecuteDeleteAsync();
+
+                await tx.CommitAsync();
+
+                var ledgerPosting = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+                await ledgerPosting.RecalcAllCustomerBalancesAsync();
+                _customerCache.ClearCustomersCache();
+
+                TempData["Success"] =
+                    $"تم مسح العملاء المستوردين بنجاح. " +
+                    $"العملاء: {deletedCustomers}، القيود: {deletedLedgerEntries}، " +
+                    $"المبيعات: {deletedSalesInvoices}، مرتجعات المبيعات: {deletedSalesReturns}، " +
+                    $"المشتريات: {deletedPurchaseInvoices}، مرتجعات المشتريات: {deletedPurchaseReturns}، " +
+                    $"القبض: {deletedCashReceipts}، الدفع: {deletedCashPayments}، " +
+                    $"إشعارات الخصم/الإضافة: {deletedDebitNotes + deletedCreditNotes}.";
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                TempData["Error"] = "تعذّر مسح العملاء المستوردين: " + (ex.InnerException?.Message ?? ex.Message);
+            }
+
+            return RedirectToAction(nameof(Import));
+        }
+
+        // =====================
+        // مسح كل العملاء + الأرصدة/الحركات المرتبطة
+        // =====================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public async Task<IActionResult> DeleteAllCustomersAndBalances()
+        {
+            var allCustomersCount = await _db.Customers.CountAsync();
+            if (allCustomersCount == 0)
+            {
+                TempData["Error"] = "لا توجد بيانات عملاء للمسح.";
+                return RedirectToAction(nameof(Import));
+            }
+
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                // فك الروابط الاختيارية أولاً
+                await _db.Users
+                    .Where(u => u.CustomerId.HasValue)
+                    .ExecuteUpdateAsync(s => s.SetProperty(u => u.CustomerId, (int?)null));
+
+                await _db.Batches
+                    .Where(b => b.CustomerId.HasValue)
+                    .ExecuteUpdateAsync(s => s.SetProperty(b => b.CustomerId, (int?)null));
+
+                // جداول الموديولات المرتبطة مباشرة بالعميل
+                await _db.VendorProductMappings.ExecuteDeleteAsync();
+                await _db.VendorFaxUploads.ExecuteDeleteAsync(); // VendorFaxLines تُحذف Cascade
+                await _db.PurchasingOrders.ExecuteDeleteAsync(); // PurchasingOrderLines تُحذف Cascade
+
+                // مستندات العملاء الرئيسية
+                await _db.CashReceipts.ExecuteDeleteAsync();
+                await _db.CashPayments.ExecuteDeleteAsync();
+                await _db.DebitNotes.ExecuteDeleteAsync();
+                await _db.CreditNotes.ExecuteDeleteAsync();
+                await _db.SalesOrders.ExecuteDeleteAsync();      // SOLines تُحذف Cascade
+                await _db.PurchaseRequests.ExecuteDeleteAsync(); // PRLines تُحذف Cascade
+                await _db.SalesReturns.ExecuteDeleteAsync();     // SalesReturnLines تُحذف Cascade
+                await _db.SalesInvoices.ExecuteDeleteAsync();    // SalesInvoiceLines + Route/FridgeLines تُحذف Cascade
+                await _db.PurchaseReturns.ExecuteDeleteAsync();  // PurchaseReturnLines تُحذف Cascade
+                await _db.PurchaseInvoices.ExecuteDeleteAsync(); // PILines تُحذف Cascade
+
+                // قيود العملاء
+                await _db.LedgerEntries
+                    .Where(x => x.CustomerId.HasValue)
+                    .ExecuteDeleteAsync();
+
+                // أخيراً حذف العملاء
+                var deletedCustomers = await _db.Customers.ExecuteDeleteAsync();
+                await tx.CommitAsync();
+
+                var ledgerPosting = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+                await ledgerPosting.RecalcAllCustomerBalancesAsync();
+                _customerCache.ClearCustomersCache();
+
+                TempData["Success"] = $"تم مسح جميع العملاء وكل الأرصدة/الحركات المرتبطة بهم بنجاح. عدد العملاء المحذوفة: {deletedCustomers}.";
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                TempData["Error"] = "تعذّر مسح كل العملاء: " + (ex.InnerException?.Message ?? ex.Message);
+            }
+
+            return RedirectToAction(nameof(Import));
+        }
+
+        // =====================
+        // مسح كل الأصناف المستوردة + أرصدتها/حركاتها المرتبطة
+        // معيار "المستورد": Product.Imported يحتوي "مستورد" أو "imported"
+        // =====================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public async Task<IActionResult> DeleteImportedProductsAndBalances()
+        {
+            var importedProducts = _db.Products.Where(p =>
+                EF.Functions.Like((p.Imported ?? ""), "%مستورد%") ||
+                EF.Functions.Like((p.Imported ?? "").ToLower(), "%imported%"));
+
+            var importedCount = await importedProducts.CountAsync();
+            if (importedCount == 0)
+            {
+                TempData["Error"] = "لا توجد أصناف مستوردة للمسح.";
+                return RedirectToAction(nameof(Import));
+            }
+
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                var importedProductIds = importedProducts.Select(p => p.ProdId);
+                var importedStockEntryIds = _db.StockLedger
+                    .Where(sl => importedProductIds.Contains(sl.ProdId))
+                    .Select(sl => sl.EntryId);
+
+                // حذف كل ما يرتبط بالصنف المستورد قبل حذف الصنف نفسه
+                await _db.VendorProductMappings.Where(x => importedProductIds.Contains(x.ProductId)).ExecuteDeleteAsync();
+                await _db.PurchasingOrderLines.Where(x => importedProductIds.Contains(x.ProductId)).ExecuteDeleteAsync();
+                await _db.VendorFaxLines.Where(x => x.MatchedProductId.HasValue && importedProductIds.Contains(x.MatchedProductId.Value)).ExecuteDeleteAsync();
+                await _db.SalesInvoiceRouteFridgeLines.Where(x => importedProductIds.Contains(x.ProductId)).ExecuteDeleteAsync();
+                await _db.StockAdjustmentLines.Where(x => importedProductIds.Contains(x.ProductId)).ExecuteDeleteAsync();
+                await _db.StockTransferLines.Where(x => importedProductIds.Contains(x.ProductId)).ExecuteDeleteAsync();
+                await _db.PRLines.Where(x => importedProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.SOLines.Where(x => importedProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.PurchaseReturnLines.Where(x => importedProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.PILines.Where(x => importedProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.SalesReturnLines.Where(x => importedProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.SalesInvoiceLines.Where(x => importedProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.ProductDiscountOverrides.Where(x => importedProductIds.Contains(x.ProductId)).ExecuteDeleteAsync();
+                await _db.ProductPriceHistories.Where(x => importedProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.StockFifoMap.Where(x => importedStockEntryIds.Contains(x.InEntryId) || importedStockEntryIds.Contains(x.OutEntryId)).ExecuteDeleteAsync();
+                await _db.StockLedger.Where(x => importedProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.StockBatches.Where(x => importedProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.Batches.Where(x => importedProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+
+                var deletedProducts = await _db.Products
+                    .Where(p =>
+                        EF.Functions.Like((p.Imported ?? ""), "%مستورد%") ||
+                        EF.Functions.Like((p.Imported ?? "").ToLower(), "%imported%"))
+                    .ExecuteDeleteAsync();
+
+                await tx.CommitAsync();
+
+                _productCache.ClearProductsCache();
+                TempData["Success"] = $"تم مسح الأصناف المستوردة وأرصدتها بنجاح. عدد الأصناف المحذوفة: {deletedProducts}.";
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                TempData["Error"] = "تعذّر مسح الأصناف المستوردة: " + (ex.InnerException?.Message ?? ex.Message);
+            }
+
+            return RedirectToAction(nameof(Import));
+        }
+
+        // =====================
+        // مسح كل الأصناف + أرصدتها/حركاتها المرتبطة
+        // =====================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public async Task<IActionResult> DeleteAllProductsAndBalances()
+        {
+            var allProductsCount = await _db.Products.CountAsync();
+            if (allProductsCount == 0)
+            {
+                TempData["Error"] = "لا توجد أصناف للمسح.";
+                return RedirectToAction(nameof(Import));
+            }
+
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                var allProductIds = _db.Products.Select(p => p.ProdId);
+                var allStockEntryIds = _db.StockLedger.Select(sl => sl.EntryId);
+
+                // جداول مرتبطة بالأصناف
+                await _db.VendorProductMappings.ExecuteDeleteAsync();
+                await _db.PurchasingOrderLines.ExecuteDeleteAsync();
+                await _db.VendorFaxLines.ExecuteDeleteAsync();
+                await _db.SalesInvoiceRouteFridgeLines.ExecuteDeleteAsync();
+                await _db.StockAdjustmentLines.ExecuteDeleteAsync();
+                await _db.StockTransferLines.ExecuteDeleteAsync();
+                await _db.PRLines.ExecuteDeleteAsync();
+                await _db.SOLines.ExecuteDeleteAsync();
+                await _db.PurchaseReturnLines.ExecuteDeleteAsync();
+                await _db.PILines.ExecuteDeleteAsync();
+                await _db.SalesReturnLines.ExecuteDeleteAsync();
+                await _db.SalesInvoiceLines.ExecuteDeleteAsync();
+                await _db.ProductDiscountOverrides.ExecuteDeleteAsync();
+                await _db.ProductPriceHistories.ExecuteDeleteAsync();
+                await _db.StockFifoMap
+                    .Where(x => allStockEntryIds.Contains(x.InEntryId) || allStockEntryIds.Contains(x.OutEntryId))
+                    .ExecuteDeleteAsync();
+                await _db.StockLedger.Where(x => allProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.StockBatches.Where(x => allProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+                await _db.Batches.Where(x => allProductIds.Contains(x.ProdId)).ExecuteDeleteAsync();
+
+                var deletedProducts = await _db.Products.ExecuteDeleteAsync();
+                await tx.CommitAsync();
+
+                _productCache.ClearProductsCache();
+                TempData["Success"] = $"تم مسح جميع الأصناف وكل الأرصدة/الحركات المرتبطة بها بنجاح. عدد الأصناف المحذوفة: {deletedProducts}.";
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                TempData["Error"] = "تعذّر مسح كل الأصناف: " + (ex.InnerException?.Message ?? ex.Message);
+            }
+
+            return RedirectToAction(nameof(Import));
+        }
+
+        // =====================
         // استيراد أسماء المستخدمين من إكسل
         // =====================
         [HttpPost]

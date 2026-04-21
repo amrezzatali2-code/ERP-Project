@@ -200,7 +200,7 @@ namespace ERP.Controllers
                 .Take(8)
                 .Select(si => new DashboardRecentItem
                 {
-                    Type = si.IsPosted ? "فاتورة بيع" : "فاتورة بيع (مسودة)",
+                    Type = si.IsPosted ? "فاتورة بيع" : "فاتورة بيع (غير مرحلة)",
                     PartyName = si.Customer!.CustomerName,
                     Amount = si.NetTotal,
                     Date = si.SIDate

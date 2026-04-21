@@ -43,6 +43,7 @@
     string? filterCol_id = ViewBag.FilterCol_Id as string;
     string? filterCol_stock = ViewBag.FilterCol_Stock as string;
     string? filterCol_product = ViewBag.FilterCol_Product as string;
+    string? filterCol_productName = ViewBag.FilterCol_ProductName as string;
     string? filterCol_batch = ViewBag.FilterCol_Batch as string;
     string? filterCol_qtyBefore = ViewBag.FilterCol_QtyBefore as string;
     string? filterCol_qtyAfter = ViewBag.FilterCol_QtyAfter as string;
@@ -82,6 +83,7 @@
         filterCol_id,
         filterCol_stock,
         filterCol_product,
+        filterCol_productName,
         filterCol_batch,
         filterCol_qtyBefore,
         filterCol_qtyAfter,
@@ -125,6 +127,7 @@
             filterCol_id,
             filterCol_stock,
             filterCol_product,
+            filterCol_productName,
             filterCol_batch,
             filterCol_qtyBefore,
             filterCol_qtyAfter,
@@ -154,6 +157,7 @@
         colKey == "id" ? (!string.IsNullOrWhiteSpace(filterCol_idExpr) ? filterCol_idExpr : filterCol_id)
         : colKey == "stock" ? (!string.IsNullOrWhiteSpace(filterCol_stockExpr) ? filterCol_stockExpr : filterCol_stock)
         : colKey == "product" ? (!string.IsNullOrWhiteSpace(filterCol_productExpr) ? filterCol_productExpr : filterCol_product)
+        : colKey == "productName" ? filterCol_productName
         : colKey == "batch" ? (!string.IsNullOrWhiteSpace(filterCol_batchExpr) ? filterCol_batchExpr : filterCol_batch)
         : colKey == "qtyBefore" ? (!string.IsNullOrWhiteSpace(filterCol_qtyBeforeExpr) ? filterCol_qtyBeforeExpr : filterCol_qtyBefore)
         : colKey == "qtyAfter" ? (!string.IsNullOrWhiteSpace(filterCol_qtyAfterExpr) ? filterCol_qtyAfterExpr : filterCol_qtyAfter)
@@ -186,10 +190,11 @@
             </div>");
     };
 
-    // متغيرات إجمالي الكميات (الصفحة الحالية فقط)
-    int totalQtyBefore = 0;
-    int totalQtyAfter = 0;
-    int totalQtyDiff = 0;
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
+    int totalQtyBeforeFiltered = (int?)ViewBag.TotalQtyBeforeFiltered ?? 0;
+    int totalQtyAfterFiltered = (int?)ViewBag.TotalQtyAfterFiltered ?? 0;
+    int totalQtyDiffFiltered = (int?)ViewBag.TotalQtyDiffFiltered ?? 0;
+    decimal totalCostDiffFiltered = (decimal?)ViewBag.TotalCostDiffFiltered ?? 0m;
 }
 
 <div dir="rtl" class="container-fluid">
@@ -219,6 +224,7 @@
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود السطر</option>
                             <option value="stock"@Html.Raw(searchBy == "stock" ? " selected" : "")>رقم التسوية</option>
                             <option value="product"@Html.Raw(searchBy == "product" ? " selected" : "")>كود الصنف</option>
+                            <option value="productname"@Html.Raw(searchBy == "productname" ? " selected" : "")>اسم الصنف</option>
                             <option value="batch"@Html.Raw(searchBy == "batch" ? " selected" : "")>كود التشغيلة</option>
                             <option value="note"@Html.Raw(searchBy == "note" ? " selected" : "")>الملاحظات</option>
                         </select>
@@ -257,6 +263,7 @@
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_stock)) { <input type="hidden" name="filterCol_stock" value="@filterCol_stock" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_product)) { <input type="hidden" name="filterCol_product" value="@filterCol_product" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_productName)) { <input type="hidden" name="filterCol_productName" value="@filterCol_productName" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_batch)) { <input type="hidden" name="filterCol_batch" value="@filterCol_batch" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_qtyBefore)) { <input type="hidden" name="filterCol_qtyBefore" value="@filterCol_qtyBefore" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_qtyAfter)) { <input type="hidden" name="filterCol_qtyAfter" value="@filterCol_qtyAfter" /> }
@@ -368,6 +375,7 @@
                                 @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
                                 @if (!string.IsNullOrWhiteSpace(filterCol_stock)) { <input type="hidden" name="filterCol_stock" value="@filterCol_stock" /> }
                                 @if (!string.IsNullOrWhiteSpace(filterCol_product)) { <input type="hidden" name="filterCol_product" value="@filterCol_product" /> }
+                                @if (!string.IsNullOrWhiteSpace(filterCol_productName)) { <input type="hidden" name="filterCol_productName" value="@filterCol_productName" /> }
                                 @if (!string.IsNullOrWhiteSpace(filterCol_batch)) { <input type="hidden" name="filterCol_batch" value="@filterCol_batch" /> }
                                 @if (!string.IsNullOrWhiteSpace(filterCol_qtyBefore)) { <input type="hidden" name="filterCol_qtyBefore" value="@filterCol_qtyBefore" /> }
                                 @if (!string.IsNullOrWhiteSpace(filterCol_qtyAfter)) { <input type="hidden" name="filterCol_qtyAfter" value="@filterCol_qtyAfter" /> }
@@ -400,6 +408,50 @@
         </div>
     </div>
 
+    @* ===== كروت التجميعات (بعد الفلترة) ===== *@
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mt-2" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي السطور</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي الكمية قبل</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@totalQtyBeforeFiltered.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي الكمية بعد</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@totalQtyAfterFiltered.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي فرق الكمية</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@totalQtyDiffFiltered.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي فرق التكلفة</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@totalCostDiffFiltered.ToString("N2", n2)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @* ===== جدول سطور التسويات داخل حاوية تمرير ===== *@
     <div class="erp-table-scroll-container mt-3 ps-0 pe-0">
         <div id="salTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
@@ -408,7 +460,10 @@
                 <tr>
                     <th data-col="id">@filterableCol("id", "id", "كود السطر")</th>
                     <th data-col="stock">@filterableCol("stock", "header", "رقم التسوية")</th>
+                    <th data-col="warehouseCode">كود المخزن</th>
+                    <th data-col="warehouseName">اسم المخزن</th>
                     <th data-col="product">@filterableCol("product", "product", "كود الصنف")</th>
+                    <th data-col="productName">@filterableCol("productName", "productname", "اسم الصنف")</th>
                     <th data-col="batch">@filterableCol("batch", "batch", "كود التشغيلة")</th>
                     <th data-col="qtyBefore">@filterableCol("qtyBefore", "qtyBefore", "الكمية قبل")</th>
                     <th data-col="qtyAfter">@filterableCol("qtyAfter", "qtyAfter", "الكمية بعد")</th>
@@ -422,7 +477,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="10" class="text-center text-muted py-4">
+                        <td colspan="13" class="text-center text-muted py-4">
                             لا توجد سطور تسوية حتى الآن.
                         </td>
                     </tr>
@@ -431,9 +486,6 @@
                 {
                     foreach (var line in Model.Items)
                     {
-                        totalQtyBefore += line.QtyBefore;
-                        totalQtyAfter += line.QtyAfter;
-                        totalQtyDiff += line.QtyDiff;
                         var showUrl = Url.Action("Show", "StockAdjustments", new { id = line.StockAdjustmentId, frame = 1 });
                         var movementUrl = Url.Action("Show", "Products", new { id = line.ProductId, frame = 1 });
                         var rowId = line.Id + "_" + line.StockAdjustmentId;
@@ -445,7 +497,10 @@
                             data-tab-title="تسوية جردية">
                             <td data-col="id">@line.Id</td>
                             <td data-col="stock">@line.StockAdjustmentId</td>
+                            <td data-col="warehouseCode">@(line.StockAdjustment?.WarehouseId.ToString() ?? "-")</td>
+                            <td data-col="warehouseName">@(line.StockAdjustment?.Warehouse?.WarehouseName ?? "-")</td>
                             <td data-col="product">@line.ProductId</td>
+                            <td data-col="productName">@(line.Product?.ProdName ?? "-")</td>
                             <td data-col="batch">@line.BatchId</td>
                             <td data-col="qtyBefore">@line.QtyBefore</td>
                             <td data-col="qtyAfter">@line.QtyAfter</td>
@@ -459,31 +514,31 @@
                             <td data-col="note">@line.Note</td>
                         </tr>
                     }
-
-                    @* صف إجمالي الكميات للصفحة الحالية *@
-                    <tr class="table-secondary fw-bold">
-                        <td colspan="4" class="text-center">
-                            إجمالي الكميات في الصفحة الحالية
-                        </td>
-                        <td>@totalQtyBefore</td>
-                        <td>@totalQtyAfter</td>
-                        <td>@totalQtyDiff</td>
-                        <td colspan="3"></td>
-                    </tr>
                 }
             </tbody>
+            <tfoot>
+                <tr class="table-secondary fw-bold">
+                    <td colspan="7" class="text-start">إجمالي بعد الفلترة</td>
+                    <td class="text-start">@totalQtyBeforeFiltered.ToString("N0", n2)</td>
+                    <td class="text-start">@totalQtyAfterFiltered.ToString("N0", n2)</td>
+                    <td class="text-start">@totalQtyDiffFiltered.ToString("N0", n2)</td>
+                    <td class="text-start">-</td>
+                    <td class="text-start">@totalCostDiffFiltered.ToString("N2", n2)</td>
+                    <td></td>
+                </tr>
+            </tfoot>
         </table>
         </div>
     </div>
 
     @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة ===== *@
-    <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print w-100" dir="rtl">
+        <small class="text-muted">
+            عرض @start - @end من @total
+        </small>
         <form method="get"
               action="@Url.Action(action, controller)"
-              class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
-            <small class="text-muted me-2">
-                عرض @start - @end من @total
-            </small>
+              class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
             <input type="hidden" name="searchMode" value="@searchMode" />
@@ -515,6 +570,7 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_stock)) { <input type="hidden" name="filterCol_stock" value="@filterCol_stock" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_product)) { <input type="hidden" name="filterCol_product" value="@filterCol_product" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_productName)) { <input type="hidden" name="filterCol_productName" value="@filterCol_productName" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_batch)) { <input type="hidden" name="filterCol_batch" value="@filterCol_batch" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_qtyBefore)) { <input type="hidden" name="filterCol_qtyBefore" value="@filterCol_qtyBefore" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_qtyAfter)) { <input type="hidden" name="filterCol_qtyAfter" value="@filterCol_qtyAfter" /> }
@@ -544,6 +600,15 @@
                 <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
+        <script>
+            (function () {
+                var sel = document.querySelector('form select[name="pageSize"]');
+                if (!sel) return;
+                var params = new URLSearchParams(window.location.search);
+                var all = params.getAll("pageSize");
+                if (all.length > 0) sel.value = all[all.length - 1];
+            })();
+        </script>
     </div>
 
     @* ===== الترقيم (Pagination) ===== *@
@@ -636,6 +701,7 @@
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_stock)) { <input type="hidden" name="filterCol_stock" value="@filterCol_stock" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_product)) { <input type="hidden" name="filterCol_product" value="@filterCol_product" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_productName)) { <input type="hidden" name="filterCol_productName" value="@filterCol_productName" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_batch)) { <input type="hidden" name="filterCol_batch" value="@filterCol_batch" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_qtyBefore)) { <input type="hidden" name="filterCol_qtyBefore" value="@filterCol_qtyBefore" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_qtyAfter)) { <input type="hidden" name="filterCol_qtyAfter" value="@filterCol_qtyAfter" /> }

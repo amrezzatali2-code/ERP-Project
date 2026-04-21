@@ -30,6 +30,8 @@
 | [purchasing-module-tables-proposal.md](purchasing-module-tables-proposal.md) | مقترح جداول موديول المشتريات |
 | [purchasing-module-implementation-plan.md](purchasing-module-implementation-plan.md) | خطة تنفيذ المشتريات |
 | [search-and-performance-review.md](search-and-performance-review.md) | مراجعة البحث والأداء |
+| [list-ui-guidelines.md](list-ui-guidelines.md) | دليل موحّد لشكل القوائم |
+| [print-header-settings.md](print-header-settings.md) | إعدادات رأس الطباعة الموحد (اسم الشركة/اللوجو) |
 | [orga-import-and-product-matching.md](orga-import-and-product-matching.md) | استيراد أورجا ومطابقة الأصناف |
 | [تفعيل_الصلاحيات.md](تفعيل_الصلاحيات.md) | تفعيل الصلاحيات |
 | [كيف_تعمل_الصلاحيات.md](كيف_تعمل_الصلاحيات.md) | آلية الصلاحيات |
@@ -66,6 +68,13 @@
 - التوثيق يُحدَّث مع تطور المشروع؛ عند تغيير كبير في `README.md` الجذر، راجع ما إذا كان يجب مواءمة [ERP_Documentation_Full.md](ERP_Documentation_Full.md).
 - قواعد سلوك الواجهة والقوائم للمطورين موجودة أيضاً تحت `.cursor/rules/` (ليست بديلاً عن هذا المجلد بل مكمّلة للتطوير).
 
+## 🔄 آخر تحديثات موثقة
+
+- تحديثات واجهة القوائم والبحث وتوحيد ترتيب الأزرار مضافة في:
+  [list-ui-guidelines.md](list-ui-guidelines.md)
+- تحديثات توحيد الطباعة لفاتورة المشتريات وطلب الشراء مضافة في:
+  [print-header-settings.md](print-header-settings.md)
+
 ---
 
-**آخر تحديث**: مارس 2026
+**آخر تحديث**: 2026-04-21

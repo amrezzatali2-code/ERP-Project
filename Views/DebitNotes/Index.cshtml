@@ -300,7 +300,7 @@
                     <th data-col="account">@filterableCol("account", "AccountName", "حساب الطرف")</th>
                     <th data-col="offset">@filterableCol("offset", "OffsetAccountName", "الحساب المقابل")</th>
                     <th data-col="amount">@filterableCol("amount", "Amount", "المبلغ")</th>
-                    <th data-col="posted">@filterableCol("posted", "IsPosted", "مرحّل؟")</th>
+                    <th data-col="posted">@filterableCol("posted", "IsPosted", "حالة الترحيل")</th>
                     <th data-col="created">@filterableCol("created", "CreatedAt", "تاريخ الإنشاء")</th>
                     <th data-col="updated">@filterableCol("updated", "UpdatedAt", "آخر تعديل")</th>
                     <th data-col="reason">@filterableCol("reason", "Reason", "السبب")</th>
@@ -334,7 +334,7 @@
                             <td data-col="account">@d.Account?.AccountName</td>
                             <td data-col="offset">@d.OffsetAccount?.AccountName</td>
                             <td data-col="amount">@d.Amount.ToString("N2")</td>
-                            <td data-col="posted">@(d.IsPosted ? "مرحّل" : "مسودة")</td>
+                            <td data-col="posted">@(d.IsPosted ? "مرحلة 1" : "غير مرحلة")</td>
                             <td data-col="created">@d.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
                             <td data-col="updated">@(d.UpdatedAt.HasValue ? d.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</td>
                             <td data-col="reason">@reasonShort</td>

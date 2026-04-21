@@ -13,6 +13,8 @@
     // قيم البحث/الترتيب الحالية
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "all";
+    var searchMode = ((string?)ViewBag.SearchMode ?? "contains").ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "SRId";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
@@ -72,6 +74,7 @@
         srId = filterSRId,
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -118,6 +121,7 @@
             srId = filterSRId,
             search,
             searchBy,
+            searchMode,
             sort = col,
             dir = newDir,
             page = 1,
@@ -267,15 +271,20 @@
         <div class="alert alert-danger">@err</div>
     }
 
-    @* ===== شريط الفلاتر الموحد بنمط القوائم الأخرى ===== *@
+    @* ===== شريط الفلاتر الموحد (بنفس نمط قائمة مرتجعات البيع) ===== *@
     <div class="erp-list-filter-bar d-print-none mt-2">
         <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
             @* --- القسم الأول: البحث --- *@
-            <div class="col-12 col-lg-6 erp-filter-section d-flex flex-column align-items-center">
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في أصناف مرتجعات البيع</label>
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
                         <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
@@ -331,7 +340,7 @@
             </div>
 
             @* --- القسم الثاني: فلتر رقم السطر من/إلى --- *@
-            <div class="col-12 col-lg-6 erp-filter-section d-flex flex-column align-items-center">
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <label class="form-label w-100 text-center">فلتر رقم السطر</label>
                 <div class="erp-list-code-filter justify-content-center">
                     <input id="lineFromInput" type="number" class="form-control erp-filter-input" placeholder="من" value="@(fromCode?.ToString() ?? "")" />
@@ -341,114 +350,109 @@
                 </div>
             </div>
 
+            @* --- القسم الثالث: أزرار التحكم (بدون حذف) --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
+                <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بتاريخ مرتجع البيع</button>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalSRL">اختيار الأعمدة</button>
+                        <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <button type="button" id="btnShowSRL" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض مرتجع البيع">عرض</button>
+                    </div>
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
+                        <button type="button" id="btnMovementSRL" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حركة الصنف">حركة الصنف</button>
+                        <form method="get" asp-action="Export" asp-controller="SalesReturnLines" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form" dir="rtl">
+                            <input type="hidden" name="srId" value="@srIdText" />
+                            <input type="hidden" name="search" value="@search" />
+                            <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
+                            <input type="hidden" name="sort" value="@sort" />
+                            <input type="hidden" name="dir" value="@dir" />
+                            <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
+                            @if (Model.FromDate.HasValue) { <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" /> }
+                            @if (Model.ToDate.HasValue) { <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" /> }
+                            @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+                            @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_srid))      { <input type="hidden" name="filterCol_srid"      value="@filterCol_srid" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_siid))      { <input type="hidden" name="filterCol_siid"      value="@filterCol_siid" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_lineno))    { <input type="hidden" name="filterCol_lineno"    value="@filterCol_lineno" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_prod))      { <input type="hidden" name="filterCol_prod"      value="@filterCol_prod" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_qty))       { <input type="hidden" name="filterCol_qty"       value="@filterCol_qty" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_priceretail)){ <input type="hidden" name="filterCol_priceretail" value="@filterCol_priceretail" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_unitprice)) { <input type="hidden" name="filterCol_unitprice" value="@filterCol_unitprice" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_net))       { <input type="hidden" name="filterCol_net"       value="@filterCol_net" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_batch))     { <input type="hidden" name="filterCol_batch"     value="@filterCol_batch" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_expiry))    { <input type="hidden" name="filterCol_expiry"    value="@filterCol_expiry" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_status))    { <input type="hidden" name="filterCol_status"    value="@filterCol_status" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_prodname)) { <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_createdby)) { <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_area))     { <input type="hidden" name="filterCol_area"     value="@filterCol_area" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_sridExpr)) { <input type="hidden" name="filterCol_sridExpr" value="@filterCol_sridExpr" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_siidExpr)) { <input type="hidden" name="filterCol_siidExpr" value="@filterCol_siidExpr" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_linenoExpr)) { <input type="hidden" name="filterCol_linenoExpr" value="@filterCol_linenoExpr" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_prodExpr)) { <input type="hidden" name="filterCol_prodExpr" value="@filterCol_prodExpr" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr)) { <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_priceretailExpr)) { <input type="hidden" name="filterCol_priceretailExpr" value="@filterCol_priceretailExpr" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_unitpriceExpr)) { <input type="hidden" name="filterCol_unitpriceExpr" value="@filterCol_unitpriceExpr" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_netExpr)) { <input type="hidden" name="filterCol_netExpr" value="@filterCol_netExpr" /> }
+                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
+                                <option value="excel" selected>Excel</option>
+                                <option value="pdf">PDF</option>
+                            </select>
+                            <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
-    @* ===== كروت الإجماليات + أزرار التحكم (كارت واحد بنمط الفواتير — أعلى الجدول) ===== *@
-    <div class="no-print erp-srl-summary-toolbar-wrap mb-3" dir="rtl">
-        <div class="card border-0 erp-srl-summary-toolbar-card"
-             style="border: 1px solid #6366f1 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25) !important; overflow: hidden;">
-            <div class="card-body py-3 px-3">
-                <div class="row g-3 align-items-center justify-content-between flex-wrap">
-                    <div class="col-12 col-xl">
-                        <div class="row g-2 g-md-3 justify-content-start erp-list-summary-row" dir="rtl">
-                            <div class="col-auto">
-                                <div class="card h-100 border-0 erp-list-summary-card erp-srl-summary-stat"
-                                     role="button" tabindex="0" title="فلترة عمود رقم المرتجع"
-                                     data-summary-filter-col="srid">
-                                    <div class="card-body py-3 px-3">
-                                        <div class="erp-srl-summary-label">إجمالي العدد</div>
-                                        <div class="erp-srl-summary-value">@totalCountForCards.ToString("N0", n2)</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-auto">
-                                <div class="card h-100 border-0 erp-list-summary-card erp-srl-summary-stat erp-srl-summary-stat--qty"
-                                     role="button" tabindex="0" title="فلترة عمود الكمية"
-                                     data-summary-filter-col="qty">
-                                    <div class="card-body py-3 px-3">
-                                        <div class="erp-srl-summary-label">إجمالي الكمية</div>
-                                        <div class="erp-srl-summary-value">@totalQtyForCards.ToString("N0", n2)</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-auto">
-                                <div class="card h-100 border-0 erp-list-summary-card erp-srl-summary-stat erp-srl-summary-stat--retail"
-                                     role="button" tabindex="0" title="فلترة عمود سعر الجمهور (الإجمالي المعروض = مجموع كمية × سعر الوحدة)"
-                                     data-summary-filter-col="priceretail">
-                                    <div class="card-body py-3 px-3">
-                                        <div class="erp-srl-summary-label">إجمالي الجمهور</div>
-                                        <div class="erp-srl-summary-value">@totalRetailGrossForCards.ToString("N2", n2)</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-auto">
-                                <div class="card h-100 border-0 erp-list-summary-card erp-srl-summary-stat erp-srl-summary-stat--net"
-                                     role="button" tabindex="0" title="فلترة عمود صافي السطر"
-                                     data-summary-filter-col="net">
-                                    <div class="card-body py-3 px-3">
-                                        <div class="erp-srl-summary-label">إجمالي الصافي</div>
-                                        <div class="erp-srl-summary-value">@totalNetForCards.ToString("N2", n2)</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 col-xl-auto d-flex justify-content-center justify-content-xl-end">
-                        <div class="erp-toolbar-two-rows d-flex flex-column align-items-center align-items-xl-end gap-1">
-                            <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
-                                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بتاريخ مرتجع البيع</button>
-                                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalSRL">اختيار الأعمدة</button>
-                                <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
-                                <span class="erp-list-toolbar-selected-actions erp-list-toolbar-selected-actions--plain d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات السطر المحدد">
-                                    <button type="button" id="btnShowSRL" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض مرتجع البيع">عرض</button>
-                                </span>
-                            </div>
-                            <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
-                                <button type="button" id="btnMovementSRL" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حركة الصنف">حركة الصنف</button>
-                                <form method="get" asp-action="Export" asp-controller="SalesReturnLines" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form" dir="rtl">
-                                    <input type="hidden" name="srId" value="@srIdText" />
-                                    <input type="hidden" name="search" value="@search" />
-                                    <input type="hidden" name="searchBy" value="@searchBy" />
-                                    <input type="hidden" name="sort" value="@sort" />
-                                    <input type="hidden" name="dir" value="@dir" />
-                                    <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
-                                    @if (Model.FromDate.HasValue) { <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" /> }
-                                    @if (Model.ToDate.HasValue) { <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" /> }
-                                    @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
-                                    @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_srid))      { <input type="hidden" name="filterCol_srid"      value="@filterCol_srid" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_siid))      { <input type="hidden" name="filterCol_siid"      value="@filterCol_siid" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_lineno))    { <input type="hidden" name="filterCol_lineno"    value="@filterCol_lineno" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_prod))      { <input type="hidden" name="filterCol_prod"      value="@filterCol_prod" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_qty))       { <input type="hidden" name="filterCol_qty"       value="@filterCol_qty" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_priceretail)){ <input type="hidden" name="filterCol_priceretail" value="@filterCol_priceretail" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_unitprice)) { <input type="hidden" name="filterCol_unitprice" value="@filterCol_unitprice" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_net))       { <input type="hidden" name="filterCol_net"       value="@filterCol_net" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_batch))     { <input type="hidden" name="filterCol_batch"     value="@filterCol_batch" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_expiry))    { <input type="hidden" name="filterCol_expiry"    value="@filterCol_expiry" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_status))    { <input type="hidden" name="filterCol_status"    value="@filterCol_status" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_prodname)) { <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_createdby)) { <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_area))     { <input type="hidden" name="filterCol_area"     value="@filterCol_area" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_sridExpr)) { <input type="hidden" name="filterCol_sridExpr" value="@filterCol_sridExpr" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_siidExpr)) { <input type="hidden" name="filterCol_siidExpr" value="@filterCol_siidExpr" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_linenoExpr)) { <input type="hidden" name="filterCol_linenoExpr" value="@filterCol_linenoExpr" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_prodExpr)) { <input type="hidden" name="filterCol_prodExpr" value="@filterCol_prodExpr" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr)) { <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_priceretailExpr)) { <input type="hidden" name="filterCol_priceretailExpr" value="@filterCol_priceretailExpr" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_unitpriceExpr)) { <input type="hidden" name="filterCol_unitpriceExpr" value="@filterCol_unitpriceExpr" /> }
-                                    @if (!string.IsNullOrWhiteSpace(filterCol_netExpr)) { <input type="hidden" name="filterCol_netExpr" value="@filterCol_netExpr" /> }
-                                    <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
-                                        <option value="excel" selected>Excel</option>
-                                        <option value="pdf">PDF</option>
-                                    </select>
-                                    <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
+    @* ===== كروت الإجماليات (بنفس نمط قائمة مرتجعات البيع) ===== *@
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mb-3" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card erp-srl-summary-stat"
+                 style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;"
+                 role="button" tabindex="0" title="فلترة عمود رقم المرتجع"
+                 data-summary-filter-col="srid">
+                <div class="card-body py-3 px-3">
+                    <div class="erp-srl-summary-label">إجمالي العدد</div>
+                    <div class="erp-srl-summary-value">@totalCountForCards.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card erp-srl-summary-stat erp-srl-summary-stat--qty"
+                 style="border: 1px solid #0ea5e9 !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;"
+                 role="button" tabindex="0" title="فلترة عمود الكمية"
+                 data-summary-filter-col="qty">
+                <div class="card-body py-3 px-3">
+                    <div class="erp-srl-summary-label">إجمالي الكمية</div>
+                    <div class="erp-srl-summary-value">@totalQtyForCards.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card erp-srl-summary-stat erp-srl-summary-stat--retail"
+                 style="border: 1px solid #7c3aed !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;"
+                 role="button" tabindex="0" title="فلترة عمود سعر الجمهور (الإجمالي المعروض = مجموع كمية × سعر الوحدة)"
+                 data-summary-filter-col="priceretail">
+                <div class="card-body py-3 px-3">
+                    <div class="erp-srl-summary-label">إجمالي الجمهور</div>
+                    <div class="erp-srl-summary-value">@totalRetailGrossForCards.ToString("N2", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card erp-srl-summary-stat erp-srl-summary-stat--net"
+                 style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;"
+                 role="button" tabindex="0" title="فلترة عمود صافي السطر"
+                 data-summary-filter-col="net">
+                <div class="card-body py-3 px-3">
+                    <div class="erp-srl-summary-label">إجمالي الصافي</div>
+                    <div class="erp-srl-summary-value">@totalNetForCards.ToString("N2", n2)</div>
                 </div>
             </div>
         </div>
@@ -567,6 +571,7 @@
             <input type="hidden" name="srId" value="@srIdText" />
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -673,6 +678,7 @@
                     <input type="hidden" name="srId" value="@srIdText" />
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />

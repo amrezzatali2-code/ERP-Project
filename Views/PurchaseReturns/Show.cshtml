@@ -214,6 +214,40 @@
         .invoice-page .product-dropdown-item { cursor: pointer; font-size: 0.875rem; text-align: right; }
         .invoice-page .product-dropdown-item:hover { background: #f1f5f9; }
         .invoice-page .product-dropdown-item-active { background: #e0f2fe !important; }
+        .si-print-dropdown-menu {
+            border-radius: 12px;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+            padding: 0.25rem 0;
+        }
+        .si-print-dropdown-header {
+            font-weight: 600;
+            color: #64748b;
+            background: #f8fafc;
+        }
+        .si-print-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+        }
+        .si-print-dropdown-item:hover,
+        .si-print-dropdown-item:focus {
+            background: #eef2ff;
+            color: #1e293b;
+        }
+        .si-print-opt-icon {
+            width: 1.15rem;
+            text-align: center;
+            font-size: 0.95rem;
+            opacity: 0.9;
+        }
+        .si-print-opt-text { flex: 1; }
+        .si-print-dropdown-btn.dropdown-toggle::after {
+            margin-inline-start: 0.5rem;
+        }
         .pr-invoice-no-wrap { max-width: 7.5rem; }
         .pr-invoice-no-wrap .form-control { max-width: 7rem; margin-inline: auto; }
         .pr-line-deleted-flash {
@@ -348,9 +382,22 @@
                             📊 حجم التعامل
                         </a>
 
-                        <button type="button" id="btnPrintReturn" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" title="ضبط الطباعة: يطبع الهيدر وجدول السطور والإجماليات دون شريط الإجراءات">
-                            🖨️ طباعة المرتجع
-                        </button>
+                        <div class="dropdown w-100 si-print-dropdown">
+                            <button type="button"
+                                    id="btnPrintReturn"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100 dropdown-toggle si-print-dropdown-btn"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                    title="اختر نوع الطباعة">
+                                🖨️ طباعة المرتجع
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end w-100 si-print-dropdown-menu" aria-labelledby="btnPrintReturn">
+                                <li class="si-print-dropdown-header px-3 py-2 small text-muted border-bottom mb-0">اختر نوع الطباعة</li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-prt-print-mode="1"><span class="si-print-opt-icon" aria-hidden="true">📄</span><span class="si-print-opt-text">طباعة صفحة واحدة</span></a></li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-prt-print-mode="2"><span class="si-print-opt-icon" aria-hidden="true">📑</span><span class="si-print-opt-text">طباعة أصل وصورة</span></a></li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-prt-print-mode="3"><span class="si-print-opt-icon" aria-hidden="true">📚</span><span class="si-print-opt-text">طباعة أصل وصورتين</span></a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -368,9 +415,9 @@
                     string statusDisplayValue = Model.Status switch
                     {
                         "Draft" => "غير مرحلة",
-                        "Posted" => (stagePr.HasValue ? $"مرحلة {stagePr.Value}" : "مرحّل"),
+                        "Posted" => (stagePr.HasValue ? $"مرحلة {stagePr.Value}" : "مرحلة 1"),
                         "Cancelled" => "ملغى",
-                        _ => string.IsNullOrWhiteSpace(Model.Status) ? (Model.IsPosted ? (stagePr.HasValue ? $"مرحلة {stagePr.Value}" : "مرحّل") : "غير مرحلة") : Model.Status
+                        _ => string.IsNullOrWhiteSpace(Model.Status) ? (Model.IsPosted ? (stagePr.HasValue ? $"مرحلة {stagePr.Value}" : "مرحلة 1") : "غير مرحلة") : Model.Status
                     };
                     decimal netBeforeTaxInit = Model.ItemsTotal - Model.DiscountTotal;
                 }
@@ -436,7 +483,7 @@
                                 </select>
                             </div>
                             <div class="col-lg-2 col-md-3">
-                                <label class="form-label form-label-sm">مرحّل؟</label>
+                                <label class="form-label form-label-sm">حالة الترحيل</label>
                                 <input id="ReturnIsPostedDisplay" class="form-control form-control-sm text-center" value="@(Model.IsPosted ? "نعم" : "لا")" readonly />
                             </div>
                         </div>
@@ -698,7 +745,7 @@
             }
             function getReturnStatusDisplay(status) {
                 if (!status) return 'غير مرحلة';
-                switch (String(status)) { case 'Draft': return 'غير مرحلة'; case 'Posted': return 'مرحّل'; case 'Cancelled': return 'ملغى'; default: return status; }
+                switch (String(status)) { case 'Draft': return 'غير مرحلة'; case 'Posted': return 'مرحلة 1'; case 'Cancelled': return 'ملغى'; default: return status; }
             }
             applyPostedUiLock();
             (function () {
@@ -1672,14 +1719,80 @@
             if (btnPrintPr && !btnPrintPr.dataset.boundPrPrint) {
                 btnPrintPr.dataset.boundPrPrint = '1';
                 var printingPr = false;
-                btnPrintPr.addEventListener('click', function () {
+                var prTempWrapper = null;
+
+                function buildPurchaseReturnPrintArea() {
+                    var source = document.querySelector('.col-lg-10.order-first.erp-print-area');
+                    if (!source) return null;
+                    var clone = source.cloneNode(true);
+                    clone.id = 'piPrintArea';
+                    clone.classList.add('pi-print-copy');
+                    clone.querySelectorAll('script, .print-only, .no-print, .invoice-card-collapse-btn').forEach(function (x) { x.remove(); });
+                    clone.querySelectorAll('[id]').forEach(function (x) {
+                        if (x.id === 'piPrintArea') return;
+                        x.removeAttribute('id');
+                    });
+                    return clone;
+                }
+
+                function doPurchaseReturnPrint(mode) {
+                    var returnId = parseInt((document.getElementById('PRetId')?.value || '0'), 10) || 0;
+                    if (returnId <= 0) {
+                        showToast('⚠️ لا يمكن طباعة مرتجع قبل حفظه.', 'warning');
+                        return;
+                    }
+                    if (typeof isReturnPosted === 'function' && !isReturnPosted()) {
+                        showToast('❌ يجب ترحيل المرتجع قبل الطباعة', 'danger');
+                        document.getElementById('btnPostReturn')?.focus();
+                        return;
+                    }
                     if (printingPr) return;
                     printingPr = true;
-                    setTimeout(function () {
-                        if (typeof window.print === 'function') window.print();
-                    }, 50);
+
+                    var area = buildPurchaseReturnPrintArea();
+                    if (!area) {
+                        printingPr = false;
+                        showToast('تعذر تجهيز الطباعة.', 'danger');
+                        return;
+                    }
+
+                    prTempWrapper = document.createElement('div');
+                    prTempWrapper.id = 'piPrintWrapper';
+                    prTempWrapper.className = 'erp-print-area print-only';
+                    prTempWrapper.appendChild(area);
+
+                    prTempWrapper.classList.remove('print-mode-1', 'print-mode-2', 'print-mode-3');
+                    var normalizedMode = (mode === 2 || mode === 3) ? mode : 1;
+                    var copies = normalizedMode;
+                    for (var i = 1; i < copies; i++) {
+                        var copy = area.cloneNode(true);
+                        copy.id = '';
+                        copy.classList.add('pi-print-copy');
+                        copy.querySelectorAll('[id]').forEach(function (x) { x.removeAttribute('id'); });
+                        prTempWrapper.appendChild(copy);
+                    }
+                    prTempWrapper.classList.add('print-mode-' + normalizedMode);
+                    document.body.appendChild(prTempWrapper);
+                    document.body.classList.add('printing-invoice');
+                    setTimeout(function () { window.print(); }, 50);
+                }
+
+                document.querySelectorAll('[data-prt-print-mode]').forEach(function (item) {
+                    item.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        var mode = parseInt(this.getAttribute('data-prt-print-mode') || '1', 10);
+                        doPurchaseReturnPrint(mode);
+                    });
                 });
-                window.addEventListener('afterprint', function () { printingPr = false; });
+
+                window.addEventListener('afterprint', function () {
+                    document.body.classList.remove('printing-invoice');
+                    printingPr = false;
+                    if (prTempWrapper) {
+                        prTempWrapper.remove();
+                        prTempWrapper = null;
+                    }
+                });
             }
 
             document.getElementById('btnCustomerEngagement')?.addEventListener('click', function (e) {

@@ -196,6 +196,43 @@ namespace ERP.Controllers
                 selectedWarehouseId);
         }
 
+        private async Task LoadPrintHeaderSettingsAsync()
+        {
+            try
+            {
+                var printHeader = await _context.PrintHeaderSettings
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.Id)
+                    .FirstOrDefaultAsync();
+
+                ViewBag.PrintHeaderCompanyName = string.IsNullOrWhiteSpace(printHeader?.CompanyName)
+                    ? "شركة الهدى"
+                    : printHeader!.CompanyName.Trim();
+                ViewBag.PrintHeaderLogoUrl = string.IsNullOrWhiteSpace(printHeader?.LogoPath)
+                    ? null
+                    : Url.Content(printHeader!.LogoPath!);
+            }
+            catch (Exception ex) when (IsMissingPrintHeaderSettingsTable(ex))
+            {
+                ViewBag.PrintHeaderCompanyName = "شركة الهدى";
+                ViewBag.PrintHeaderLogoUrl = null;
+            }
+        }
+
+        private static bool IsMissingPrintHeaderSettingsTable(Exception ex)
+        {
+            Exception? current = ex;
+            while (current != null)
+            {
+                var msg = current.Message ?? string.Empty;
+                if (msg.Contains("Invalid object name", StringComparison.OrdinalIgnoreCase) &&
+                    msg.Contains("PrintHeaderSettings", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                current = current.InnerException;
+            }
+            return false;
+        }
+
 
 
 
@@ -255,6 +292,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "SODate",
             string? dir = "desc",
             int page = 1,
@@ -285,6 +323,8 @@ namespace ERP.Controllers
             int[] allowedPageSizes = { 10, 25, 50, 100, 200, 0 };
             if (!allowedPageSizes.Contains(pageSize))
                 pageSize = 10;
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
 
             // 1) الاستعلام الأساسي مع تحميل العميل (ومنطقة العرض) والمخزن
             IQueryable<SalesOrder> q = _context.SalesOrders
@@ -301,6 +341,7 @@ namespace ERP.Controllers
             q = q.ApplySearchSort(
                 search: search,
                 searchBy: searchBy,
+                searchMode: sm,
                 sort: sort,
                 dir: dir,
                 stringFields: StringFields,
@@ -452,6 +493,7 @@ namespace ERP.Controllers
 
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = sort ?? "SODate";
             ViewBag.Dir = sortDesc ? "desc" : "asc";
 
@@ -641,6 +683,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "SODate",
             string? dir = "desc",
             bool useDateRange = false,
@@ -660,6 +703,9 @@ namespace ERP.Controllers
             string? format = "excel"
         )
         {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
+
             IQueryable<SalesOrder> q = _context.SalesOrders
                 .AsNoTracking()
                 .Include(o => o.Customer)
@@ -669,8 +715,14 @@ namespace ERP.Controllers
 
             q = ApplyCodeAndDateFilters(q, useDateRange, fromDate, toDate, codeFrom, codeTo);
             q = q.ApplySearchSort(
-                search, searchBy, sort, dir,
-                StringFields, IntFields, OrderFields,
+                search: search,
+                searchBy: searchBy,
+                searchMode: sm,
+                sort: sort,
+                dir: dir,
+                stringFields: StringFields,
+                intFields: IntFields,
+                orderFields: OrderFields,
                 defaultSearchBy: "all",
                 defaultSortBy: "SODate"
             );
@@ -884,7 +936,7 @@ namespace ERP.Controllers
                 SODate = DateTime.Today,
                 CustomerId = 0,
                 WarehouseId = defaultWarehouseId > 0 ? defaultWarehouseId : 0,
-                Status = "Draft",
+                Status = "غير مرحلة",
                 IsConverted = false,
                 Notes = null,
                 CreatedAt = DateTime.UtcNow,
@@ -1002,7 +1054,7 @@ namespace ERP.Controllers
                 return View("Show", order);
             }
 
-            order.Status ??= "Draft";
+            order.Status ??= "غير مرحلة";
             order.IsConverted = false;
             order.CreatedAt = DateTime.UtcNow;
             order.CreatedBy ??= GetCurrentUserDisplayName();
@@ -1082,6 +1134,7 @@ namespace ERP.Controllers
                 || string.Equals(order.Status, "Cancelled", StringComparison.OrdinalIgnoreCase);
             ViewBag.Frame = isBodyOnly ? 0 : 1;
             await FillSalesOrderNavAsync(order.SOId);
+            await LoadPrintHeaderSettingsAsync();
 
             return View("Show", order);
         }
@@ -1258,7 +1311,7 @@ namespace ERP.Controllers
                     SODate = now.Date,
                     CustomerId = dto.CustomerId,
                     WarehouseId = dto.WarehouseId,
-                    Status = "Draft",
+                    Status = "غير مرحلة",
                     IsConverted = false,
                     Notes = dto.Notes,
                     CreatedAt = now,
@@ -1552,7 +1605,7 @@ namespace ERP.Controllers
                     CustomerId = order.CustomerId,
                     WarehouseId = order.WarehouseId,
                     RefSOId = order.SOId,
-                    Status = "مسودة",
+                    Status = "غير مرحلة",
                     IsPosted = false,
                     CreatedBy = userName,
                     CreatedAt = now

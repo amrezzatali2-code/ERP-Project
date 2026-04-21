@@ -578,7 +578,7 @@ END";
                     FromWarehouseId = 0,
                     ToWarehouseId = 0,
                     IsPosted = false,
-                    Status = "مسودة",
+                    Status = "غير مرحلة",
                     Lines = new List<StockTransferLine>()
                 };
             }
@@ -1186,7 +1186,7 @@ END";
                 Note = dto.Note,
                 CreatedAt = DateTime.UtcNow,
                 IsPosted = false,
-                Status = "مسودة"
+                Status = "غير مرحلة"
             };
 
             _context.StockTransfers.Add(transfer);

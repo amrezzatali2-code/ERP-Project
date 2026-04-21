@@ -63,7 +63,8 @@ namespace ERP.Controllers
             var stringFields =
                 new Dictionary<string, Expression<Func<StockAdjustmentLine, string?>>>()
                 {
-                    ["note"] = l => l.Note ?? ""
+                    ["note"] = l => l.Note ?? "",
+                    ["productname"] = l => l.Product != null ? (l.Product.ProdName ?? "") : ""
                 };
 
             // 5) حقول رقمية للبحث
@@ -93,6 +94,7 @@ namespace ERP.Controllers
                     ["qtyDiff"] = l => l.QtyDiff,
                     ["costPer"] = l => l.CostPerUnit ?? 0,
                     ["costDiff"] = l => l.CostDiff ?? 0,
+                    ["productname"] = l => (object)(l.Product != null ? (l.Product.ProdName ?? "") : ""),
                     ["note"] = l => (object)(l.Note ?? "")
                 };
 
@@ -118,8 +120,8 @@ namespace ERP.Controllers
         // =========================
         public async Task<IActionResult> Index(
             string? search,
-            string? searchBy = "all",         // all | id | stock | product | batch | note
-            string? sort = "id",              // id | header | product | batch | qtyBefore | qtyAfter | qtyDiff | costPer | costDiff
+            string? searchBy = "all",         // all | id | stock | product | productname | batch | note
+            string? sort = "id",              // id | header | product | productname | batch | qtyBefore | qtyAfter | qtyDiff | costPer | costDiff
             string? dir = "asc",
             string? searchMode = "contains",
             int page = 1,
@@ -130,6 +132,7 @@ namespace ERP.Controllers
             string? filterCol_id = null,
             string? filterCol_stock = null,
             string? filterCol_product = null,
+            string? filterCol_productName = null,
             string? filterCol_batch = null,
             string? filterCol_qtyBefore = null,
             string? filterCol_qtyAfter = null,
@@ -182,9 +185,32 @@ namespace ERP.Controllers
                 filterCol_costDiff, filterCol_costDiffExpr,
                 filterCol_note);
 
-            var q = qBase;
+            if (!string.IsNullOrWhiteSpace(filterCol_productName))
+            {
+                var names = filterCol_productName.Split(new[] { '|', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .ToList();
+                if (names.Count > 0)
+                    qBase = qBase.Where(l => l.Product != null && l.Product.ProdName != null && names.Contains(l.Product.ProdName));
+            }
+
+            IQueryable<StockAdjustmentLine> q = qBase
+                .Include(l => l.Product)
+                .Include(l => l.StockAdjustment)
+                    .ThenInclude(s => s!.Warehouse);
 
             var total = await q.CountAsync();
+            var summary = await qBase
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    TotalQtyBefore = g.Sum(x => x.QtyBefore),
+                    TotalQtyAfter = g.Sum(x => x.QtyAfter),
+                    TotalQtyDiff = g.Sum(x => x.QtyDiff),
+                    TotalCostDiff = g.Sum(x => x.CostDiff ?? 0m)
+                })
+                .FirstOrDefaultAsync();
             int effectivePageSize = pageSize;
             if (pageSize == 0)
             {
@@ -222,6 +248,7 @@ namespace ERP.Controllers
             ViewBag.FilterCol_Id = filterCol_id;
             ViewBag.FilterCol_Stock = filterCol_stock;
             ViewBag.FilterCol_Product = filterCol_product;
+            ViewBag.FilterCol_ProductName = filterCol_productName;
             ViewBag.FilterCol_Batch = filterCol_batch;
             ViewBag.FilterCol_QtyBefore = filterCol_qtyBefore;
             ViewBag.FilterCol_QtyAfter = filterCol_qtyAfter;
@@ -238,6 +265,10 @@ namespace ERP.Controllers
             ViewBag.FilterCol_QtyDiffExpr = filterCol_qtyDiffExpr ?? string.Empty;
             ViewBag.FilterCol_CostUnitExpr = filterCol_costUnitExpr ?? string.Empty;
             ViewBag.FilterCol_CostDiffExpr = filterCol_costDiffExpr ?? string.Empty;
+            ViewBag.TotalQtyBeforeFiltered = summary?.TotalQtyBefore ?? 0;
+            ViewBag.TotalQtyAfterFiltered = summary?.TotalQtyAfter ?? 0;
+            ViewBag.TotalQtyDiffFiltered = summary?.TotalQtyDiff ?? 0;
+            ViewBag.TotalCostDiffFiltered = summary?.TotalCostDiff ?? 0m;
 
             return View(model);
         }
@@ -258,6 +289,7 @@ namespace ERP.Controllers
             string? filterCol_id = null,
             string? filterCol_stock = null,
             string? filterCol_product = null,
+            string? filterCol_productName = null,
             string? filterCol_batch = null,
             string? filterCol_qtyBefore = null,
             string? filterCol_qtyAfter = null,
@@ -304,13 +336,25 @@ namespace ERP.Controllers
                 filterCol_costUnit, filterCol_costUnitExpr,
                 filterCol_costDiff, filterCol_costDiffExpr,
                 filterCol_note);
+            if (!string.IsNullOrWhiteSpace(filterCol_productName))
+            {
+                var names = filterCol_productName.Split(new[] { '|', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .ToList();
+                if (names.Count > 0)
+                    qBase = qBase.Where(l => l.Product != null && l.Product.ProdName != null && names.Contains(l.Product.ProdName));
+            }
 
-            var q = qBase;
+            var q = qBase
+                .Include(l => l.Product)
+                .Include(l => l.StockAdjustment)
+                    .ThenInclude(s => s!.Warehouse);
 
             var list = await q.ToListAsync();
 
             var sb = new StringBuilder();
-            sb.AppendLine("كود السطر,رقم التسوية,كود الصنف,كود التشغيلة,الكمية قبل,الكمية بعد,فرق الكمية,تكلفة الوحدة,فرق التكلفة,ملاحظات");
+            sb.AppendLine("كود السطر,رقم التسوية,كود المخزن,اسم المخزن,كود الصنف,اسم الصنف,كود التشغيلة,الكمية قبل,الكمية بعد,فرق الكمية,تكلفة الوحدة,فرق التكلفة,ملاحظات");
 
             foreach (var l in list)
             {
@@ -318,7 +362,10 @@ namespace ERP.Controllers
                 var line = string.Join(",",
                     l.Id,
                     l.StockAdjustmentId,
+                    l.StockAdjustment?.WarehouseId.ToString() ?? "",
+                    "\"" + ((l.StockAdjustment?.Warehouse?.WarehouseName ?? "").Replace("\"", "\"\"").Replace(",", "،")) + "\"",
                     l.ProductId,
+                    "\"" + ((l.Product?.ProdName ?? "").Replace("\"", "\"\"").Replace(",", "،")) + "\"",
                     l.BatchId?.ToString() ?? "",
                     l.QtyBefore,
                     l.QtyAfter,
@@ -357,6 +404,13 @@ namespace ERP.Controllers
                     .Select(v => (v.ToString(), v.ToString())).ToList(),
                 "product" => (await q.Select(l => l.ProductId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
                     .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "productname" => (await q.Where(l => l.Product != null && l.Product.ProdName != null && l.Product.ProdName != "")
+                        .Select(l => l.Product!.ProdName!)
+                        .Distinct()
+                        .OrderBy(v => v)
+                        .Take(400)
+                        .ToListAsync())
+                    .Select(v => (v, v)).ToList(),
                 "batch" => (await q.Where(l => l.BatchId.HasValue).Select(l => l.BatchId!.Value).Distinct().OrderBy(v => v).Take(500).ToListAsync())
                     .Select(v => (v.ToString(), v.ToString())).ToList(),
                 "qtybefore" => (await q.Select(l => l.QtyBefore).Distinct().OrderBy(v => v).Take(200).ToListAsync())

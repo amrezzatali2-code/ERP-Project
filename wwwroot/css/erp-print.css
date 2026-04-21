@@ -345,9 +345,28 @@
     #piPrintArea .invoice-totals-card .invoice-summary-item.invoice-summary-box,
     .erp-print-invoice-area .invoice-totals-card .invoice-summary-item.invoice-summary-box,
     .pi-print-copy .invoice-totals-card .invoice-summary-item.invoice-summary-box {
-        flex: 1 1 0 !important;
-        min-width: 0 !important;
-        max-width: 100% !important;
+        /* توحيد حجم كل كروت الإجماليات (4 أعمدة ثابتة في الصف) */
+        flex: 0 0 calc((100% - 1.5rem) / 4) !important;
+        min-width: calc((100% - 1.5rem) / 4) !important;
+        max-width: calc((100% - 1.5rem) / 4) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 0.08rem !important;
+        text-align: center !important;
+    }
+    #piPrintWrapper > * .invoice-totals-card .invoice-summary-label,
+    #piPrintArea .invoice-totals-card .invoice-summary-label,
+    .erp-print-invoice-area .invoice-totals-card .invoice-summary-label,
+    .pi-print-copy .invoice-totals-card .invoice-summary-label,
+    #piPrintWrapper > * .invoice-totals-card .invoice-summary-value,
+    #piPrintArea .invoice-totals-card .invoice-summary-value,
+    .erp-print-invoice-area .invoice-totals-card .invoice-summary-value,
+    .pi-print-copy .invoice-totals-card .invoice-summary-value {
+        display: block !important;
+        width: 100% !important;
+        text-align: center !important;
     }
 
     /* صفحة واحدة — طولية */

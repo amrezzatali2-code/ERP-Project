@@ -32,6 +32,7 @@ namespace ERP.Data
         public DbSet<Batch> Batches => Set<Batch>();
         public DbSet<SalesReturn> SalesReturns => Set<SalesReturn>();
         public DbSet<SalesReturnLine> SalesReturnLines => Set<SalesReturnLine>();
+        public DbSet<PrintHeaderSetting> PrintHeaderSettings => Set<PrintHeaderSetting>();
         public DbSet<ERP.Models.DocumentSeries> DocumentSeries => Set<ERP.Models.DocumentSeries>();
         public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
         public DbSet<PRLine> PRLines => Set<PRLine>();
@@ -122,6 +123,8 @@ namespace ERP.Data
 
 
         private readonly IHttpContextAccessor? _httpContextAccessor;
+        private const string DefaultBatchNo = "55555";
+        private static readonly DateTime DefaultExpiryDate = new(2028, 1, 1);
 
         // داخل المُنشئ:
         public AppDbContext(DbContextOptions<AppDbContext> options, IHttpContextAccessor httpContextAccessor)
@@ -139,6 +142,15 @@ namespace ERP.Data
         protected override void OnModelCreating(ModelBuilder mb)
         {
             base.OnModelCreating(mb);
+
+            mb.Entity<PrintHeaderSetting>(entity =>
+            {
+                entity.ToTable("PrintHeaderSettings");
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.CompanyName).HasMaxLength(200).IsRequired();
+                entity.Property(x => x.LogoPath).HasMaxLength(500);
+                entity.Property(x => x.UpdatedAt).HasColumnType("datetime2");
+            });
 
 
 
@@ -2316,14 +2328,77 @@ namespace ERP.Data
 
         public override int SaveChanges()
         {
+            ApplyDefaultBatchAndExpiryValues();
             TrackProductPriceChanges(); // لو اتغيّر PriceRetail نسجل في السجل
             return base.SaveChanges();
         }
 
         public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
+            ApplyDefaultBatchAndExpiryValues();
             TrackProductPriceChanges(); // لو اتغيّر PriceRetail نسجل في السجل
             return await base.SaveChangesAsync(cancellationToken);
+        }
+
+        private void ApplyDefaultBatchAndExpiryValues()
+        {
+            // Batch (Expiry غير Nullable)
+            foreach (var entry in ChangeTracker.Entries<Batch>().Where(e => e.State == EntityState.Added || e.State == EntityState.Modified))
+            {
+                var entity = entry.Entity;
+                entity.BatchNo = string.IsNullOrWhiteSpace(entity.BatchNo) ? DefaultBatchNo : entity.BatchNo.Trim();
+                if (entity.Expiry == default)
+                    entity.Expiry = DefaultExpiryDate;
+            }
+
+            // الكيانات التي تحتوي Expiry Nullable
+            foreach (var entry in ChangeTracker.Entries<StockBatch>().Where(e => e.State == EntityState.Added || e.State == EntityState.Modified))
+            {
+                var entity = entry.Entity;
+                entity.BatchNo = string.IsNullOrWhiteSpace(entity.BatchNo) ? DefaultBatchNo : entity.BatchNo.Trim();
+                if (!entity.Expiry.HasValue)
+                    entity.Expiry = DefaultExpiryDate;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<StockLedger>().Where(e => e.State == EntityState.Added || e.State == EntityState.Modified))
+            {
+                var entity = entry.Entity;
+                entity.BatchNo = string.IsNullOrWhiteSpace(entity.BatchNo) ? DefaultBatchNo : entity.BatchNo.Trim();
+                if (!entity.Expiry.HasValue)
+                    entity.Expiry = DefaultExpiryDate;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<PILine>().Where(e => e.State == EntityState.Added || e.State == EntityState.Modified))
+            {
+                var entity = entry.Entity;
+                entity.BatchNo = string.IsNullOrWhiteSpace(entity.BatchNo) ? DefaultBatchNo : entity.BatchNo.Trim();
+                if (!entity.Expiry.HasValue)
+                    entity.Expiry = DefaultExpiryDate;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<PurchaseReturnLine>().Where(e => e.State == EntityState.Added || e.State == EntityState.Modified))
+            {
+                var entity = entry.Entity;
+                entity.BatchNo = string.IsNullOrWhiteSpace(entity.BatchNo) ? DefaultBatchNo : entity.BatchNo.Trim();
+                if (!entity.Expiry.HasValue)
+                    entity.Expiry = DefaultExpiryDate;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<SalesInvoiceLine>().Where(e => e.State == EntityState.Added || e.State == EntityState.Modified))
+            {
+                var entity = entry.Entity;
+                entity.BatchNo = string.IsNullOrWhiteSpace(entity.BatchNo) ? DefaultBatchNo : entity.BatchNo.Trim();
+                if (!entity.Expiry.HasValue)
+                    entity.Expiry = DefaultExpiryDate;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<SalesReturnLine>().Where(e => e.State == EntityState.Added || e.State == EntityState.Modified))
+            {
+                var entity = entry.Entity;
+                entity.BatchNo = string.IsNullOrWhiteSpace(entity.BatchNo) ? DefaultBatchNo : entity.BatchNo.Trim();
+                if (!entity.Expiry.HasValue)
+                    entity.Expiry = DefaultExpiryDate;
+            }
         }
 
         // دالة تلتقط أي تعديل على Product.PriceRetail وتضيف صفًا في ProductPriceHistory

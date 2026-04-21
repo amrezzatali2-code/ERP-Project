@@ -14,6 +14,8 @@
     // قيم البحث/الترتيب الحالية
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "all";
+    var searchMode = ((string?)ViewBag.SearchMode ?? "contains").ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "SOId";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
@@ -41,13 +43,20 @@
     var dateField = (string?)ViewBag.DateField ?? "SODate";
 
     string? filterCol_soid = ViewBag.FilterCol_soid as string;
+    string? filterCol_soidExpr = ViewBag.FilterCol_soidExpr as string;
     string? filterCol_lineno = ViewBag.FilterCol_lineno as string;
+    string? filterCol_linenoExpr = ViewBag.FilterCol_linenoExpr as string;
     string? filterCol_prod = ViewBag.FilterCol_prod as string;
+    string? filterCol_prodExpr = ViewBag.FilterCol_prodExpr as string;
     string? filterCol_prodname = ViewBag.FilterCol_prodname as string;
     string? filterCol_qty = ViewBag.FilterCol_qty as string;
+    string? filterCol_qtyExpr = ViewBag.FilterCol_qtyExpr as string;
     string? filterCol_reqretail = ViewBag.FilterCol_reqretail as string;
+    string? filterCol_reqretailExpr = ViewBag.FilterCol_reqretailExpr as string;
     string? filterCol_disc = ViewBag.FilterCol_disc as string;
+    string? filterCol_discExpr = ViewBag.FilterCol_discExpr as string;
     string? filterCol_linetotal = ViewBag.FilterCol_linetotal as string;
+    string? filterCol_linetotalExpr = ViewBag.FilterCol_linetotalExpr as string;
     string? filterCol_batch = ViewBag.FilterCol_batch as string;
     string? filterCol_expiry = ViewBag.FilterCol_expiry as string;
     string? filterCol_writer = ViewBag.FilterCol_writer as string;
@@ -73,6 +82,7 @@
         soId = filterSOId,
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -84,13 +94,20 @@
         fromCode,
         toCode,
         filterCol_soid,
+        filterCol_soidExpr,
         filterCol_lineno,
+        filterCol_linenoExpr,
         filterCol_prod,
+        filterCol_prodExpr,
         filterCol_prodname,
         filterCol_qty,
+        filterCol_qtyExpr,
         filterCol_reqretail,
+        filterCol_reqretailExpr,
         filterCol_disc,
+        filterCol_discExpr,
         filterCol_linetotal,
+        filterCol_linetotalExpr,
         filterCol_batch,
         filterCol_expiry,
         filterCol_writer,
@@ -99,14 +116,14 @@
     })!;
 
     string? FilterForCol(string colKey) =>
-        colKey == "soid" ? filterCol_soid
-        : colKey == "lineno" ? filterCol_lineno
-        : colKey == "prod" ? filterCol_prod
+        colKey == "soid" ? (!string.IsNullOrWhiteSpace(filterCol_soidExpr) ? filterCol_soidExpr : filterCol_soid)
+        : colKey == "lineno" ? (!string.IsNullOrWhiteSpace(filterCol_linenoExpr) ? filterCol_linenoExpr : filterCol_lineno)
+        : colKey == "prod" ? (!string.IsNullOrWhiteSpace(filterCol_prodExpr) ? filterCol_prodExpr : filterCol_prod)
         : colKey == "prodname" ? filterCol_prodname
-        : colKey == "qty" ? filterCol_qty
-        : colKey == "reqretail" ? filterCol_reqretail
-        : colKey == "disc" ? filterCol_disc
-        : colKey == "linetotal" ? filterCol_linetotal
+        : colKey == "qty" ? (!string.IsNullOrWhiteSpace(filterCol_qtyExpr) ? filterCol_qtyExpr : filterCol_qty)
+        : colKey == "reqretail" ? (!string.IsNullOrWhiteSpace(filterCol_reqretailExpr) ? filterCol_reqretailExpr : filterCol_reqretail)
+        : colKey == "disc" ? (!string.IsNullOrWhiteSpace(filterCol_discExpr) ? filterCol_discExpr : filterCol_disc)
+        : colKey == "linetotal" ? (!string.IsNullOrWhiteSpace(filterCol_linetotalExpr) ? filterCol_linetotalExpr : filterCol_linetotal)
         : colKey == "batch" ? filterCol_batch
         : colKey == "expiry" ? filterCol_expiry
         : colKey == "writer" ? filterCol_writer
@@ -145,6 +162,7 @@
             soId = filterSOId,
             search,
             searchBy,
+            searchMode,
             sort = col,
             dir = newDir,
             page = 1,
@@ -156,13 +174,20 @@
             fromCode,
             toCode,
             filterCol_soid,
+            filterCol_soidExpr,
             filterCol_lineno,
+            filterCol_linenoExpr,
             filterCol_prod,
+            filterCol_prodExpr,
             filterCol_prodname,
             filterCol_qty,
+            filterCol_qtyExpr,
             filterCol_reqretail,
+            filterCol_reqretailExpr,
             filterCol_disc,
+            filterCol_discExpr,
             filterCol_linetotal,
+            filterCol_linetotalExpr,
             filterCol_batch,
             filterCol_expiry,
             filterCol_writer,
@@ -207,6 +232,13 @@
                     <label class="form-label w-100 text-center">بحث في أصناف أوامر البيع</label>
 
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <select name="searchMode"
+                                class="form-select form-select-arrow erp-filter-input flex-shrink-0"
+                                style="max-width:110px;min-width:100px">
+                            <option value="starts"   @Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains" @Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"     @Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
                         <input type="text"
                                name="search"
                                class="form-control erp-filter-input"
@@ -249,13 +281,20 @@
                     @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                     @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                     <input type="hidden" name="filterCol_soid" value="@(filterCol_soid ?? "")" />
+                    <input type="hidden" name="filterCol_soidExpr" value="@(filterCol_soidExpr ?? "")" />
                     <input type="hidden" name="filterCol_lineno" value="@(filterCol_lineno ?? "")" />
+                    <input type="hidden" name="filterCol_linenoExpr" value="@(filterCol_linenoExpr ?? "")" />
                     <input type="hidden" name="filterCol_prod" value="@(filterCol_prod ?? "")" />
+                    <input type="hidden" name="filterCol_prodExpr" value="@(filterCol_prodExpr ?? "")" />
                     <input type="hidden" name="filterCol_prodname" value="@(filterCol_prodname ?? "")" />
                     <input type="hidden" name="filterCol_qty" value="@(filterCol_qty ?? "")" />
+                    <input type="hidden" name="filterCol_qtyExpr" value="@(filterCol_qtyExpr ?? "")" />
                     <input type="hidden" name="filterCol_reqretail" value="@(filterCol_reqretail ?? "")" />
+                    <input type="hidden" name="filterCol_reqretailExpr" value="@(filterCol_reqretailExpr ?? "")" />
                     <input type="hidden" name="filterCol_disc" value="@(filterCol_disc ?? "")" />
+                    <input type="hidden" name="filterCol_discExpr" value="@(filterCol_discExpr ?? "")" />
                     <input type="hidden" name="filterCol_linetotal" value="@(filterCol_linetotal ?? "")" />
+                    <input type="hidden" name="filterCol_linetotalExpr" value="@(filterCol_linetotalExpr ?? "")" />
                     <input type="hidden" name="filterCol_batch" value="@(filterCol_batch ?? "")" />
                     <input type="hidden" name="filterCol_expiry" value="@(filterCol_expiry ?? "")" />
                     <input type="hidden" name="filterCol_writer" value="@(filterCol_writer ?? "")" />
@@ -294,6 +333,8 @@
                             <input type="hidden" name="soId" value="@soIdText" />
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
+                            <input type="hidden" name="visibleCols" value="" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
@@ -302,13 +343,20 @@
                             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                             <input type="hidden" name="filterCol_soid" value="@(filterCol_soid ?? "")" />
+                            <input type="hidden" name="filterCol_soidExpr" value="@(filterCol_soidExpr ?? "")" />
                             <input type="hidden" name="filterCol_lineno" value="@(filterCol_lineno ?? "")" />
+                            <input type="hidden" name="filterCol_linenoExpr" value="@(filterCol_linenoExpr ?? "")" />
                             <input type="hidden" name="filterCol_prod" value="@(filterCol_prod ?? "")" />
+                            <input type="hidden" name="filterCol_prodExpr" value="@(filterCol_prodExpr ?? "")" />
                             <input type="hidden" name="filterCol_prodname" value="@(filterCol_prodname ?? "")" />
                             <input type="hidden" name="filterCol_qty" value="@(filterCol_qty ?? "")" />
+                            <input type="hidden" name="filterCol_qtyExpr" value="@(filterCol_qtyExpr ?? "")" />
                             <input type="hidden" name="filterCol_reqretail" value="@(filterCol_reqretail ?? "")" />
+                            <input type="hidden" name="filterCol_reqretailExpr" value="@(filterCol_reqretailExpr ?? "")" />
                             <input type="hidden" name="filterCol_disc" value="@(filterCol_disc ?? "")" />
+                            <input type="hidden" name="filterCol_discExpr" value="@(filterCol_discExpr ?? "")" />
                             <input type="hidden" name="filterCol_linetotal" value="@(filterCol_linetotal ?? "")" />
+                            <input type="hidden" name="filterCol_linetotalExpr" value="@(filterCol_linetotalExpr ?? "")" />
                             <input type="hidden" name="filterCol_batch" value="@(filterCol_batch ?? "")" />
                             <input type="hidden" name="filterCol_expiry" value="@(filterCol_expiry ?? "")" />
                             <input type="hidden" name="filterCol_writer" value="@(filterCol_writer ?? "")" />
@@ -464,6 +512,7 @@
             <input type="hidden" name="soId" value="@soIdText" />
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -486,13 +535,20 @@
                 <input type="hidden" name="toCode" value="@toCode" />
             }
             <input type="hidden" name="filterCol_soid" value="@(filterCol_soid ?? "")" />
+            <input type="hidden" name="filterCol_soidExpr" value="@(filterCol_soidExpr ?? "")" />
             <input type="hidden" name="filterCol_lineno" value="@(filterCol_lineno ?? "")" />
+            <input type="hidden" name="filterCol_linenoExpr" value="@(filterCol_linenoExpr ?? "")" />
             <input type="hidden" name="filterCol_prod" value="@(filterCol_prod ?? "")" />
+            <input type="hidden" name="filterCol_prodExpr" value="@(filterCol_prodExpr ?? "")" />
             <input type="hidden" name="filterCol_prodname" value="@(filterCol_prodname ?? "")" />
             <input type="hidden" name="filterCol_qty" value="@(filterCol_qty ?? "")" />
+            <input type="hidden" name="filterCol_qtyExpr" value="@(filterCol_qtyExpr ?? "")" />
             <input type="hidden" name="filterCol_reqretail" value="@(filterCol_reqretail ?? "")" />
+            <input type="hidden" name="filterCol_reqretailExpr" value="@(filterCol_reqretailExpr ?? "")" />
             <input type="hidden" name="filterCol_disc" value="@(filterCol_disc ?? "")" />
+            <input type="hidden" name="filterCol_discExpr" value="@(filterCol_discExpr ?? "")" />
             <input type="hidden" name="filterCol_linetotal" value="@(filterCol_linetotal ?? "")" />
+            <input type="hidden" name="filterCol_linetotalExpr" value="@(filterCol_linetotalExpr ?? "")" />
             <input type="hidden" name="filterCol_batch" value="@(filterCol_batch ?? "")" />
             <input type="hidden" name="filterCol_expiry" value="@(filterCol_expiry ?? "")" />
             <input type="hidden" name="filterCol_writer" value="@(filterCol_writer ?? "")" />
@@ -566,6 +622,7 @@
                     <input type="hidden" name="soId" value="@soIdText" />
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -574,13 +631,20 @@
                     <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
                     <input type="hidden" name="dateField" value="@dateField" />
                     <input type="hidden" name="filterCol_soid" value="@(filterCol_soid ?? "")" />
+                    <input type="hidden" name="filterCol_soidExpr" value="@(filterCol_soidExpr ?? "")" />
                     <input type="hidden" name="filterCol_lineno" value="@(filterCol_lineno ?? "")" />
+                    <input type="hidden" name="filterCol_linenoExpr" value="@(filterCol_linenoExpr ?? "")" />
                     <input type="hidden" name="filterCol_prod" value="@(filterCol_prod ?? "")" />
+                    <input type="hidden" name="filterCol_prodExpr" value="@(filterCol_prodExpr ?? "")" />
                     <input type="hidden" name="filterCol_prodname" value="@(filterCol_prodname ?? "")" />
                     <input type="hidden" name="filterCol_qty" value="@(filterCol_qty ?? "")" />
+                    <input type="hidden" name="filterCol_qtyExpr" value="@(filterCol_qtyExpr ?? "")" />
                     <input type="hidden" name="filterCol_reqretail" value="@(filterCol_reqretail ?? "")" />
+                    <input type="hidden" name="filterCol_reqretailExpr" value="@(filterCol_reqretailExpr ?? "")" />
                     <input type="hidden" name="filterCol_disc" value="@(filterCol_disc ?? "")" />
+                    <input type="hidden" name="filterCol_discExpr" value="@(filterCol_discExpr ?? "")" />
                     <input type="hidden" name="filterCol_linetotal" value="@(filterCol_linetotal ?? "")" />
+                    <input type="hidden" name="filterCol_linetotalExpr" value="@(filterCol_linetotalExpr ?? "")" />
                     <input type="hidden" name="filterCol_batch" value="@(filterCol_batch ?? "")" />
                     <input type="hidden" name="filterCol_expiry" value="@(filterCol_expiry ?? "")" />
                     <input type="hidden" name="filterCol_writer" value="@(filterCol_writer ?? "")" />
@@ -703,6 +767,7 @@
 
 @section Scripts {
     <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
+    <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
     <script>
         // يبدأ شريط التمرير الأفقي من اليمين (RTL)
         (function () {
@@ -738,6 +803,18 @@
                 showUrlAttribute: "data-show-url",
                 tabTitleAttribute: "data-tab-title",
                 showTabId: "so-show-tab"
+            });
+        }
+
+        if (typeof ERP !== "undefined" && ERP.initListColumnFilter) {
+            ERP.initListColumnFilter({
+                panelId: "erpColumnFilterPanel",
+                tableId: "solTable",
+                wrapperId: "solTableWrapper",
+                getColumnValuesUrl: "@Url.Action("GetColumnValues", "SOLines")",
+                defaultSort: "SOId",
+                defaultDir: "asc",
+                numericColumns: ["soid", "lineno", "prod", "qty", "reqretail", "disc", "linetotal"]
             });
         }
 
@@ -844,6 +921,31 @@
                     const modal = bootstrap.Modal.getInstance(modalEl);
                     modal?.hide();
                 });
+
+            function getVisibleColsInTableOrder() {
+                const headerCells = Array.from(table.querySelectorAll("thead th[data-col]"));
+                const ordered = headerCells
+                    .filter(th => !th.hasAttribute("data-col-fixed"))
+                    .map(th => th.getAttribute("data-col"))
+                    .filter(Boolean);
+
+                let hiddenCols = [];
+                try {
+                    const saved = localStorage.getItem(storageKey);
+                    if (saved) hiddenCols = JSON.parse(saved) || [];
+                } catch { hiddenCols = []; }
+
+                const hiddenSet = new Set(hiddenCols.map(x => String(x)));
+                return ordered.filter(k => !hiddenSet.has(String(k)));
+            }
+
+            document.querySelectorAll("form.erp-export-form").forEach(function (form) {
+                form.addEventListener("submit", function () {
+                    const inp = form.querySelector("input[name='visibleCols']");
+                    if (!inp) return;
+                    inp.value = getVisibleColsInTableOrder().join(",");
+                });
+            });
         })();
 
         // =========================
@@ -881,113 +983,5 @@
             });
         })();
 
-        // فلتر الأعمدة بنمط Excel
-        (function () {
-            var panel = document.getElementById("erpColumnFilterPanel");
-            if (!panel) return;
-            var titleEl = document.getElementById("erpColumnFilterTitle");
-            var searchInp = document.getElementById("erpColumnFilterSearch");
-            var listEl = document.getElementById("erpColumnFilterList");
-            var btnOk = document.getElementById("erpColumnFilterOk");
-            var btnClear = document.getElementById("erpColumnFilterClear");
-            var btnClose = document.getElementById("erpColumnFilterClose");
-            var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
-            function getCurrentFilterValue(col) { return new URL(window.location.href).searchParams.get("filterCol_" + col) || ""; }
-            function getCurrentSort() { var u = new URL(window.location.href); return { sort: u.searchParams.get("sort") || "SOId", dir: u.searchParams.get("dir") || "asc" }; }
-            function adjustPanelPosition() {
-                if (!panel || !anchorRect) return;
-                setTimeout(function () {
-                    var r = panel.getBoundingClientRect();
-                    var top = anchorRect.bottom + 4, left = anchorRect.left;
-                    if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - r.height);
-                    if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - r.width);
-                    panel.style.top = top + "px"; panel.style.left = left + "px";
-                }, 50);
-            }
-            function showPanel(btn) {
-                currentCol = btn.dataset.col;
-                currentSortKey = btn.dataset.sortKey || currentCol;
-                titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
-                searchInp.value = "";
-                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split("|").filter(Boolean));
-                anchorRect = btn.getBoundingClientRect();
-                panel.style.minWidth = Math.max(250, anchorRect.width) + "px";
-                panel.classList.remove("d-none");
-                var currentSort = getCurrentSort();
-                var isCurrent = currentSort.sort.toLowerCase() === (currentSortKey || "").toLowerCase();
-                var currentDir = isCurrent ? currentSort.dir : "asc";
-                panel.querySelectorAll(".erp-sort-btn").forEach(function (b) {
-                    if (isCurrent && b.dataset.sortDir === currentDir) { b.classList.add("active", "btn-primary"); b.classList.remove("btn-outline-secondary"); }
-                    else { b.classList.remove("active", "btn-primary"); b.classList.add("btn-outline-secondary"); }
-                });
-                adjustPanelPosition();
-                document.getElementById("erpColumnFilterSearchRow").classList.remove("d-none");
-                listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
-                var url = "@Url.Action("GetColumnValues", "SOLines")" + "?column=" + encodeURIComponent(currentCol);
-                if (searchInp && searchInp.value.trim()) url += "&search=" + encodeURIComponent(searchInp.value.trim());
-                fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                    allItems = (items || []).map(function (v) { return { value: v, display: v }; });
-                    renderList(searchInp ? searchInp.value : "");
-                }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
-            }
-            function renderList(search) {
-                var term = (search || "").toLowerCase();
-                var filtered = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term) >= 0; }) : allItems;
-                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
-                var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
-                listEl.innerHTML = '<div class="form-check mb-1"><input type="checkbox" class="form-check-input" id="erpFilterSelectAll" ' + (allChecked ? "checked" : "") + '><label class="form-check-label small" for="erpFilterSelectAll">(تحديد الكل)</label></div><div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' + filtered.map(function (x) {
-                    var v = String(x.value);
-                    return '<div class="form-check"><input type="checkbox" class="form-check-input erp-filter-item" value="' + v.replace(/"/g, "&quot;") + '" ' + (currentSelected.has(v) ? "checked" : "") + '><label class="form-check-label small">' + (x.display || v).replace(/</g, "&lt;") + '</label></div>';
-                }).join("") + "</div>";
-                var selectAllCb = listEl.querySelector("#erpFilterSelectAll");
-                if (selectAllCb) {
-                    selectAllCb.indeterminate = someChecked && !allChecked;
-                    selectAllCb.onchange = function () { filtered.forEach(function (x) { if (this.checked) currentSelected.add(String(x.value)); else currentSelected.delete(String(x.value)); }.bind(this)); renderList(searchInp.value); };
-                }
-                listEl.querySelectorAll(".erp-filter-item").forEach(function (cb) {
-                    cb.onchange = function () { if (this.checked) currentSelected.add(this.value); else currentSelected.delete(this.value); renderList(searchInp.value); };
-                });
-                adjustPanelPosition();
-            }
-            function applyFilter(applySort, sortDir) {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                if (applySort !== undefined && sortDir !== undefined) { url.searchParams.set("sort", applySort); url.searchParams.set("dir", sortDir); }
-                var val = Array.from(currentSelected).filter(Boolean).join("|");
-                if (val) url.searchParams.set("filterCol_" + currentCol, val);
-                else url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-            function clearFilter() {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-            document.querySelectorAll(".erp-col-filter-btn").forEach(function (btn) { btn.addEventListener("click", function (e) { e.stopPropagation(); showPanel(this); }); });
-            document.addEventListener("click", function (e) { if (e.target.closest(".erp-sort-btn")) { var sortBtn = e.target.closest(".erp-sort-btn"); if (currentSortKey) applyFilter(currentSortKey, sortBtn.dataset.sortDir); } });
-            var fetchDebounce = null;
-            searchInp && searchInp.addEventListener("input", function () {
-                renderList(this.value);
-                if (fetchDebounce) clearTimeout(fetchDebounce);
-                fetchDebounce = setTimeout(function () {
-                    fetchDebounce = null;
-                    if (!currentCol) return;
-                    var url = "@Url.Action("GetColumnValues", "SOLines")" + "?column=" + encodeURIComponent(currentCol);
-                    if (searchInp && searchInp.value.trim()) url += "&search=" + encodeURIComponent(searchInp.value.trim());
-                    fetch(url).then(function (r) { return r.json(); }).then(function (items) { allItems = (items || []).map(function (v) { return { value: v, display: v }; }); renderList(searchInp ? searchInp.value : ""); });
-                }, 400);
-            });
-            searchInp && searchInp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applyFilter(); } });
-            btnOk && btnOk.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); applyFilter(); });
-            btnClear && btnClear.addEventListener("click", clearFilter);
-            btnClose && btnClose.addEventListener("click", function () { panel.classList.add("d-none"); });
-            document.addEventListener("click", function (e) {
-                if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn"))
-                    panel.classList.add("d-none");
-            });
-        })();
     </script>
 }

@@ -2476,7 +2476,7 @@ namespace ERP.Services
 
                 // تحديث حالة التسوية
                 adjustment.IsPosted = false;
-                adjustment.Status = "مسودة";
+                adjustment.Status = "غير مرحلة";
                 adjustment.PostedAt = null;
                 adjustment.PostedBy = null;
 
@@ -2787,7 +2787,7 @@ namespace ERP.Services
 
                 // تحديث حالة التحويل
                 transfer.IsPosted = false;
-                transfer.Status = "مسودة";
+                transfer.Status = "غير مرحلة";
                 transfer.PostedAt = null;
                 transfer.PostedBy = null;
 

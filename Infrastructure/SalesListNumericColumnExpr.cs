@@ -364,4 +364,171 @@ namespace ERP.Infrastructure
         private static bool IsMemberDec(System.Linq.Expressions.Expression<Func<SalesInvoiceLine, decimal>> prop, string name) =>
             prop.Body is System.Linq.Expressions.MemberExpression m && m.Member.Name == name;
     }
+
+    /// <summary>تعبيرات رقمية لقائمة أصناف أوامر البيع — مفاتيح الأعمدة كما في data-col.</summary>
+    public static class SOLineListNumericExpr
+    {
+        public static IQueryable<SOLine> ApplyForColumn(IQueryable<SOLine> q, string column, string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return q;
+            var expr = raw.Trim();
+            column = (column ?? "").Trim().ToLowerInvariant();
+            return column switch
+            {
+                "soid" => ApplyInt(q, expr, x => x.SOId),
+                "lineno" => ApplyInt(q, expr, x => x.LineNo),
+                "prod" => ApplyInt(q, expr, x => x.ProdId),
+                "qty" => ApplyInt(q, expr, x => x.QtyRequested),
+                "reqretail" => ApplyDecimal(q, expr, x => x.RequestedRetailPrice),
+                "disc" => ApplyDecimal(q, expr, x => x.SalesDiscountPct),
+                "linetotal" => ApplyLineTotal(q, expr),
+                _ => q
+            };
+        }
+
+        private static IQueryable<SOLine> ApplyInt(IQueryable<SOLine> q, string expr, System.Linq.Expressions.Expression<Func<SOLine, int>> prop)
+        {
+            if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return WhereInt(q, prop, le, IntCmp.Le);
+            if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return WhereInt(q, prop, ge, IntCmp.Ge);
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return WhereInt(q, prop, lt, IntCmp.Lt);
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return WhereInt(q, prop, gt, IntCmp.Gt);
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b) (a, b) = (b, a);
+                    return WhereIntRange(q, prop, a, b);
+                }
+            }
+            if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                return WhereIntEq(q, prop, ex);
+            return q;
+        }
+
+        private enum IntCmp { Le, Ge, Lt, Gt }
+
+        private static IQueryable<SOLine> WhereInt(IQueryable<SOLine> q, System.Linq.Expressions.Expression<Func<SOLine, int>> prop, int v, IntCmp cmp)
+        {
+            if (IsIntMember(prop, nameof(SOLine.SOId)))
+                return cmp switch { IntCmp.Le => q.Where(x => x.SOId <= v), IntCmp.Ge => q.Where(x => x.SOId >= v), IntCmp.Lt => q.Where(x => x.SOId < v), _ => q.Where(x => x.SOId > v) };
+            if (IsIntMember(prop, nameof(SOLine.LineNo)))
+                return cmp switch { IntCmp.Le => q.Where(x => x.LineNo <= v), IntCmp.Ge => q.Where(x => x.LineNo >= v), IntCmp.Lt => q.Where(x => x.LineNo < v), _ => q.Where(x => x.LineNo > v) };
+            if (IsIntMember(prop, nameof(SOLine.ProdId)))
+                return cmp switch { IntCmp.Le => q.Where(x => x.ProdId <= v), IntCmp.Ge => q.Where(x => x.ProdId >= v), IntCmp.Lt => q.Where(x => x.ProdId < v), _ => q.Where(x => x.ProdId > v) };
+            return cmp switch { IntCmp.Le => q.Where(x => x.QtyRequested <= v), IntCmp.Ge => q.Where(x => x.QtyRequested >= v), IntCmp.Lt => q.Where(x => x.QtyRequested < v), _ => q.Where(x => x.QtyRequested > v) };
+        }
+
+        private static IQueryable<SOLine> WhereIntRange(IQueryable<SOLine> q, System.Linq.Expressions.Expression<Func<SOLine, int>> prop, int a, int b)
+        {
+            if (IsIntMember(prop, nameof(SOLine.SOId)))
+                return q.Where(x => x.SOId >= a && x.SOId <= b);
+            if (IsIntMember(prop, nameof(SOLine.LineNo)))
+                return q.Where(x => x.LineNo >= a && x.LineNo <= b);
+            if (IsIntMember(prop, nameof(SOLine.ProdId)))
+                return q.Where(x => x.ProdId >= a && x.ProdId <= b);
+            return q.Where(x => x.QtyRequested >= a && x.QtyRequested <= b);
+        }
+
+        private static IQueryable<SOLine> WhereIntEq(IQueryable<SOLine> q, System.Linq.Expressions.Expression<Func<SOLine, int>> prop, int v)
+        {
+            if (IsIntMember(prop, nameof(SOLine.SOId)))
+                return q.Where(x => x.SOId == v);
+            if (IsIntMember(prop, nameof(SOLine.LineNo)))
+                return q.Where(x => x.LineNo == v);
+            if (IsIntMember(prop, nameof(SOLine.ProdId)))
+                return q.Where(x => x.ProdId == v);
+            return q.Where(x => x.QtyRequested == v);
+        }
+
+        private static bool IsIntMember(System.Linq.Expressions.Expression<Func<SOLine, int>> prop, string name) =>
+            prop.Body is System.Linq.Expressions.MemberExpression m && m.Member.Name == name;
+
+        private static IQueryable<SOLine> ApplyDecimal(IQueryable<SOLine> q, string expr, System.Linq.Expressions.Expression<Func<SOLine, decimal>> prop)
+        {
+            if (expr.StartsWith("<=") && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return WhereDec(q, prop, le, DecCmp.Le);
+            if (expr.StartsWith(">=") && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return WhereDec(q, prop, ge, DecCmp.Ge);
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return WhereDec(q, prop, lt, DecCmp.Lt);
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return WhereDec(q, prop, gt, DecCmp.Gt);
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && decimal.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && decimal.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b) (a, b) = (b, a);
+                    return WhereDecRange(q, prop, a, b);
+                }
+            }
+            if (decimal.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                return WhereDecEq(q, prop, ex);
+            return q;
+        }
+
+        private enum DecCmp { Le, Ge, Lt, Gt }
+
+        private static IQueryable<SOLine> WhereDec(IQueryable<SOLine> q, System.Linq.Expressions.Expression<Func<SOLine, decimal>> prop, decimal v, DecCmp cmp)
+        {
+            if (IsDecMember(prop, nameof(SOLine.RequestedRetailPrice)))
+                return cmp switch { DecCmp.Le => q.Where(x => x.RequestedRetailPrice <= v), DecCmp.Ge => q.Where(x => x.RequestedRetailPrice >= v), DecCmp.Lt => q.Where(x => x.RequestedRetailPrice < v), _ => q.Where(x => x.RequestedRetailPrice > v) };
+            return cmp switch { DecCmp.Le => q.Where(x => x.SalesDiscountPct <= v), DecCmp.Ge => q.Where(x => x.SalesDiscountPct >= v), DecCmp.Lt => q.Where(x => x.SalesDiscountPct < v), _ => q.Where(x => x.SalesDiscountPct > v) };
+        }
+
+        private static IQueryable<SOLine> WhereDecRange(IQueryable<SOLine> q, System.Linq.Expressions.Expression<Func<SOLine, decimal>> prop, decimal a, decimal b)
+        {
+            if (IsDecMember(prop, nameof(SOLine.RequestedRetailPrice)))
+                return q.Where(x => x.RequestedRetailPrice >= a && x.RequestedRetailPrice <= b);
+            return q.Where(x => x.SalesDiscountPct >= a && x.SalesDiscountPct <= b);
+        }
+
+        private static IQueryable<SOLine> WhereDecEq(IQueryable<SOLine> q, System.Linq.Expressions.Expression<Func<SOLine, decimal>> prop, decimal v)
+        {
+            if (IsDecMember(prop, nameof(SOLine.RequestedRetailPrice)))
+                return q.Where(x => x.RequestedRetailPrice == v);
+            return q.Where(x => x.SalesDiscountPct == v);
+        }
+
+        private static bool IsDecMember(System.Linq.Expressions.Expression<Func<SOLine, decimal>> prop, string name) =>
+            prop.Body is System.Linq.Expressions.MemberExpression m && m.Member.Name == name;
+
+        private static IQueryable<SOLine> ApplyLineTotal(IQueryable<SOLine> q, string expr)
+        {
+            if (expr.StartsWith("<=") && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var le))
+                return q.Where(x => (x.ExpectedUnitPrice * x.QtyRequested) <= le);
+            if (expr.StartsWith(">=") && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var ge))
+                return q.Where(x => (x.ExpectedUnitPrice * x.QtyRequested) >= ge);
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var lt))
+                return q.Where(x => (x.ExpectedUnitPrice * x.QtyRequested) < lt);
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var gt))
+                return q.Where(x => (x.ExpectedUnitPrice * x.QtyRequested) > gt);
+            if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2
+                    && decimal.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && decimal.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    if (a > b) (a, b) = (b, a);
+                    return q.Where(x => (x.ExpectedUnitPrice * x.QtyRequested) >= a && (x.ExpectedUnitPrice * x.QtyRequested) <= b);
+                }
+            }
+            if (decimal.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                return q.Where(x => (x.ExpectedUnitPrice * x.QtyRequested) == ex);
+            return q;
+        }
+    }
 }

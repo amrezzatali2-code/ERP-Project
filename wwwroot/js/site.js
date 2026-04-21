@@ -182,6 +182,13 @@ if (window.__ERP_TABS_INITED__) {
                 // (أ) open-same-tab
                 // ------------------------------
                 if (link.classList.contains('open-same-tab')) {
+                    var isDisabledLink =
+                        link.classList.contains('disabled')
+                        || String(link.getAttribute('aria-disabled') || '').toLowerCase() === 'true';
+                    if (isDisabledLink) {
+                        event.preventDefault();
+                        return;
+                    }
 
                     var tabId = normalizeTabId(link.getAttribute('data-tab-id') || '');
                     var tabTitle = (link.getAttribute('data-tab-title') || link.textContent || '').trim();

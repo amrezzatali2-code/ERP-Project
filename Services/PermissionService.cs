@@ -1,7 +1,9 @@
+using System;
 using System.Linq;
 using System.Security.Claims;
 using ERP.Data;
 using ERP.Security;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Services
@@ -15,11 +17,17 @@ namespace ERP.Services
     {
         private readonly AppDbContext _context;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IMemoryCache _memoryCache;
 
-        public PermissionService(AppDbContext context, IHttpContextAccessor httpContextAccessor)
+        private const string PermissionCacheVersionKey = "perm-cache-version";
+        private static readonly TimeSpan PermissionCacheAbsoluteExpiration = TimeSpan.FromMinutes(15);
+        private static readonly TimeSpan PermissionCacheSlidingExpiration = TimeSpan.FromMinutes(5);
+
+        public PermissionService(AppDbContext context, IHttpContextAccessor httpContextAccessor, IMemoryCache memoryCache)
         {
             _context = context;
             _httpContextAccessor = httpContextAccessor;
+            _memoryCache = memoryCache;
         }
 
         /// <summary>
@@ -52,6 +60,17 @@ namespace ERP.Services
             }
 
             if (string.IsNullOrEmpty(code)) return false;
+
+            // مسار سريع جداً: فحص الصلاحية من كاش الصلاحيات الفعّالة للمستخدم
+            // (يشمل Role + Extra - Denied) مع دعم الأكواد القديمة المتوافقة.
+            var cachedCodes = await GetUserPermissionCodesAsync(userId);
+            if (HasPermissionFromCachedCodes(cachedCodes, code))
+                return true;
+
+            // صلاحيات Global.* لا تمتلك خرائط توافق قديمة؛ إذا لم تُوجد في الكاش نعتبرها غير متاحة فوراً
+            // لتجنّب استعلامات DB إضافية في كل طلب (خصوصاً Global.GeneralList و Global.ShowSummaries).
+            if (code.StartsWith("Global.", StringComparison.OrdinalIgnoreCase))
+                return false;
 
             // البحث عن الصلاحية بأكواد مطابقة (بدون مراعاة حالة الحروف أو مسافات زائدة)
             var codeLower = code.ToLowerInvariant();
@@ -381,13 +400,28 @@ namespace ERP.Services
             var userIdStr = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out int userId))
                 return false;
+
+            // مسار سريع: قراءة الصلاحيات من الكاش أولاً لتقليل استعلامات كل طلب.
+            var cachedCodes = await GetUserPermissionCodesAsync(userId);
+            if (cachedCodes.Contains(code))
+                return true;
+
             return await HasPermissionAsync(userId, permissionCode);
         }
 
         public async Task<HashSet<string>> GetUserPermissionCodesAsync(int userId)
         {
+            var empty = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (userId <= 0) return empty;
+
+            var cacheKey = BuildUserPermissionCacheKey(userId);
+            if (_memoryCache.TryGetValue(cacheKey, out HashSet<string>? cached) && cached != null)
+            {
+                // نرجع نسخة حتى لا يعدّل أي مستهلك الكاش الأصلي بالخطأ.
+                return new HashSet<string>(cached, StringComparer.OrdinalIgnoreCase);
+            }
+
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (userId <= 0) return set;
 
             var roleIds = await _context.UserRoles
                 .Where(ur => ur.UserId == userId)
@@ -420,6 +454,16 @@ namespace ERP.Services
                 .ToListAsync();
 
             foreach (var c in codes) set.Add(c);
+
+            _memoryCache.Set(
+                cacheKey,
+                new HashSet<string>(set, StringComparer.OrdinalIgnoreCase),
+                new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = PermissionCacheAbsoluteExpiration,
+                    SlidingExpiration = PermissionCacheSlidingExpiration
+                });
+
             return set;
         }
 
@@ -433,6 +477,111 @@ namespace ERP.Services
             var prefix = codePrefix.Trim();
             var codes = await GetUserPermissionCodesAsync(userId);
             return codes.Any(c => c != null && c.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public void InvalidateUserPermissionCache(int userId)
+        {
+            if (userId <= 0) return;
+            _memoryCache.Remove(BuildUserPermissionCacheKey(userId));
+        }
+
+        public void InvalidateAllPermissionCaches()
+        {
+            var version = GetPermissionCacheVersion();
+            _memoryCache.Set(PermissionCacheVersionKey, version + 1);
+        }
+
+        private string BuildUserPermissionCacheKey(int userId)
+        {
+            var version = GetPermissionCacheVersion();
+            return $"user-permissions:{version}:{userId}";
+        }
+
+        private int GetPermissionCacheVersion()
+        {
+            if (_memoryCache.TryGetValue(PermissionCacheVersionKey, out int version))
+                return version;
+
+            _memoryCache.Set(PermissionCacheVersionKey, 1);
+            return 1;
+        }
+
+        private static bool HasPermissionFromCachedCodes(HashSet<string> cachedCodes, string permissionCode)
+        {
+            if (cachedCodes.Count == 0 || string.IsNullOrWhiteSpace(permissionCode))
+                return false;
+
+            var code = permissionCode.Trim();
+            if (cachedCodes.Contains(code))
+                return true;
+
+            var codeLower = code.ToLowerInvariant();
+
+            // Sales legacy: sales.invoices.* -> sales.invoice.*
+            if (codeLower == "sales.invoices.view.index" && cachedCodes.Contains("sales.invoices.view"))
+                return true;
+            if (codeLower.StartsWith("sales.invoices."))
+            {
+                var altCode = codeLower.Replace("sales.invoices.", "sales.invoice.");
+                if (cachedCodes.Contains(altCode))
+                    return true;
+            }
+
+            // Customers legacy
+            if ((codeLower == "customers.view.index" || codeLower == "customers.view.show")
+                && cachedCodes.Contains("customers.customers.view"))
+                return true;
+            if (codeLower.StartsWith("customers.")
+                && !codeLower.StartsWith("customers.customers.")
+                && !codeLower.StartsWith("customers.view.")
+                && !codeLower.StartsWith("customers.ledger.")
+                && !codeLower.StartsWith("customers.customervolume."))
+            {
+                var altCode = "customers.customers." + codeLower.Substring("customers.".Length);
+                if (cachedCodes.Contains(altCode))
+                    return true;
+            }
+
+            // Purchasing legacy: underscore <-> dot + plural <-> singular + view.index <-> view
+            if (codeLower.StartsWith("purchasing."))
+            {
+                var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                if (codeLower == "purchasing.invoices_view")
+                    candidates.UnionWith(new[] { "purchasing.invoices.view.index", "purchasing.invoices.view" });
+                else if (codeLower == "purchasing.requests_view")
+                    candidates.UnionWith(new[] { "purchasing.requests.view.index", "purchasing.requests.view" });
+                else if (codeLower == "purchasing.returns_view")
+                    candidates.UnionWith(new[] { "purchasing.returns.view.index", "purchasing.returns.view" });
+                else
+                    candidates.Add(codeLower
+                        .Replace("purchasing.invoices_", "purchasing.invoices.")
+                        .Replace("purchasing.requests_", "purchasing.requests.")
+                        .Replace("purchasing.returns_", "purchasing.returns.")
+                        .Replace("purchasing.invoicelines_", "purchasing.invoicelines.")
+                        .Replace("purchasing.requestlines_", "purchasing.requestlines.")
+                        .Replace("purchasing.returnlines_", "purchasing.returnlines."));
+
+                candidates.Add(codeLower
+                    .Replace("purchasing.invoices.", "purchasing.invoice.")
+                    .Replace("purchasing.requests.", "purchasing.request.")
+                    .Replace("purchasing.returns.", "purchasing.return.")
+                    .Replace("purchasing.invoicelines.", "purchasing.invoiceline.")
+                    .Replace("purchasing.requestlines.", "purchasing.requestline.")
+                    .Replace("purchasing.returnlines.", "purchasing.returnline."));
+
+                if (codeLower == "purchasing.invoices.view.index")
+                    candidates.Add("purchasing.invoices.view");
+                else if (codeLower == "purchasing.requests.view.index")
+                    candidates.Add("purchasing.requests.view");
+                else if (codeLower == "purchasing.returns.view.index")
+                    candidates.Add("purchasing.returns.view");
+
+                if (candidates.Any(cachedCodes.Contains))
+                    return true;
+            }
+
+            return false;
         }
     }
 }

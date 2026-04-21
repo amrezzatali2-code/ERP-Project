@@ -369,8 +369,8 @@
 
                             <td data-col="id">@t.Id</td>
                             <td data-col="date">@t.TransferDate.ToString("yyyy-MM-dd HH:mm")</td>
-                            <td data-col="fromwarehouse">@t.FromWarehouseId</td>
-                            <td data-col="towarehouse">@t.ToWarehouseId</td>
+                            <td data-col="fromwarehouse">@(t.FromWarehouse?.WarehouseName ?? "-")</td>
+                            <td data-col="towarehouse">@(t.ToWarehouse?.WarehouseName ?? "-")</td>
                             <td data-col="note">@((string.IsNullOrWhiteSpace(t.Note) ? "-" : t.Note))</td>
                             <td data-col="created">@t.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
                             <td data-col="updated">

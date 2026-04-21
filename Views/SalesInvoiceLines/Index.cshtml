@@ -16,9 +16,10 @@
     // تنظيف search من أسماء الأعمدة المعروفة
     var columnNames = new[] { "siid", "line", "lineno", "prodid", "prodname", "customername", "region", "createdby",
         "qty", "price", "unit", "total", "net", "disc1", "disc2", "disc3", "discval",
+        "itemreturnqty", "finalnetafterall",
         "batch", "expiry", "رقم الفاتورة", "رقم السطر", "كود الصنف", "اسم الصنف",
         "اسم العميل", "المنطقة", "الكاتب", "الكمية", "سعر الجمهور", "التشغيلة", "الصلاحية",
-        "الخصم", "قيمة الخصم" };
+        "الخصم", "قيمة الخصم", "مرتجع الصنف", "الصافي النهائي بعد كل حاجة" };
     
     var search = "";
     if (!string.IsNullOrWhiteSpace(searchRaw))
@@ -31,6 +32,8 @@
     }
     
     var searchBy = (string?)ViewBag.SearchBy ?? "all";          // all | si | prod | batch | notes
+    var searchMode = ((string?)ViewBag.SearchMode ?? "contains").ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "LineNo";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
@@ -85,6 +88,7 @@
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -174,6 +178,16 @@
     decimal totalAfterDiscForCards = ViewBag.TotalAfterDiscount != null ? (decimal)ViewBag.TotalAfterDiscount : 0m;
     decimal totalNetForCards = ViewBag.TotalNet != null ? (decimal)ViewBag.TotalNet : 0m;
     int categoriesCountForCards = ViewBag.CategoriesCount != null ? (int)ViewBag.CategoriesCount : 0;
+    var returnQtyByLine = ViewBag.ReturnQtyByLine as IReadOnlyDictionary<string, int> ?? new Dictionary<string, int>();
+    var finalNetByLine = ViewBag.FinalNetByLine as IReadOnlyDictionary<string, decimal> ?? new Dictionary<string, decimal>();
+    int totalReturnQtyForPage = 0;
+    decimal totalFinalNetForPage = 0m;
+    foreach (var line in Model.Items)
+    {
+        var key = $"{line.SIId}:{line.LineNo}:{line.ProdId}";
+        totalReturnQtyForPage += returnQtyByLine.TryGetValue(key, out var rq) ? rq : 0;
+        totalFinalNetForPage += finalNetByLine.TryGetValue(key, out var fn) ? fn : line.LineNetTotal;
+    }
     var n2 = System.Globalization.CultureInfo.InvariantCulture;
 }
 
@@ -223,6 +237,13 @@
                     <label class="form-label w-100 text-center">بحث في أصناف المبيعات</label>
 
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <select name="searchMode"
+                                class="form-select form-select-arrow erp-filter-input flex-shrink-0"
+                                style="max-width:110px;min-width:100px">
+                            <option value="starts"   @Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains" @Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="ends"     @Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
                         <input type="text"
                                name="search"
                                class="form-control erp-filter-input"
@@ -355,6 +376,8 @@
                         <form method="get" asp-action="Export" asp-controller="SalesInvoiceLines" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form" dir="rtl">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
+                            <input type="hidden" name="visibleCols" value="" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             @if (siIdFilter.HasValue) { <input type="hidden" name="siId" value="@siIdFilter.Value" /> }
@@ -488,6 +511,8 @@
                     <th data-col="discval">@filterableCol("discval", "DiscVal", "قيمة الخصم")</th>
                     <th data-col="total">@filterableCol("total", "Total", "الإجمالي بعد الخصم")</th>
                     <th data-col="net">@filterableCol("net", "Net", "الصافي بعد الضريبة")</th>
+                    <th data-col="itemReturnQty">مرتجع الصنف</th>
+                    <th data-col="finalNetAfterAll">الصافي النهائي بعد كل حاجة</th>
                     <th data-col="batch">@filterableCol("batch", "Batch", "التشغيلة")</th>
                     <th data-col="expiry">@filterableCol("expiry", "Expiry", "الصلاحية")</th>
                 </tr>
@@ -496,7 +521,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="17" class="text-center text-muted py-4">
+                        <td colspan="19" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -508,6 +533,9 @@
                         var showUrl = Url.Action("Show", "SalesInvoices", new { id = x.SIId }) + "?frame=1";
                         var movementUrl = Url.Action("Show", "Products", new { id = x.ProdId }) + "?frame=1";
                         var rowId = x.SIId + "_" + x.LineNo;
+                        var returnKey = $"{x.SIId}:{x.LineNo}:{x.ProdId}";
+                        var returnedQty = returnQtyByLine.TryGetValue(returnKey, out var rq) ? rq : 0;
+                        var finalNetAfterAll = finalNetByLine.TryGetValue(returnKey, out var fn) ? fn : x.LineNetTotal;
                         var regionDisplay = x.SalesInvoice?.Customer == null
                             ? ""
                             : (!string.IsNullOrWhiteSpace(x.SalesInvoice.Customer.RegionName)
@@ -533,6 +561,8 @@
                             <td data-col="discval">@x.DiscountValue.ToString("0.00")</td>
                             <td data-col="total">@x.LineTotalAfterDiscount.ToString("0.00")</td>
                             <td data-col="net">@x.LineNetTotal.ToString("0.00")</td>
+                            <td data-col="itemReturnQty">@returnedQty</td>
+                            <td data-col="finalNetAfterAll">@finalNetAfterAll.ToString("0.00")</td>
 
                             <td data-col="batch">@(x.BatchNo ?? "-")</td>
                             <td data-col="expiry">
@@ -559,6 +589,8 @@
                     <td data-col="discval">@((ViewBag.TotalDiscountValue != null ? (decimal)ViewBag.TotalDiscountValue : 0m).ToString("0.00"))</td>
                     <td data-col="total">@((ViewBag.TotalAfterDiscount != null ? (decimal)ViewBag.TotalAfterDiscount : 0m).ToString("0.00"))</td>
                     <td data-col="net">@((ViewBag.TotalNet != null ? (decimal)ViewBag.TotalNet : 0m).ToString("0.00"))</td>
+                    <td data-col="itemReturnQty">@totalReturnQtyForPage</td>
+                    <td data-col="finalNetAfterAll">@totalFinalNetForPage.ToString("0.00")</td>
                     <td data-col="batch"></td>
                     <td data-col="expiry"></td>
                 </tr>
@@ -579,6 +611,7 @@
               class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -678,6 +711,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -945,6 +979,31 @@
                     const modal   = bootstrap.Modal.getInstance(modalEl);
                     modal?.hide();
                 });
+
+            function getVisibleColsInTableOrder() {
+                const headerCells = Array.from(table.querySelectorAll("thead th[data-col]"));
+                const ordered = headerCells
+                    .filter(th => !th.hasAttribute("data-col-fixed"))
+                    .map(th => th.getAttribute("data-col"))
+                    .filter(Boolean);
+
+                let hiddenCols = [];
+                try {
+                    const saved = localStorage.getItem(storageKey);
+                    if (saved) hiddenCols = JSON.parse(saved) || [];
+                } catch { hiddenCols = []; }
+
+                const hiddenSet = new Set(hiddenCols.map(x => String(x)));
+                return ordered.filter(k => !hiddenSet.has(String(k)));
+            }
+
+            document.querySelectorAll("form.erp-export-form").forEach(function (form) {
+                form.addEventListener("submit", function () {
+                    const inp = form.querySelector("input[name='visibleCols']");
+                    if (!inp) return;
+                    inp.value = getVisibleColsInTableOrder().join(",");
+                });
+            });
         })();
 
         // =========================

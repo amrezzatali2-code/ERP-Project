@@ -35,6 +35,9 @@
 
     int? fromCode = ViewBag.FromCode as int?;
     int? toCode = ViewBag.ToCode as int?;
+    int totalQtyFiltered = ViewBag.TotalQtyFiltered != null ? (int)ViewBag.TotalQtyFiltered : 0;
+    decimal totalCostValueFiltered = ViewBag.TotalCostValueFiltered != null ? (decimal)ViewBag.TotalCostValueFiltered : 0m;
+    decimal avgUnitCostFiltered = ViewBag.AvgUnitCostFiltered != null ? (decimal)ViewBag.AvgUnitCostFiltered : 0m;
 
     string? filterCol_map = ViewBag.FilterCol_Map as string;
     string? filterCol_mapExpr = ViewBag.FilterCol_MapExpr as string;
@@ -229,11 +232,47 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_unitcostExpr)) { <input type="hidden" name="filterCol_unitcostExpr" value="@filterCol_unitcostExpr" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;padding:0.3rem 0.5rem;">
                                 <option value="excel" selected>Excel</option>
+                                <option value="csv">CSV</option>
                                 <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mt-2" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي القيود</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0")</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #0369a1 !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي الكمية</div>
+                    <div class="h4 mb-0 fw-bold" style="color:#0369a1;">@totalQtyFiltered.ToString("N0")</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي التكلفة</div>
+                    <div class="h4 mb-0 text-success fw-bold">@totalCostValueFiltered.ToString("N2")</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #7c3aed !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">متوسط تكلفة الوحدة</div>
+                    <div class="h4 mb-0 fw-bold" style="color:#7c3aed;">@avgUnitCostFiltered.ToString("N4")</div>
                 </div>
             </div>
         </div>
@@ -396,7 +435,7 @@
     </nav>
 </div>
 
-<div class="modal fade no-print" id="columnsModalFifo" tabindex="-1" aria-hidden="true">
+<div class="modal fade no-print erp-columns-modal" id="columnsModalFifo" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" dir="rtl">
             <div class="modal-header">
@@ -404,11 +443,11 @@
                 <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="إغلاق"></button>
             </div>
             <div class="modal-body">
-                <div id="columnsListFifo"></div>
+                <div id="columnsListFifo" class="erp-columns-modal-list"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" id="btnApplyColumnsFifo" class="btn btn-erp btn-erp-primary">تطبيق</button>
                 <button type="button" class="btn btn-erp btn-erp-secondary" data-bs-dismiss="modal">إغلاق</button>
+                <button type="button" id="btnApplyColumnsFifo" class="btn btn-erp btn-erp-primary">تطبيق</button>
             </div>
         </div>
     </div>
@@ -472,7 +511,7 @@
             if (listContainer) {
                 listContainer.innerHTML = "";
                 const selectAllWrap = document.createElement("div");
-                selectAllWrap.className = "form-check mb-2 border-bottom pb-2";
+                selectAllWrap.className = "form-check erp-columns-select-all-row";
                 const selectAllId = "fifo_col_select_all";
                 selectAllWrap.innerHTML = '<input type="checkbox" class="form-check-input ms-2" id="' + selectAllId + '" checked><label class="form-check-label fw-bold" for="' + selectAllId + '">اختيار الكل</label>';
                 listContainer.appendChild(selectAllWrap);

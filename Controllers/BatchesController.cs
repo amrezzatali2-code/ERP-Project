@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -29,6 +30,147 @@ namespace ERP.Controllers
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
         private readonly IUserActivityLogger _activityLogger;
+        private static readonly CultureInfo _inv = CultureInfo.InvariantCulture;
+
+        private static IQueryable<Batch> ApplyInt32ExprFilter(IQueryable<Batch> q, string? exprRaw, string field)
+        {
+            if (string.IsNullOrWhiteSpace(exprRaw)) return q;
+            var expr = exprRaw.Trim();
+
+            if (expr.StartsWith("<=", StringComparison.Ordinal) && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, _inv, out var le))
+            {
+                return field switch
+                {
+                    "id" => q.Where(x => x.BatchId <= le),
+                    "prod" => q.Where(x => x.ProdId <= le),
+                    _ => q
+                };
+            }
+            if (expr.StartsWith(">=", StringComparison.Ordinal) && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, _inv, out var ge))
+            {
+                return field switch
+                {
+                    "id" => q.Where(x => x.BatchId >= ge),
+                    "prod" => q.Where(x => x.ProdId >= ge),
+                    _ => q
+                };
+            }
+            if (expr.StartsWith("<", StringComparison.Ordinal) && !expr.StartsWith("<=", StringComparison.Ordinal) && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, _inv, out var lt))
+            {
+                return field switch
+                {
+                    "id" => q.Where(x => x.BatchId < lt),
+                    "prod" => q.Where(x => x.ProdId < lt),
+                    _ => q
+                };
+            }
+            if (expr.StartsWith(">", StringComparison.Ordinal) && !expr.StartsWith(">=", StringComparison.Ordinal) && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, _inv, out var gt))
+            {
+                return field switch
+                {
+                    "id" => q.Where(x => x.BatchId > gt),
+                    "prod" => q.Where(x => x.ProdId > gt),
+                    _ => q
+                };
+            }
+            if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith("-", StringComparison.Ordinal))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0].Trim(), NumberStyles.Any, _inv, out var from) &&
+                    int.TryParse(parts[1].Trim(), NumberStyles.Any, _inv, out var to))
+                {
+                    if (from > to) (from, to) = (to, from);
+                    return field switch
+                    {
+                        "id" => q.Where(x => x.BatchId >= from && x.BatchId <= to),
+                        "prod" => q.Where(x => x.ProdId >= from && x.ProdId <= to),
+                        _ => q
+                    };
+                }
+            }
+            if (int.TryParse(expr, NumberStyles.Any, _inv, out var exact))
+            {
+                return field switch
+                {
+                    "id" => q.Where(x => x.BatchId == exact),
+                    "prod" => q.Where(x => x.ProdId == exact),
+                    _ => q
+                };
+            }
+            return q;
+        }
+
+        private static IQueryable<Batch> ApplyDecimalExprFilter(IQueryable<Batch> q, string? exprRaw, string field)
+        {
+            if (string.IsNullOrWhiteSpace(exprRaw)) return q;
+            var expr = exprRaw.Trim();
+
+            if (expr.StartsWith("<=", StringComparison.Ordinal) && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, _inv, out var le))
+            {
+                return field switch
+                {
+                    "price" => q.Where(x => (x.PriceRetailBatch ?? 0m) <= le),
+                    "cost" => q.Where(x => (x.UnitCostDefault ?? 0m) <= le),
+                    _ => q
+                };
+            }
+            if (expr.StartsWith(">=", StringComparison.Ordinal) && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, _inv, out var ge))
+            {
+                return field switch
+                {
+                    "price" => q.Where(x => (x.PriceRetailBatch ?? 0m) >= ge),
+                    "cost" => q.Where(x => (x.UnitCostDefault ?? 0m) >= ge),
+                    _ => q
+                };
+            }
+            if (expr.StartsWith("<", StringComparison.Ordinal) && !expr.StartsWith("<=", StringComparison.Ordinal) && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, _inv, out var lt))
+            {
+                return field switch
+                {
+                    "price" => q.Where(x => (x.PriceRetailBatch ?? 0m) < lt),
+                    "cost" => q.Where(x => (x.UnitCostDefault ?? 0m) < lt),
+                    _ => q
+                };
+            }
+            if (expr.StartsWith(">", StringComparison.Ordinal) && !expr.StartsWith(">=", StringComparison.Ordinal) && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, _inv, out var gt))
+            {
+                return field switch
+                {
+                    "price" => q.Where(x => (x.PriceRetailBatch ?? 0m) > gt),
+                    "cost" => q.Where(x => (x.UnitCostDefault ?? 0m) > gt),
+                    _ => q
+                };
+            }
+            if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith("-", StringComparison.Ordinal))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 &&
+                    decimal.TryParse(parts[0].Trim(), NumberStyles.Any, _inv, out var from) &&
+                    decimal.TryParse(parts[1].Trim(), NumberStyles.Any, _inv, out var to))
+                {
+                    if (from > to) (from, to) = (to, from);
+                    return field switch
+                    {
+                        "price" => q.Where(x => (x.PriceRetailBatch ?? 0m) >= from && (x.PriceRetailBatch ?? 0m) <= to),
+                        "cost" => q.Where(x => (x.UnitCostDefault ?? 0m) >= from && (x.UnitCostDefault ?? 0m) <= to),
+                        _ => q
+                    };
+                }
+            }
+            if (decimal.TryParse(expr, NumberStyles.Any, _inv, out var exact))
+            {
+                return field switch
+                {
+                    "price" => q.Where(x => (x.PriceRetailBatch ?? 0m) == exact),
+                    "cost" => q.Where(x => (x.UnitCostDefault ?? 0m) == exact),
+                    _ => q
+                };
+            }
+            return q;
+        }
 
         public BatchesController(AppDbContext context, IUserActivityLogger activityLogger)
         {
@@ -143,7 +285,11 @@ namespace ERP.Controllers
             string? filterCol_cost = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
-            string? filterCol_updated = null)
+            string? filterCol_updated = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_prodExpr = null,
+            string? filterCol_priceExpr = null,
+            string? filterCol_costExpr = null)
         {
             // الاستعلام الأساسي من جدول Batch مع ربط اسم الصنف
             var q = _db.Batches
@@ -154,7 +300,11 @@ namespace ERP.Controllers
             // ------------------------------
             // فلاتر أعمدة بنمط Excel
             // ------------------------------
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                q = ApplyInt32ExprFilter(q, filterCol_idExpr, "id");
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -165,7 +315,11 @@ namespace ERP.Controllers
                     q = q.Where(b => ids.Contains(b.BatchId));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            if (!string.IsNullOrWhiteSpace(filterCol_prodExpr))
+            {
+                q = ApplyInt32ExprFilter(q, filterCol_prodExpr, "prod");
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_prod))
             {
                 var vals = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x.Trim())
@@ -210,7 +364,11 @@ namespace ERP.Controllers
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_price))
+            if (!string.IsNullOrWhiteSpace(filterCol_priceExpr))
+            {
+                q = ApplyDecimalExprFilter(q, filterCol_priceExpr, "price");
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_price))
             {
                 var vals = filterCol_price.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
@@ -221,7 +379,11 @@ namespace ERP.Controllers
                     q = q.Where(b => b.PriceRetailBatch.HasValue && vals.Contains(b.PriceRetailBatch.Value));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_cost))
+            if (!string.IsNullOrWhiteSpace(filterCol_costExpr))
+            {
+                q = ApplyDecimalExprFilter(q, filterCol_costExpr, "cost");
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_cost))
             {
                 var vals = filterCol_cost.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
@@ -422,6 +584,33 @@ namespace ERP.Controllers
                         }
                         break;
 
+                    case "all":
+                        if (sm == "starts")
+                        {
+                            q = q.Where(b =>
+                                b.BatchId.ToString() == term ||
+                                b.ProdId.ToString() == term ||
+                                b.BatchNo.StartsWith(term) ||
+                                (b.Product != null && b.Product.ProdName != null && b.Product.ProdName.StartsWith(term)));
+                        }
+                        else if (sm == "ends")
+                        {
+                            q = q.Where(b =>
+                                b.BatchId.ToString() == term ||
+                                b.ProdId.ToString() == term ||
+                                b.BatchNo.EndsWith(term) ||
+                                (b.Product != null && b.Product.ProdName != null && b.Product.ProdName.EndsWith(term)));
+                        }
+                        else
+                        {
+                            q = q.Where(b =>
+                                b.BatchId.ToString() == term ||
+                                b.ProdId.ToString() == term ||
+                                b.BatchNo.Contains(term) ||
+                                (b.Product != null && b.Product.ProdName != null && b.Product.ProdName.Contains(term)));
+                        }
+                        break;
+
                     case "batchno":
                     default:
                         if (sm == "starts")
@@ -503,7 +692,7 @@ namespace ERP.Controllers
             string? sort,
             string? dir,
             int page = 1,
-            int pageSize = 25,
+            int pageSize = 10,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
@@ -517,24 +706,30 @@ namespace ERP.Controllers
             string? filterCol_cost = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
-            string? filterCol_updated = null)
+            string? filterCol_updated = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_prodExpr = null,
+            string? filterCol_priceExpr = null,
+            string? filterCol_costExpr = null)
         {
             // =========================
             // (1) قيم افتراضية + حماية Paging
             // =========================
-            searchBy ??= "batchno";      // متغير: نوع البحث الافتراضي
+            searchBy ??= "all";          // متغير: نوع البحث الافتراضي
             sort ??= "expiry";           // متغير: عمود الترتيب الافتراضي
             dir ??= "asc";               // متغير: اتجاه الترتيب الافتراضي
 
             var smNorm = string.IsNullOrWhiteSpace(searchMode) ? "contains" : searchMode.Trim().ToLowerInvariant();
             if (smNorm != "starts" && smNorm != "ends") smNorm = "contains";
 
-            if (page < 1) page = 1;
-            if (pageSize <= 0) pageSize = 25;
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
 
-            // حماية إضافية (اختياري) لمنع قيم غريبة
-            if (pageSize < 10) pageSize = 10;
-            if (pageSize > 500) pageSize = 500;
+            if (page < 1) page = 1;
 
             // =========================
             // (2) استعلام واحد فقط: فلترة + بحث + ترتيب
@@ -559,26 +754,45 @@ namespace ERP.Controllers
                 filterCol_cost,
                 filterCol_active,
                 filterCol_created,
-                filterCol_updated);
+                filterCol_updated,
+                filterCol_idExpr,
+                filterCol_prodExpr,
+                filterCol_priceExpr,
+                filterCol_costExpr);
 
             // =========================
             // (3) إجمالي العدد بعد الفلاتر
             // =========================
             int totalCount = await query.CountAsync();
+            var batchSummary = await query
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    ActiveCount = g.Count(x => x.IsActive),
+                    TotalPriceRetail = g.Sum(x => x.PriceRetailBatch ?? 0m),
+                    TotalUnitCost = g.Sum(x => x.UnitCostDefault ?? 0m)
+                })
+                .FirstOrDefaultAsync();
 
-            // حساب عدد الصفحات
-            int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
+
+            int totalPages = pageSize == 0
+                ? 1
+                : (int)Math.Ceiling(totalCount / (double)effectivePageSize);
             if (totalPages < 1) totalPages = 1;
-
-            // لو الصفحة الحالية أكبر من آخر صفحة (يحصل عند تغيير pageSize أو بعد فلترة)
-            if (page > totalPages) page = 1;
+            if (page > totalPages) page = totalPages;
 
             // =========================
             // (4) قراءة صفحة واحدة فقط (Skip/Take)
             // =========================
             var items = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Skip(pageSize == 0 ? 0 : (page - 1) * effectivePageSize)
+                .Take(effectivePageSize)
                 .ToListAsync();
 
             // =========================
@@ -594,7 +808,7 @@ namespace ERP.Controllers
                 TotalCount = totalCount,
                 TotalPages = totalPages,
                 HasPrevious = page > 1,
-                HasNext = page < totalPages,
+                HasNext = pageSize == 0 ? false : page < totalPages,
                 Search = search,
                 SortColumn = sort,
                 SortDescending = sortDesc,
@@ -623,6 +837,14 @@ namespace ERP.Controllers
             ViewBag.FilterCol_Active = filterCol_active;
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Updated = filterCol_updated;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
+            ViewBag.FilterCol_ProdExpr = filterCol_prodExpr;
+            ViewBag.FilterCol_PriceExpr = filterCol_priceExpr;
+            ViewBag.FilterCol_CostExpr = filterCol_costExpr;
+            ViewBag.PageSize = pageSize;
+            ViewBag.ActiveCountFiltered = batchSummary?.ActiveCount ?? 0;
+            ViewBag.TotalPriceRetailFiltered = batchSummary?.TotalPriceRetail ?? 0m;
+            ViewBag.TotalUnitCostFiltered = batchSummary?.TotalUnitCost ?? 0m;
 
             return View(model);
         }
@@ -922,6 +1144,19 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_prod = null,
+            string? filterCol_batchno = null,
+            string? filterCol_expiry = null,
+            string? filterCol_price = null,
+            string? filterCol_cost = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_prodExpr = null,
+            string? filterCol_priceExpr = null,
+            string? filterCol_costExpr = null,
             string format = "excel")
         {
             var smNorm = string.IsNullOrWhiteSpace(searchMode) ? "contains" : searchMode.Trim().ToLowerInvariant();
@@ -938,7 +1173,20 @@ namespace ERP.Controllers
                 toDate,
                 "CreatedAt",
                 fromCode,
-                toCode);
+                toCode,
+                filterCol_id,
+                filterCol_prod,
+                filterCol_batchno,
+                filterCol_expiry,
+                filterCol_price,
+                filterCol_cost,
+                filterCol_active,
+                filterCol_created,
+                filterCol_updated,
+                filterCol_idExpr,
+                filterCol_prodExpr,
+                filterCol_priceExpr,
+                filterCol_costExpr);
 
             var data = await query.ToListAsync();
 

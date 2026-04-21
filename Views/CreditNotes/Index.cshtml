@@ -333,7 +333,7 @@
                             <td data-col="offset">@c.OffsetAccount?.AccountName</td>
                             <td data-col="amount">@c.Amount.ToString("N2")</td>
                             <td data-col="reason">@reason</td>
-                            <td data-col="posted">@(c.IsPosted ? "مرحّل" : "مسودة")</td>
+                            <td data-col="posted">@(c.IsPosted ? "مرحلة 1" : "غير مرحلة")</td>
                             <td data-col="created">@(c.CreatedAt == default ? "" : c.CreatedAt.ToString("yyyy-MM-dd HH:mm"))</td>
                             <td data-col="updated">@(c.UpdatedAt.HasValue ? c.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</td>
                             <td data-col="desc">@descShort</td>

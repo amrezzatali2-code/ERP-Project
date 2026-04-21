@@ -11,7 +11,10 @@
 
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "all";
-    var searchMode = (string?)ViewBag.SearchMode ?? "contains";
+    var searchMode = ((string?)ViewBag.SearchMode ?? "contains").Trim().ToLowerInvariant();
+    if (searchMode == "startswith") searchMode = "starts";
+    else if (searchMode == "endswith") searchMode = "ends";
+    else if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "LineNo";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
@@ -151,7 +154,7 @@
     }
 
     <div class="d-flex justify-content-between align-items-center mb-2">
-        <h4 class="mb-0">@ViewData["Title"]</h4>
+        <h5 class="mb-0 fs-6 text-secondary">@ViewData["Title"]</h5>
     </div>
 
     <div class="erp-list-filter-bar d-print-none mt-2">
@@ -172,9 +175,9 @@
                             <option value="batch"@Html.Raw(searchBy == "batch" ? " selected" : "")>التشغيلة</option>
                             <option value="qty"@Html.Raw(searchBy == "qty" ? " selected" : "")>الكمية</option>
                         </select>
-                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input" style="max-width:130px;min-width:100px" title="طريقة المطابقة">
-                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input order-first flex-shrink-0" style="max-width:130px;min-width:100px" title="طريقة المطابقة">
                             <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
                             <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
                         </select>
                     </div>
@@ -234,17 +237,12 @@
                         <button type="button" id="btnPrintPRL" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
                         <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات السطر المحدد">
                             <button type="button" id="btnShowPRL" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض المرتجع">عرض</button>
-                            <button type="button" id="btnMovementPRL" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حركة الصنف">حركة الصنف</button>
                         </span>
                     </div>
-                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
-                        <div class="dropdown d-inline">
-                            <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
-                            <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
-                                <li><button type="button" class="dropdown-item text-danger" id="btnBulkDeletePRL">حذف المحدد</button></li>
-                            </ul>
-                        </div>
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
+                        <button type="button" id="btnMovementPRL" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حركة الصنف">حركة الصنف</button>
                         <form method="get" asp-action="Export" asp-controller="PurchaseReturnLines" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
+                            <input type="hidden" name="visibleCols" value="" />
                             <input type="hidden" name="pretId" value="@(pretId?.ToString() ?? "")" />
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
@@ -283,7 +281,6 @@
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
                     </div>
-                    <form id="formBulkDeletePRL" asp-action="BulkDelete" asp-controller="PurchaseReturnLines" method="post" class="d-none">@Html.AntiForgeryToken()</form>
                 </div>
             </div>
         </div>
@@ -590,35 +587,6 @@
         });
 
         (function () {
-            const table = document.getElementById("prlTable");
-            if (!table) return;
-            const chkAll = document.getElementById("chkAllRowsPRL");
-            const rowsChk = () => table.querySelectorAll("tbody .row-select");
-            chkAll?.addEventListener("change", function () { rowsChk().forEach(cb => cb.checked = chkAll.checked); });
-            table.addEventListener("change", function (e) {
-                const t = e.target;
-                if (t && t.classList.contains("row-select") && !t.checked && chkAll) chkAll.checked = false;
-            });
-
-            const bulkBtn = document.getElementById("btnBulkDeletePRL");
-            const bulkForm = document.getElementById("formBulkDeletePRL");
-            bulkBtn?.addEventListener("click", function () {
-                const checks = Array.from(rowsChk()).filter(cb => cb.checked);
-                if (checks.length === 0) { alert("من فضلك اختر سطراً واحداً على الأقل."); return; }
-                if (!confirm("هل أنت متأكد من حذف السطور المحددة؟")) return;
-                bulkForm.querySelectorAll("input[type='hidden'][name='ids']").forEach(h => h.remove());
-                checks.forEach(cb => {
-                    const input = document.createElement("input");
-                    input.type = "hidden";
-                    input.name = "ids";
-                    input.value = cb.value;
-                    bulkForm.appendChild(input);
-                });
-                bulkForm.submit();
-            });
-        })();
-
-        (function () {
             const btnApply = document.getElementById("btnApplyCodeFilter");
             const btnClear = document.getElementById("btnClearCodeFilter");
             const fromInp = document.getElementById("codeFromInput");
@@ -684,6 +652,36 @@
                 const modalEl = document.getElementById("columnsModalPRL");
                 bootstrap.Modal.getInstance(modalEl)?.hide();
             });
+
+            function getVisibleColsInTableOrder() {
+                const ordered = Array.from(table.querySelectorAll("thead th[data-col]"))
+                    .filter(th => !th.hasAttribute("data-col-fixed"))
+                    .map(th => th.getAttribute("data-col"))
+                    .filter(Boolean);
+
+                let hiddenCols = [];
+                try {
+                    const saved = localStorage.getItem(storageKey);
+                    if (saved) hiddenCols = JSON.parse(saved) || [];
+                } catch { hiddenCols = []; }
+
+                const hiddenSet = new Set(hiddenCols.map(x => String(x)));
+                return ordered.filter(k => !hiddenSet.has(String(k)));
+            }
+
+            document.querySelectorAll("form.erp-export-form").forEach(function (form) {
+                form.addEventListener("submit", function () {
+                    const inp = form.querySelector("input[name='visibleCols']");
+                    if (!inp) return;
+                    inp.value = getVisibleColsInTableOrder().join(",");
+                });
+            });
         })();
     </script>
 }
+
+
+
+
+
+

@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using ClosedXML.Excel;
 using ERP.Data;
 using ERP.Filters;
 using ERP.Infrastructure;
@@ -412,6 +413,15 @@ namespace ERP.Controllers
             q = ApplyFifoSort(q, sort, dir);
 
             var totalRows = await q.CountAsync();
+            var summary = await q
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    TotalQty = g.Sum(x => x.M.Qty),
+                    TotalCostValue = g.Sum(x => ((decimal)x.M.Qty) * x.M.UnitCost),
+                    AvgUnitCost = g.Average(x => x.M.UnitCost)
+                })
+                .FirstOrDefaultAsync();
 
             int effectivePageSize = pageSize;
             if (pageSize == 0)
@@ -464,6 +474,9 @@ namespace ERP.Controllers
             ViewBag.RangeStart = totalRows == 0 ? 0 : (pageSize == 0 ? 1 : ((page - 1) * effectivePageSize) + 1);
             ViewBag.RangeEnd = pageSize == 0 || totalRows == 0 ? totalRows : Math.Min(totalRows, page * effectivePageSize);
             ViewBag.TotalRows = totalRows;
+            ViewBag.TotalQtyFiltered = summary?.TotalQty ?? 0;
+            ViewBag.TotalCostValueFiltered = summary?.TotalCostValue ?? 0m;
+            ViewBag.AvgUnitCostFiltered = summary?.AvgUnitCost ?? 0m;
 
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
@@ -603,15 +616,77 @@ namespace ERP.Controllers
                 var i = inDictExp.GetValueOrDefault(x.InEntryId);
                 int? pid = o?.ProdId;
                 string pname = (pid.HasValue && prodNamesExp.TryGetValue(pid.Value, out var n)) ? n : "";
-                if (!string.IsNullOrEmpty(pname) && pname.Contains(',')) pname = "\"" + pname.Replace("\"", "\"\"") + "\"";
                 string outSrc = o != null ? $"{o.SourceType} {o.SourceId}" : "";
                 string inSrc = i != null ? $"{i.SourceType} {i.SourceId}" : "";
-                sb.AppendLine($"{x.MapId},{pid ?? 0},{pname},{x.OutEntryId},{outSrc},{x.InEntryId},{inSrc},{x.Qty},{x.UnitCost.ToString(Inv)}");
+                sb.AppendLine(string.Join(",",
+                    x.MapId,
+                    pid?.ToString() ?? "",
+                    EscapeCsv(pname),
+                    x.OutEntryId,
+                    EscapeCsv(outSrc),
+                    x.InEntryId,
+                    EscapeCsv(inSrc),
+                    x.Qty,
+                    x.UnitCost.ToString(Inv)));
+            }
+
+            if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
+            {
+                using var wb = new XLWorkbook();
+                var ws = wb.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("ربط FIFO للمخزون"));
+                ws.Cell(1, 1).Value = "كود الربط";
+                ws.Cell(1, 2).Value = "كود الصنف";
+                ws.Cell(1, 3).Value = "اسم الصنف";
+                ws.Cell(1, 4).Value = "الخروج (قيد)";
+                ws.Cell(1, 5).Value = "مصدر الخروج";
+                ws.Cell(1, 6).Value = "الدخول (قيد)";
+                ws.Cell(1, 7).Value = "مصدر الدخول";
+                ws.Cell(1, 8).Value = "الكمية";
+                ws.Cell(1, 9).Value = "تكلفة الوحدة";
+
+                var row = 2;
+                foreach (var x in data)
+                {
+                    var o = outDictExp.GetValueOrDefault(x.OutEntryId);
+                    var i = inDictExp.GetValueOrDefault(x.InEntryId);
+                    int? pid = o?.ProdId;
+                    string pname = (pid.HasValue && prodNamesExp.TryGetValue(pid.Value, out var n)) ? n : "";
+                    string outSrc = o != null ? $"{o.SourceType} {o.SourceId}" : "";
+                    string inSrc = i != null ? $"{i.SourceType} {i.SourceId}" : "";
+
+                    ws.Cell(row, 1).Value = x.MapId;
+                    ws.Cell(row, 2).Value = pid;
+                    ws.Cell(row, 3).Value = pname;
+                    ws.Cell(row, 4).Value = x.OutEntryId;
+                    ws.Cell(row, 5).Value = outSrc;
+                    ws.Cell(row, 6).Value = x.InEntryId;
+                    ws.Cell(row, 7).Value = inSrc;
+                    ws.Cell(row, 8).Value = x.Qty;
+                    ws.Cell(row, 9).Value = x.UnitCost;
+                    row++;
+                }
+
+                ws.Columns().AdjustToContents();
+                using var ms = new System.IO.MemoryStream();
+                wb.SaveAs(ms);
+                var xlsxName = ExcelExportNaming.ArabicTimestampedFileName("ربط FIFO للمخزون", ".xlsx");
+                return File(ms.ToArray(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    xlsxName);
             }
 
             var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
             var fileName = ExcelExportNaming.ArabicTimestampedFileName("ربط FIFO للمخزون", ".csv");
             return File(bytes, "text/csv; charset=utf-8", fileName);
+        }
+
+        private static string EscapeCsv(string? value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "";
+            if (value.Contains(",") || value.Contains("\"") || value.Contains("\n") || value.Contains("\r"))
+                return "\"" + value.Replace("\"", "\"\"") + "\"";
+            return value;
         }
     }
 }

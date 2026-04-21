@@ -246,7 +246,7 @@ namespace ERP.Controllers
                     ["customer"] = p => p.Customer != null ? p.Customer.CustomerName : "",
                     ["cashAccount"] = p => p.CashAccount != null ? p.CashAccount.AccountName : "",
                     ["counterAccount"] = p => p.CounterAccount != null ? p.CounterAccount.AccountName : "",
-                    ["posted"] = p => p.IsPosted ? "Posted" : "Draft"                  // حالة الترحيل كنص
+                    ["posted"] = p => p.IsPosted ? "مرحلة 1" : "غير مرحلة"                  // حالة الترحيل كنص
                 };
 
             // الحقول الرقمية (int) التى يمكن البحث فيها
@@ -365,11 +365,13 @@ namespace ERP.Controllers
             if (!string.IsNullOrWhiteSpace(filterCol_posted))
             {
                 var vals = filterCol_posted.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Trim().ToLowerInvariant()).Where(x => x == "true" || x == "1" || x == "مرحّل" || x == "false" || x == "0" || x == "مسودة").ToList();
+                    .Select(x => x.Trim().ToLowerInvariant())
+                    .Where(x => x == "true" || x == "1" || x == "مرحّل" || x == "مرحلة 1" || x == "false" || x == "0" || x == "مسودة" || x == "غير مرحلة")
+                    .ToList();
                 if (vals.Count > 0)
                 {
-                    var postTrue = vals.Any(v => v == "true" || v == "1" || v == "مرحّل");
-                    var postFalse = vals.Any(v => v == "false" || v == "0" || v == "مسودة");
+                    var postTrue = vals.Any(v => v == "true" || v == "1" || v == "مرحّل" || v == "مرحلة 1");
+                    var postFalse = vals.Any(v => v == "false" || v == "0" || v == "مسودة" || v == "غير مرحلة");
                     if (postTrue && !postFalse) query = query.Where(p => p.IsPosted);
                     else if (postFalse && !postTrue) query = query.Where(p => !p.IsPosted);
                 }
@@ -441,7 +443,7 @@ namespace ERP.Controllers
             }
             if (columnLower == "posted" || columnLower == "isposted")
             {
-                return Json(new[] { new { value = "true", display = "مرحّل" }, new { value = "false", display = "مسودة" } });
+                return Json(new[] { new { value = "true", display = "مرحلة 1" }, new { value = "false", display = "غير مرحلة" } });
             }
             if (columnLower == "created" || columnLower == "createdat")
             {
