@@ -14,7 +14,10 @@ namespace ERP.Controllers
         private readonly IWebHostEnvironment _env;
         private readonly IUserActivityLogger _activityLogger;
 
-        public PrintHeaderSettingsController(AppDbContext context, IWebHostEnvironment env, IUserActivityLogger activityLogger)
+        public PrintHeaderSettingsController(
+            AppDbContext context,
+            IWebHostEnvironment env,
+            IUserActivityLogger activityLogger)
         {
             _context = context;
             _env = env;
@@ -34,7 +37,10 @@ namespace ERP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Index(string? companyName, IFormFile? logoFile, bool removeLogo = false)
+        public async Task<IActionResult> Index(
+            string? companyName,
+            IFormFile? logoFile,
+            bool removeLogo = false)
         {
             var setting = await GetOrCreateAsync();
             if (setting.Id == 0 && IsMissingTableMode())

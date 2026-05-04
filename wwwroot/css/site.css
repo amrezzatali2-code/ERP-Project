@@ -42,7 +42,7 @@ html {
 }
 
 body {
-    margin-bottom: 60px; /* مساحة تحت للفوتر */
+    margin-bottom: 0;
 }
 
 /* نحدد ارتفاع الناف بار مرة واحدة ونستخدمه في الباقي + متغيرات أزرار النظام */
@@ -436,7 +436,8 @@ body {
     font-size: 0.8rem;
 }
 /* تصغير سمك الناف بار ومحتوياته */
-.navbar {
+.navbar,
+.erp-main-navbar {
     min-height: var(--erp-navbar-height);
     padding-top: 0.2rem !important;
     padding-bottom: 0.2rem !important;
@@ -529,16 +530,22 @@ body {
     display: flex;
     flex-direction: row-reverse;
     align-items: center;
-    gap: 0.35rem;
-    border-bottom: 1px solid #e5e7eb;
-    padding: 0.2rem 0;
-    margin-bottom: 0.5rem;
+    gap: 0.25rem;
+    border-bottom: 1px solid transparent;
+    padding: 0.3rem 0.5rem;
+    margin-bottom: 0;
     overflow-x: auto;
-    min-height: 36px;
+    min-height: 40px;
     position: sticky;
     top: var(--erp-navbar-height);
     z-index: 1040;
-    background-color: #f9fafb;
+    background: transparent;
+    box-shadow: none;
+}
+body.has-tabs .app-tabs-bar {
+    border-bottom-color: #dbe5f1;
+    background: #ffffff;
+    box-shadow: inset 0 -1px 0 rgba(37, 99, 235, 0.08);
 }
 
 /* زر التاب */
@@ -546,20 +553,33 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 0.2rem;
-    border-radius: 0.3rem;
-    padding-inline: 0.6rem;
-    padding-block: 0.2rem;
+    border-radius: 0.36rem;
+    padding-inline: 0.52rem;
+    padding-block: 0.22rem;
     white-space: nowrap;
     border: 1px solid #e5e7eb;
     background-color: #f9fafb;
-    font-size: 0.8rem;
+    color: #495057;
+    font-size: 0.74rem;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+body.has-tabs .app-tab {
+    border-color: #2563eb;
+    background-color: #2563eb;
+    color: #ffffff;
+}
+.app-tab:hover {
+    background-color: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #ffffff;
 }
 
-    .app-tab.active {
-        background-color: #0d6efd;
-        color: #ffffff;
-        border-color: #0d6efd;
-    }
+.app-tab.active {
+    background: #1d4ed8;
+    color: #ffffff;
+    border-color: #1e40af;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.22);
+}
 
 /* عنوان التاب */
 .app-tab-title {
@@ -580,6 +600,12 @@ body {
 .app-tabs-container {
     flex: 1;
     position: relative;
+    background: #f3f6fb;
+    margin: 0;
+}
+
+body.has-tabs .app-tabs-container {
+    height: calc(100vh - 82px);
 }
 
 /* iframe لكل شاشة */
@@ -589,7 +615,24 @@ body {
     width: 100%;
     height: 100%;
     border: none;
-    background-color: #ffffff;
+    background-color: #f3f6fb;
+}
+
+body.has-tabs,
+body.has-tabs #homeContent {
+    background: #f3f6fb !important;
+}
+body.has-tabs main[role="main"] {
+    background: #f3f6fb !important;
+    padding: 0 !important;
+}
+
+body.has-tabs #appTabsBar:empty {
+    display: none !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    margin: 0 !important;
 }
 
 /* رسالة "اختر شاشة" */

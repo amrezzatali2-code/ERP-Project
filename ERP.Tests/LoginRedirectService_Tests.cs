@@ -3,6 +3,7 @@ using ERP.Models;
 using ERP.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ERP.Tests;
 
@@ -19,7 +20,7 @@ public class LoginRedirectService_Tests
 
     private static PermissionService CreatePermissionService(AppDbContext db)
     {
-        return new PermissionService(db, new HttpContextAccessor());
+        return new PermissionService(db, new HttpContextAccessor(), new MemoryCache(new MemoryCacheOptions()));
     }
 
     private static async Task<(User User, Role Role)> SeedUserWithPermissionsAsync(AppDbContext db, params string[] permissionCodes)

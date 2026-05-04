@@ -1,11 +1,51 @@
-@model ERP.Models.DebitNote
+﻿@model ERP.Models.DebitNote
 
 @{
     ViewData["Title"] = "إضافة إشعار خصم";
     bool lockCustomer = ViewBag.LockCustomer is bool b && b;
+    bool isPosted = Model.DebitNoteId > 0 && Model.IsPosted;
+    bool isOpenForEdit = Model.DebitNoteId > 0 && !isPosted && !Model.IsLocked;
+    string statusText = isPosted ? "مرحل" : (isOpenForEdit ? "مفتوح للتعديل" : "غير مرحل");
 }
 
+<style>
+    .dn-form-wrap .card {
+        border: 1px solid #dbe3ef;
+        border-radius: 14px;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, .06);
+        overflow: hidden;
+    }
+    .dn-form-wrap .card-body {
+        background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%);
+    }
+    .dn-form-wrap .form-label {
+        color: #334155;
+        font-weight: 600;
+        font-size: .88rem;
+        margin-bottom: .35rem;
+    }
+    .dn-form-wrap .form-control,
+    .dn-form-wrap .form-select {
+        border: 2px solid #9cb5de;
+        border-radius: .6rem;
+        min-height: 2.7rem;
+        font-size: 1.02rem;
+        color: #0f172a;
+        background-color: #fff;
+    }
+    .dn-form-wrap .form-control:focus,
+    .dn-form-wrap .form-select:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 .22rem rgba(37,99,235,.18);
+    }
+    .dn-form-wrap .card-footer {
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+    }
+</style>
+
 <div class="container" dir="rtl">
+<div class="dn-form-wrap">
     <h2 class="mb-3">إشعار خصم</h2>
 
     @if (TempData["DebitNoteSuccess"] != null)
@@ -35,54 +75,71 @@
         </div>
     }
 
-    <form asp-action="Create" method="post">
+    <form asp-action="Create" method="post" id="debitNoteForm">
+        @if (Model.DebitNoteId > 0)
+        {
+            <input type="hidden" asp-for="DebitNoteId" />
+        }
+        <input type="hidden" asp-for="Description" />
+
         <div class="card">
             <div class="card-body">
                 <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">رقم المستند</label>
+                    <div class="col-md-2 col-sm-4">
+                        <label class="form-label">رقم الإشعار</label>
                         @if (Model.DebitNoteId > 0)
                         {
-                            <input type="text" class="form-control" value="@Model.DebitNoteId" readonly />
+                            <input type="text" class="form-control form-control-sm text-center" style="max-width:120px;" value="@Model.DebitNoteId" readonly />
                         }
                         else
                         {
-                            <input type="text" class="form-control" value="" readonly placeholder="سيتم توليده تلقائياً عند الحفظ" />
-                            <small class="text-muted">رقم المستند = رقم الإشعار (ID) ويُولَّد تلقائياً عند الحفظ</small>
+                            <input type="text" class="form-control form-control-sm text-center" style="max-width:120px;" value="" readonly />
                         }
                     </div>
-                    <div class="col-md-4">
+
+                    <div class="col-md-5 col-sm-4">
                         <label asp-for="NoteDate" class="form-label"></label>
-                        <input asp-for="NoteDate" type="date" class="form-control" />
+                        @if (isPosted)
+                        {
+                            <input asp-for="NoteDate" type="date" class="form-control" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="NoteDate" type="date" class="form-control" />
+                        }
                         <span asp-validation-for="NoteDate" class="text-danger"></span>
                     </div>
-                    <div class="col-md-4">
+
+                    <div class="col-md-5 col-sm-4">
                         <label class="form-label">الحالة</label>
-                        <input type="text" class="form-control" value="@(Model.IsPosted ? "مرحلة 1" : "غير مرحلة")" readonly />
+                        <input type="text" class="form-control" value="@statusText" readonly />
                     </div>
 
-                    <!-- الطرف (عند اختياره يُملأ حساب الطرف تلقائياً) -->
                     <div class="col-md-4">
-                        <label asp-for="CustomerId" class="form-label"></label>
-                        @if (lockCustomer)
+                        <label asp-for="CustomerId" class="form-label">العميل</label>
+                        @if (lockCustomer || isPosted)
                         {
-                            <select asp-for="CustomerId" asp-items="ViewBag.CustomerId" class="form-select" id="customerSelect" disabled></select>
+                            <select asp-for="CustomerId" asp-items="ViewBag.CustomerId" class="form-select" id="customerSelect" disabled>
+                                <option value="">-- اختر العميل --</option>
+                            </select>
                             <input type="hidden" asp-for="CustomerId" />
                         }
                         else
                         {
                             <select asp-for="CustomerId" asp-items="ViewBag.CustomerId" class="form-select" id="customerSelect">
-                                <option value="">-- اختر الطرف --</option>
+                                <option value="">-- اختر العميل --</option>
                             </select>
                         }
                         <span asp-validation-for="CustomerId" class="text-danger"></span>
                     </div>
-                    <!-- حساب الطرف (يتم تعبئته تلقائياً عند اختيار العميل) -->
+
                     <div class="col-md-4">
-                        <label asp-for="AccountId" class="form-label"></label>
-                        @if (lockCustomer)
+                        <label asp-for="AccountId" class="form-label">حساب العميل</label>
+                        @if (lockCustomer || isPosted)
                         {
-                            <select asp-for="AccountId" asp-items="ViewBag.AccountId" class="form-select" id="accountIdSelect" disabled></select>
+                            <select asp-for="AccountId" asp-items="ViewBag.AccountId" class="form-select" id="accountIdSelect" disabled>
+                                <option value="">-- سيتم تعبئته تلقائياً --</option>
+                            </select>
                             <input type="hidden" asp-for="AccountId" />
                         }
                         else
@@ -96,47 +153,117 @@
 
                     <div class="col-md-4">
                         <label asp-for="Amount" class="form-label"></label>
-                        <input asp-for="Amount" class="form-control" type="number" step="0.01" />
+                        @if (isPosted)
+                        {
+                            <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" />
+                        }
                         <span asp-validation-for="Amount" class="text-danger"></span>
                     </div>
-                    <div class="col-md-8">
-                        <label asp-for="Reason" class="form-label"></label>
-                        <input asp-for="Reason" class="form-control" />
-                    </div>
+
                     <div class="col-12">
-                        <label asp-for="Description" class="form-label"></label>
-                        <textarea asp-for="Description" class="form-control" rows="2"></textarea>
+                        <label asp-for="Reason" class="form-label"></label>
+                        @if (isPosted)
+                        {
+                            <input asp-for="Reason" class="form-control" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="Reason" class="form-control" />
+                        }
+                        <span asp-validation-for="Reason" class="text-danger"></span>
                     </div>
                 </div>
-                <hr />
-                <div class="d-flex justify-content-between">
-                    <a asp-action="Index" class="btn btn-secondary">عودة للقائمة</a>
-                    <button type="submit" class="btn btn-primary">حفظ وترحيل</button>
+            </div>
+
+            <div class="card-footer d-flex justify-content-between">
+                <a class="btn btn-secondary btn-sm open-same-tab"
+                   href="@Url.Action("Index", "DebitNotes", new { frame = 1 })"
+                   data-tab-id="debit-notes"
+                   data-tab-title="قائمة إشعارات الخصم"
+                   data-url="@Url.Action("Index", "DebitNotes", new { frame = 1 })">عودة للقائمة</a>
+
+                <div class="d-flex gap-2 align-items-center">
+                    @if (Model.DebitNoteId > 0)
+                    {
+                        <a asp-action="Show"
+                           asp-route-id="@Model.DebitNoteId"
+                           asp-route-autoPrint="1"
+                           asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)"
+                           target="_blank"
+                           class="btn btn-outline-primary btn-sm">🖨️ طباعة الإشعار</a>
+                    }
+                    @if (!isPosted)
+                    {
+                        <button type="submit" class="btn btn-primary btn-sm">حفظ وترحيل</button>
+                    }
                 </div>
             </div>
         </div>
     </form>
 </div>
+</div>
 
 @section Scripts {
     @{ await Html.RenderPartialAsync("_ValidationScriptsPartial"); }
     <script>
-        (function() {
+        (function () {
             if (window.top !== window) {
-                try {
-                    window.top.postMessage({ type: 'erp-set-tab-title', title: 'إشعار خصم' }, '*');
-                } catch (e) { /* تجاهل */ }
+                try { window.top.postMessage({ type: 'erp-set-tab-title', title: 'إشعار خصم' }, '*'); } catch (e) { }
             }
         })();
     </script>
     <script>
-        $(document).ready(function() {
+        $(document).ready(function () {
+            var $amount = $('#Amount');
+            if ($amount.length && ($amount.val() === '0' || $amount.val() === '0.00')) {
+                $amount.val('');
+            }
+
             @if (Model.AccountId > 0)
             {
                 <text>$('#accountIdSelect').val('@Model.AccountId');</text>
             }
-            // عند اختيار الطرف، جلب حسابه وتعيين حساب الطرف تلقائياً
-            $('#customerSelect').on('change', function() {
+
+            var $customer = $('#customerSelect');
+            var focusAmount = function () {
+                if ($amount.length && !$amount.prop('readonly') && !$amount.prop('disabled')) {
+                    $amount.trigger('focus');
+                    $amount.trigger('select');
+                }
+            };
+
+            setTimeout(function () {
+                if ($customer.length && !$customer.prop('disabled')) {
+                    $customer.trigger('focus');
+                } else {
+                    focusAmount();
+                }
+            }, 120);
+
+            $customer.on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    focusAmount();
+                }
+            });
+
+            $amount.on('focus', function () {
+                if (!$(this).prop('readonly')) $(this).trigger('select');
+            });
+
+            $amount.on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var form = $('#debitNoteForm');
+                    if (form.length) form.trigger('submit');
+                }
+            });
+
+            $('#customerSelect').on('change', function () {
                 var customerId = $(this).val();
                 var accountSelect = $('#accountIdSelect');
                 if (!customerId || customerId === '') {
@@ -147,7 +274,7 @@
                     url: '@Url.Action("GetCustomerAccount", "DebitNotes")',
                     type: 'GET',
                     data: { customerId: customerId },
-                    success: function(response) {
+                    success: function (response) {
                         if (response && response.success && response.accountId) {
                             accountSelect.val(response.accountId);
                         } else {
@@ -159,7 +286,7 @@
                             }
                         }
                     },
-                    error: function() {
+                    error: function () {
                         accountSelect.val('');
                         alert('حدث خطأ أثناء جلب بيانات العميل.');
                     }

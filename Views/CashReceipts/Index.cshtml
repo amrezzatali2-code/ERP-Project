@@ -42,6 +42,9 @@
     string? filterCol_receiptNumber = ViewBag.FilterCol_ReceiptNumber as string;
     string? filterCol_date = ViewBag.FilterCol_Date as string;
     string? filterCol_customer = ViewBag.FilterCol_Customer as string;
+    string? filterCol_region = ViewBag.FilterCol_Region as string;
+    string? filterCol_employee = ViewBag.FilterCol_Employee as string;
+    string? filterCol_writer = ViewBag.FilterCol_Writer as string;
     string? filterCol_cashAccount = ViewBag.FilterCol_CashAccount as string;
     string? filterCol_counterAccount = ViewBag.FilterCol_CounterAccount as string;
     string? filterCol_amount = ViewBag.FilterCol_Amount as string;
@@ -55,6 +58,9 @@
         : colKey == "receiptNumber" ? filterCol_receiptNumber
         : colKey == "date" ? filterCol_date
         : colKey == "customer" ? filterCol_customer
+        : colKey == "region" ? filterCol_region
+        : colKey == "employee" ? filterCol_employee
+        : colKey == "writer" ? filterCol_writer
         : colKey == "cashAccount" ? filterCol_cashAccount
         : colKey == "counterAccount" ? filterCol_counterAccount
         : colKey == "posted" ? filterCol_posted
@@ -81,6 +87,9 @@
         filterCol_receiptNumber,
         filterCol_date,
         filterCol_customer,
+        filterCol_region,
+        filterCol_employee,
+        filterCol_writer,
         filterCol_cashAccount,
         filterCol_counterAccount,
         filterCol_amount,
@@ -113,6 +122,9 @@
             filterCol_receiptNumber,
             filterCol_date,
             filterCol_customer,
+            filterCol_region,
+            filterCol_employee,
+            filterCol_writer,
             filterCol_cashAccount,
             filterCol_counterAccount,
             filterCol_amount,
@@ -145,6 +157,8 @@
                 </button>
             </div>");
     };
+
+    var employeeByUserId = ViewBag.EmployeeByUserId as IDictionary<int, string> ?? new Dictionary<int, string>();
 }
 
 <div dir="rtl" class="container-fluid">
@@ -175,17 +189,20 @@
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في إذون الاستلام</label>
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100 flex-wrap">
-                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
                         <select name="searchMode" class="form-select form-select-arrow erp-filter-input" style="max-width:130px;min-width:90px" title="نمط مطابقة النص">
                             <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
                             <option value="contains"@Html.Raw(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? " selected" : "")>يحتوي</option>
                             <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
                         </select>
+                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px;min-width:100px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>رقم الإذن</option>
                             <option value="receiptNumber"@Html.Raw(searchBy == "receiptNumber" ? " selected" : "")>رقم المستند</option>
                             <option value="customer"@Html.Raw(searchBy == "customer" ? " selected" : "")>اسم الطرف</option>
+                            <option value="region"@Html.Raw(searchBy == "region" ? " selected" : "")>المنطقة</option>
+                            <option value="employee"@Html.Raw(searchBy == "employee" ? " selected" : "")>الموظف</option>
+                            <option value="writer"@Html.Raw(searchBy == "writer" ? " selected" : "")>الكاتب</option>
                             <option value="cashAccount"@Html.Raw(searchBy == "cashAccount" ? " selected" : "")>حساب الصندوق/البنك</option>
                             <option value="counterAccount"@Html.Raw(searchBy == "counterAccount" ? " selected" : "")>حساب الطرف</option>
                             <option value="description"@Html.Raw(searchBy == "description" ? " selected" : "")>البيان</option>
@@ -208,6 +225,9 @@
                     @if (!string.IsNullOrWhiteSpace(filterCol_receiptNumber)) { <input type="hidden" name="filterCol_receiptNumber" value="@filterCol_receiptNumber" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_date)) { <input type="hidden" name="filterCol_date" value="@filterCol_date" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_region)) { <input type="hidden" name="filterCol_region" value="@filterCol_region" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_employee)) { <input type="hidden" name="filterCol_employee" value="@filterCol_employee" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_writer)) { <input type="hidden" name="filterCol_writer" value="@filterCol_writer" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_cashAccount)) { <input type="hidden" name="filterCol_cashAccount" value="@filterCol_cashAccount" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_counterAccount)) { <input type="hidden" name="filterCol_counterAccount" value="@filterCol_counterAccount" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_amount)) { <input type="hidden" name="filterCol_amount" value="@filterCol_amount" /> }
@@ -231,7 +251,18 @@
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
-                        <a asp-action="Create" asp-controller="CashReceipts" class="btn btn-erp btn-erp-success btn-erp-sm">إذن جديد</a>
+                        <a asp-action="Create"
+                           asp-controller="CashReceipts"
+                           asp-route-frame="1"
+                           class="btn btn-erp btn-erp-success btn-erp-sm open-tab"
+                           data-tab-id="cash-receipt-create"
+                           data-tab-title="إذن استلام نقدية">إذن جديد</a>
+                        <a asp-action="BatchCreate"
+                           asp-controller="CashReceipts"
+                           asp-route-frame="1"
+                           class="btn btn-erp btn-erp-secondary btn-erp-sm open-tab"
+                           data-tab-id="cash-receipts-batch"
+                           data-tab-title="إذن استلام مجمّع">إذن استلام مجمّع</a>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModalCashReceipts">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalCashReceipts">اختيار الأعمدة</button>
                         <button type="button" id="btnPrintCashReceipts" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
@@ -240,6 +271,7 @@
                         </span>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
+                        <button type="button" id="btnCustomerVolumeCr" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حجم تعامل العميل">حجم التعامل</button>
                         <div class="btn-group">
                             <button type="button" class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end">
@@ -264,6 +296,9 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_receiptNumber)) { <input type="hidden" name="filterCol_receiptNumber" value="@filterCol_receiptNumber" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_date)) { <input type="hidden" name="filterCol_date" value="@filterCol_date" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_region)) { <input type="hidden" name="filterCol_region" value="@filterCol_region" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_employee)) { <input type="hidden" name="filterCol_employee" value="@filterCol_employee" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_writer)) { <input type="hidden" name="filterCol_writer" value="@filterCol_writer" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_cashAccount)) { <input type="hidden" name="filterCol_cashAccount" value="@filterCol_cashAccount" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_counterAccount)) { <input type="hidden" name="filterCol_counterAccount" value="@filterCol_counterAccount" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_amount)) { <input type="hidden" name="filterCol_amount" value="@filterCol_amount" /> }
@@ -314,6 +349,9 @@
                     <th data-col="receiptNumber">@filterableCol("receiptNumber", "ReceiptNumber", "رقم المستند")</th>
                     <th data-col="date">@filterableCol("date", "ReceiptDate", "تاريخ الإذن")</th>
                     <th data-col="customer">@filterableCol("customer", "CustomerName", "الطرف")</th>
+                    <th data-col="region">@filterableCol("region", "Region", "المنطقة")</th>
+                    <th data-col="employee">@filterableCol("employee", "Employee", "الموظف")</th>
+                    <th data-col="writer">@filterableCol("writer", "CreatedBy", "الكاتب")</th>
                     <th data-col="cashAccount">@filterableCol("cashAccount", "CashAccount", "حساب الصندوق/البنك")</th>
                     <th data-col="counterAccount">@filterableCol("counterAccount", "CounterAccount", "حساب الطرف")</th>
                     <th data-col="amount">@filterableCol("amount", "Amount", "المبلغ")</th>
@@ -327,7 +365,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="12" class="text-center text-muted py-4">لا توجد بيانات.</td>
+                        <td colspan="15" class="text-center text-muted py-4">لا توجد بيانات.</td>
                     </tr>
                 }
                 else
@@ -336,17 +374,30 @@
                     {
                         var desc = r.Description ?? "";
                         var descShort = desc.Length > 80 ? desc.Substring(0, 80) + "…" : desc;
-                        var showU = Url.Action("Show", "CashReceipts", new { id = r.CashReceiptId }) + "?frame=1";
-                        <tr class="erp-list-selectable-row" data-row-id="@r.CashReceiptId" data-show-url="@showU" data-tab-title="إذن استلام @r.CashReceiptId">
+                        var showU = Url.Action("Edit", "CashReceipts", new { id = r.CashReceiptId, frame = 1 });
+                        var volUrl = r.CustomerId.HasValue && r.CustomerId.Value > 0
+                            ? Url.Action("Show", "Customers", new { id = r.CustomerId.Value, frame = 1 })
+                            : "";
+                        var regionName = r.Customer?.Area?.AreaName ?? r.Customer?.RegionName ?? "";
+                        var employeeName = "";
+                        if (r.Customer?.UserId is int userId)
+                        {
+                            if (employeeByUserId.TryGetValue(userId, out var employeeValue) && !string.IsNullOrWhiteSpace(employeeValue))
+                                employeeName = employeeValue;
+                        }
+                        <tr class="erp-list-selectable-row" data-row-id="@r.CashReceiptId" data-show-url="@showU" data-tab-title="إذن استلام @r.CashReceiptId" data-customer-volume-url="@volUrl">
                             <td class="no-print text-center" data-col="select"><input type="checkbox" class="form-check-input row-select" value="@r.CashReceiptId" aria-label="تحديد" /></td>
                             <td data-col="id">@r.CashReceiptId</td>
                             <td data-col="receiptNumber">@r.ReceiptNumber</td>
                             <td data-col="date">@r.ReceiptDate.ToString("yyyy-MM-dd")</td>
                             <td data-col="customer">@r.Customer?.CustomerName</td>
+                            <td data-col="region">@regionName</td>
+                            <td data-col="employee">@employeeName</td>
+                            <td data-col="writer">@r.CreatedBy</td>
                             <td data-col="cashAccount">@r.CashAccount?.AccountName</td>
                             <td data-col="counterAccount">@r.CounterAccount?.AccountName</td>
                             <td data-col="amount">@r.Amount.ToString("N2")</td>
-                            <td data-col="posted">@(r.IsPosted ? "مرحلة 1" : "غير مرحلة")</td>
+                            <td data-col="posted">@(r.IsPosted ? "مرحل" : "غير مرحل")</td>
                             <td data-col="created">@(r.CreatedAt == default ? "" : r.CreatedAt.ToString("yyyy-MM-dd HH:mm"))</td>
                             <td data-col="updated">@(r.UpdatedAt.HasValue ? r.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</td>
                             <td data-col="description">@descShort</td>
@@ -406,6 +457,9 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_receiptNumber)) { <input type="hidden" name="filterCol_receiptNumber" value="@filterCol_receiptNumber" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_date)) { <input type="hidden" name="filterCol_date" value="@filterCol_date" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_region)) { <input type="hidden" name="filterCol_region" value="@filterCol_region" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_employee)) { <input type="hidden" name="filterCol_employee" value="@filterCol_employee" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_writer)) { <input type="hidden" name="filterCol_writer" value="@filterCol_writer" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_cashAccount)) { <input type="hidden" name="filterCol_cashAccount" value="@filterCol_cashAccount" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_counterAccount)) { <input type="hidden" name="filterCol_counterAccount" value="@filterCol_counterAccount" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_amount)) { <input type="hidden" name="filterCol_amount" value="@filterCol_amount" /> }
@@ -459,6 +513,9 @@
                     @if (!string.IsNullOrWhiteSpace(filterCol_receiptNumber)) { <input type="hidden" name="filterCol_receiptNumber" value="@filterCol_receiptNumber" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_date)) { <input type="hidden" name="filterCol_date" value="@filterCol_date" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_region)) { <input type="hidden" name="filterCol_region" value="@filterCol_region" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_employee)) { <input type="hidden" name="filterCol_employee" value="@filterCol_employee" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_writer)) { <input type="hidden" name="filterCol_writer" value="@filterCol_writer" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_cashAccount)) { <input type="hidden" name="filterCol_cashAccount" value="@filterCol_cashAccount" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_counterAccount)) { <input type="hidden" name="filterCol_counterAccount" value="@filterCol_counterAccount" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_amount)) { <input type="hidden" name="filterCol_amount" value="@filterCol_amount" /> }
@@ -533,6 +590,10 @@
     ERP.initListSelection({
         rowSelector: '.erp-list-selectable-row',
         showButtonId: 'btnShowCr',
+        movementButtonId: 'btnCustomerVolumeCr',
+        movementUrlAttribute: 'data-customer-volume-url',
+        movementTabTitle: 'حجم تعامل عميل',
+        movementTabId: 'customer-engagement',
         idAttribute: 'data-row-id',
         showUrlAttribute: 'data-show-url',
         tabTitleAttribute: 'data-tab-title',

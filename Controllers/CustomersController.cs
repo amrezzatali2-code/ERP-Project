@@ -827,6 +827,153 @@ namespace ERP.Controllers
             return View(model);
         }
 
+        private async Task<CustomerCreditLimitAdjustmentViewModel> BuildCreditLimitAdjustmentViewModelAsync(
+            int? customerId,
+            decimal? draftIncrease = null)
+        {
+            var baseQuery = _context.Customers.AsNoTracking();
+            baseQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(baseQuery);
+
+            var vm = new CustomerCreditLimitAdjustmentViewModel
+            {
+                CustomerId = customerId
+            };
+
+            vm.Customers = await baseQuery
+                .OrderBy(c => c.CustomerName)
+                .Select(c => new CustomerCreditLimitAdjustmentLookupItem
+                {
+                    CustomerId = c.CustomerId,
+                    CustomerName = c.CustomerName ?? "",
+                    PartyCategory = c.PartyCategory
+                })
+                .ToListAsync();
+
+            if (draftIncrease.HasValue)
+                vm.IncreaseAmount = draftIncrease.Value;
+
+            if (customerId.HasValue && customerId.Value > 0)
+            {
+                var selected = await baseQuery
+                    .Include(c => c.Account)
+                    .Where(c => c.CustomerId == customerId.Value)
+                    .Select(c => new
+                    {
+                        c.CustomerId,
+                        c.CustomerName,
+                        c.PartyCategory,
+                        AccountName = c.Account != null ? c.Account.AccountName : null,
+                        AccountCode = c.Account != null ? c.Account.AccountCode : null,
+                        c.CreditLimit,
+                        c.CurrentBalance,
+                        c.CreditLimitTemporaryIncrease,
+                        c.CreditLimitTemporaryUntil
+                    })
+                    .FirstOrDefaultAsync();
+
+                if (selected != null)
+                {
+                    vm.CustomerId = selected.CustomerId;
+                    vm.CustomerName = selected.CustomerName;
+                    vm.PartyCategory = selected.PartyCategory;
+                    vm.AccountName = selected.AccountName;
+                    vm.AccountCode = selected.AccountCode;
+                    vm.BaseCreditLimit = selected.CreditLimit;
+                    vm.CurrentBalance = selected.CurrentBalance;
+                    vm.TemporaryIncreaseAmount = selected.CreditLimitTemporaryIncrease ?? 0m;
+                    vm.TemporaryIncreaseUntil = selected.CreditLimitTemporaryUntil;
+                    vm.EffectiveCreditLimit = CustomerCreditLimitCalculator.GetEffectiveCreditLimit(
+                        selected.CreditLimit,
+                        selected.CreditLimitTemporaryIncrease,
+                        selected.CreditLimitTemporaryUntil,
+                        DateTime.Now);
+                    vm.RemainingCredit = Math.Max(0m, vm.EffectiveCreditLimit - selected.CurrentBalance);
+                }
+            }
+
+            return vm;
+        }
+
+        [RequirePermission("Customers.Edit")]
+        public async Task<IActionResult> CreditLimitAdjustment(int? customerId = null)
+        {
+            var vm = await BuildCreditLimitAdjustmentViewModelAsync(customerId);
+            return View(vm);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Customers.Edit")]
+        public async Task<IActionResult> CreditLimitAdjustment(
+            CustomerCreditLimitAdjustmentViewModel model,
+            string submitAction = "apply")
+        {
+            if (!model.CustomerId.HasValue || model.CustomerId.Value <= 0)
+                ModelState.AddModelError(nameof(model.CustomerId), "يرجى اختيار عميل أولاً.");
+
+            IQueryable<Customer> customerQuery = _context.Customers;
+            customerQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customerQuery);
+            var customer = model.CustomerId.HasValue
+                ? await customerQuery.FirstOrDefaultAsync(c => c.CustomerId == model.CustomerId.Value)
+                : null;
+
+            if (customer == null && model.CustomerId.HasValue)
+                ModelState.AddModelError(nameof(model.CustomerId), "العميل غير موجود أو غير متاح لك.");
+
+            if (!string.Equals(submitAction, "clear", StringComparison.OrdinalIgnoreCase))
+            {
+                if (model.IncreaseAmount < 0m)
+                    ModelState.AddModelError(nameof(model.IncreaseAmount), "قيمة الزيادة لا يمكن أن تكون بالسالب.");
+            }
+
+            if (!ModelState.IsValid || customer == null)
+            {
+                var vmInvalid = await BuildCreditLimitAdjustmentViewModelAsync(model.CustomerId, model.IncreaseAmount);
+                return View(vmInvalid);
+            }
+
+            var before = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                customer.CreditLimit,
+                customer.CreditLimitTemporaryIncrease,
+                customer.CreditLimitTemporaryUntil
+            });
+
+            if (string.Equals(submitAction, "clear", StringComparison.OrdinalIgnoreCase))
+            {
+                customer.CreditLimitTemporaryIncrease = null;
+                customer.CreditLimitTemporaryUntil = null;
+                TempData["SuccessMessage"] = "تم إلغاء الزيادة المؤقتة للحد الائتماني.";
+            }
+            else
+            {
+                customer.CreditLimitTemporaryIncrease = Math.Round(model.IncreaseAmount, 2);
+                customer.CreditLimitTemporaryUntil = DateTime.Now.AddHours(24);
+                TempData["SuccessMessage"] = $"تم ضبط زيادة مؤقتة قدرها {customer.CreditLimitTemporaryIncrease:N2} لمدة 24 ساعة.";
+            }
+
+            customer.UpdatedAt = DateTime.Now;
+            await _context.SaveChangesAsync();
+            _customerCache.ClearCustomersCache();
+
+            var after = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                customer.CreditLimit,
+                customer.CreditLimitTemporaryIncrease,
+                customer.CreditLimitTemporaryUntil
+            });
+
+            await _activityLogger.LogAsync(
+                UserActionType.Edit,
+                "Customer",
+                customer.CustomerId,
+                $"تعديل الحد الائتماني المؤقت للعميل: {customer.CustomerName}",
+                before,
+                after);
+
+            return RedirectToAction(nameof(CreditLimitAdjustment), new { customerId = customer.CustomerId });
+        }
+
         /// <summary>جلب القيم المميزة لعمود (للفلترة بنمط Excel) — مع تطبيق نفس فلتر ظهور الحسابات كقائمة العملاء.</summary>
         [HttpGet]
         public async Task<IActionResult> GetColumnValues(string column, string? search = null)
@@ -1597,6 +1744,11 @@ namespace ERP.Controllers
                 existing.CreditLimit,
                 existing.IsActive,
                 existing.Notes,
+                existing.TaxIdOrNationalId,
+                existing.RecordNumber,
+                existing.LicenseNumber,
+                existing.Segment,
+                existing.LocationCode,
                 existing.GovernorateId,
                 existing.DistrictId,
                 existing.AreaId,
@@ -1622,6 +1774,11 @@ namespace ERP.Controllers
                 existing.CreditLimit = customer.CreditLimit;
                 existing.IsActive = customer.IsActive;
                 existing.Notes = customer.Notes;
+                existing.TaxIdOrNationalId = customer.TaxIdOrNationalId;
+                existing.RecordNumber = customer.RecordNumber;
+                existing.LicenseNumber = customer.LicenseNumber;
+                existing.Segment = customer.Segment;
+                existing.LocationCode = customer.LocationCode;
 
                 // ✅ الجديد: حفظ المحافظة / الحي / المنطقة
                 existing.GovernorateId = customer.GovernorateId;
@@ -1654,6 +1811,11 @@ namespace ERP.Controllers
                     existing.CreditLimit,
                     existing.IsActive,
                     existing.Notes,
+                    existing.TaxIdOrNationalId,
+                    existing.RecordNumber,
+                    existing.LicenseNumber,
+                    existing.Segment,
+                    existing.LocationCode,
                     existing.GovernorateId,
                     existing.DistrictId,
                     existing.AreaId,
@@ -1683,7 +1845,7 @@ namespace ERP.Controllers
                     throw;
             }
 
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(Edit), new { id = customer.CustomerId });
         }
 
 
@@ -1773,7 +1935,7 @@ namespace ERP.Controllers
                 await _context.SaveChangesAsync();
                 _customerCache.ClearCustomersCache();
 
-                TempData["Success"] = $"تم حذف جميع العملاء بنجاح (عددهم {allCustomers.Count}).";
+                TempData["SuccessMessage"] = $"تم حذف جميع العملاء بنجاح (عددهم {allCustomers.Count}).";
             }
             catch (DbUpdateException)
             {
@@ -1824,7 +1986,7 @@ namespace ERP.Controllers
                 await _context.SaveChangesAsync();
                 _customerCache.ClearCustomersCache();
 
-                TempData["Success"] = $"تم حذف {customers.Count} عميل/عملاء بنجاح.";
+                TempData["SuccessMessage"] = $"تم حذف {customers.Count} عميل/عملاء بنجاح.";
             }
             catch (DbUpdateException)
             {

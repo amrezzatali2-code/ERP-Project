@@ -1,0 +1,45 @@
+@model ERP.ViewModels.MobileAppSettingsViewModel
+@{
+    ViewData["Title"] = "إعدادات تطبيق الصيدلي";
+}
+
+<div class="container-fluid py-2">
+    <div class="card shadow-sm">
+        <div class="card-header bg-white">
+            <h6 class="mb-0">إعدادات تطبيق الصيدلي</h6>
+        </div>
+        <div class="card-body">
+            @if (TempData["Success"] != null)
+            {
+                <div class="alert alert-success py-2">@TempData["Success"]</div>
+            }
+
+            <form asp-action="Index" asp-controller="MobileAppSettings" method="post" class="row g-3">
+                @Html.AntiForgeryToken()
+
+                <div class="col-lg-6">
+                    <label asp-for="CompanyName" class="form-label">اسم الشركة</label>
+                    <input asp-for="CompanyName"
+                           class="form-control"
+                           maxlength="120"
+                           placeholder="مثال: ابن سينا" />
+                    <span asp-validation-for="CompanyName" class="text-danger small"></span>
+                </div>
+
+                <div class="col-lg-6">
+                    <label asp-for="ProgramCode" class="form-label">كود الشركة (كود البرنامج)</label>
+                    <input asp-for="ProgramCode"
+                           class="form-control"
+                           maxlength="100"
+                           placeholder="مثال: EBN-SINA" />
+                    <span asp-validation-for="ProgramCode" class="text-danger small"></span>
+                    <small class="text-muted d-block mt-1">نفس هذا الكود يُستخدم داخل تطبيق الصيدلي في زر "تأكيد كود البرنامج".</small>
+                </div>
+
+                <div class="col-12">
+                    <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">حفظ الإعدادات</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

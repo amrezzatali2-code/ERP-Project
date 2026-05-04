@@ -43,6 +43,10 @@ namespace ERP.Models
         [Display(Name = "نشط؟")]
         public bool IsActive { get; set; } = true;             // متغير: هل المستخدم مفعل أم لا
 
+        [StringLength(30)]
+        [Display(Name = "وظيفة الموقع")]
+        public string? PortalRole { get; set; }                // متغير: نوع الحساب في الموقع (موظف / صيدلي / موزع)
+
         [Display(Name = "تاريخ الإنشاء")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // متغير: وقت إنشاء المستخدم
 
@@ -82,6 +86,10 @@ namespace ERP.Models
         [Display(Name = "صلاحيات إضافية")]
         public virtual ICollection<UserExtraPermissions> ExtraPermissions { get; set; }
             = new List<UserExtraPermissions>();              // متغير: كل الصلاحيات الزيادة عن الأدوار
+
+        [Display(Name = "العملاء المرتبطون كموزع")]
+        public virtual ICollection<CustomerCollector> CustomerCollectors { get; set; }
+            = new List<CustomerCollector>();                 // متغير: روابط العملاء بهذا المستخدم عندما يعمل كموزع
 
 
         // ===== خصائص للعرض فقط (لا تُخزَّن في قاعدة البيانات) =====

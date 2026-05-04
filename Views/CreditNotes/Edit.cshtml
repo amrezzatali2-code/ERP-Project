@@ -1,11 +1,52 @@
-@model ERP.Models.CreditNote
+﻿@model ERP.Models.CreditNote
 
 @{
-    ViewData["Title"] = "إشعار إضافة";
-    var isLocked = Model.IsLocked;
+    ViewData["Title"] = "تعديل إشعار إضافة";
+    bool lockCustomer = ViewBag.LockCustomer is bool b && b;
+    bool isLocked = Model.IsLocked;
+    bool isPosted = Model.IsPosted;
+    bool isOpenForEdit = !isLocked && !isPosted;
+    string statusText = isPosted ? "مرحل" : (isOpenForEdit ? "مفتوح للتعديل" : "غير مرحل");
 }
 
+<style>
+    .cn-form-wrap .card {
+        border: 1px solid #dbe3ef;
+        border-radius: 14px;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, .06);
+        overflow: hidden;
+    }
+    .cn-form-wrap .card-body {
+        background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%);
+    }
+    .cn-form-wrap .form-label {
+        color: #334155;
+        font-weight: 600;
+        font-size: .88rem;
+        margin-bottom: .35rem;
+    }
+    .cn-form-wrap .form-control,
+    .cn-form-wrap .form-select {
+        border: 2px solid #9cb5de;
+        border-radius: .6rem;
+        min-height: 2.7rem;
+        font-size: 1.02rem;
+        color: #0f172a;
+        background-color: #fff;
+    }
+    .cn-form-wrap .form-control:focus,
+    .cn-form-wrap .form-select:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 .22rem rgba(37,99,235,.18);
+    }
+    .cn-form-wrap .card-footer {
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+    }
+</style>
+
 <div class="container" dir="rtl">
+<div class="cn-form-wrap">
     <h2 class="mb-3">إشعار إضافة</h2>
 
     @if (TempData["CreditNoteSuccess"] != null)
@@ -35,96 +76,171 @@
         </div>
     }
 
-    <form asp-action="Edit" method="post">
+    @if (isLocked)
+    {
+        <div class="alert alert-warning">
+            <strong>تنبيه:</strong> الإشعار مغلق حالياً. اضغط «فتح للتعديل» لإتاحة التعديل.
+        </div>
+    }
+
+    <form asp-action="Edit" method="post" id="creditNoteForm">
         <input type="hidden" asp-for="CreditNoteId" />
+        <input type="hidden" asp-for="Description" />
+
         <div class="card">
             <div class="card-body">
                 <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">رقم المستند</label>
-                        <input type="text" class="form-control" value="@Model.CreditNoteId" readonly />
+                    <div class="col-md-2 col-sm-4">
+                        <label class="form-label">رقم الإشعار</label>
+                        <input type="text" class="form-control form-control-sm text-center" style="max-width:120px;" value="@Model.CreditNoteId" readonly />
                     </div>
-                    <div class="col-md-4">
+
+                    <div class="col-md-5 col-sm-4">
                         <label asp-for="NoteDate" class="form-label"></label>
-                        <input asp-for="NoteDate" type="date" class="form-control" @Html.Raw(isLocked ? " disabled" : "") />
+                        <input asp-for="NoteDate" type="date" class="form-control" @Html.Raw(isLocked ? "readonly" : "") />
                         <span asp-validation-for="NoteDate" class="text-danger"></span>
                     </div>
-                    <div class="col-md-4">
+
+                    <div class="col-md-5 col-sm-4">
                         <label class="form-label">الحالة</label>
-                        <input type="text" class="form-control" value="@(isLocked ? (Model.IsPosted ? "مرحلة 1" : "غير مرحلة") : "مفتوحة للتعديل")" readonly />
+                        <input type="text" class="form-control" value="@statusText" readonly />
                     </div>
 
                     <div class="col-md-4">
-                        <label asp-for="CustomerId" class="form-label"></label>
-                        <select asp-for="CustomerId" asp-items="ViewBag.CustomerId" class="form-select" id="customerSelect" @Html.Raw(isLocked ? " disabled" : "")>
-                            <option value="">-- اختر الطرف --</option>
-                        </select>
+                        <label asp-for="CustomerId" class="form-label">العميل</label>
+                        @if (lockCustomer || isLocked)
+                        {
+                            <select asp-for="CustomerId" asp-items="ViewBag.CustomerId" class="form-select" id="customerSelect" disabled>
+                                <option value="">-- اختر العميل --</option>
+                            </select>
+                            <input type="hidden" asp-for="CustomerId" />
+                        }
+                        else
+                        {
+                            <select asp-for="CustomerId" asp-items="ViewBag.CustomerId" class="form-select" id="customerSelect">
+                                <option value="">-- اختر العميل --</option>
+                            </select>
+                        }
                         <span asp-validation-for="CustomerId" class="text-danger"></span>
                     </div>
+
                     <div class="col-md-4">
-                        <label asp-for="AccountId" class="form-label"></label>
-                        <select asp-for="AccountId" asp-items="ViewBag.AccountId" class="form-select" id="accountIdSelect" @Html.Raw(isLocked ? " disabled" : "")>
-                            <option value="">-- سيتم تعبئته تلقائياً --</option>
-                        </select>
+                        <label asp-for="AccountId" class="form-label">حساب العميل</label>
+                        @if (lockCustomer || isLocked)
+                        {
+                            <select asp-for="AccountId" asp-items="ViewBag.AccountId" class="form-select" id="accountIdSelect" disabled>
+                                <option value="">-- سيتم تعبئته تلقائياً --</option>
+                            </select>
+                            <input type="hidden" asp-for="AccountId" />
+                        }
+                        else
+                        {
+                            <select asp-for="AccountId" asp-items="ViewBag.AccountId" class="form-select" id="accountIdSelect">
+                                <option value="">-- سيتم تعبئته تلقائياً --</option>
+                            </select>
+                        }
                         <span asp-validation-for="AccountId" class="text-danger"></span>
                     </div>
 
                     <div class="col-md-4">
                         <label asp-for="Amount" class="form-label"></label>
-                        <input asp-for="Amount" class="form-control" type="number" step="0.01" @Html.Raw(isLocked ? " disabled" : "") />
+                        <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" @Html.Raw(isLocked ? "readonly" : "") />
                         <span asp-validation-for="Amount" class="text-danger"></span>
                     </div>
-                    <div class="col-md-8">
-                        <label asp-for="Reason" class="form-label"></label>
-                        <input asp-for="Reason" class="form-control" @Html.Raw(isLocked ? " disabled" : "") />
-                    </div>
+
                     <div class="col-12">
-                        <label asp-for="Description" class="form-label"></label>
-                        <textarea asp-for="Description" class="form-control" rows="2" @Html.Raw(isLocked ? " disabled" : "")></textarea>
+                        <label asp-for="Reason" class="form-label"></label>
+                        <input asp-for="Reason" class="form-control" @Html.Raw(isLocked ? "readonly" : "") />
+                        <span asp-validation-for="Reason" class="text-danger"></span>
                     </div>
                 </div>
-                <hr />
-                <div class="d-flex justify-content-between flex-wrap gap-2">
-                    <div class="d-flex gap-2">
-                        <a asp-action="Index" class="btn btn-secondary">عودة للقائمة</a>
-                        <a asp-action="Create" class="btn btn-outline-primary">إشعار جديد</a>
-                    </div>
-                    <div>
-                        @if (isLocked)
-                        {
-                            <a asp-action="Unlock" asp-route-id="@Model.CreditNoteId" class="btn btn-primary">تعديل</a>
-                        }
-                        else
-                        {
-                            <button type="submit" class="btn btn-primary">حفظ وترحيل</button>
-                        }
-                    </div>
+            </div>
+
+            <div class="card-footer d-flex justify-content-between flex-wrap gap-2">
+                <div class="d-flex gap-2">
+                    <a class="btn btn-secondary btn-sm open-same-tab"
+                       href="@Url.Action("Index", "CreditNotes", new { frame = 1 })"
+                       data-tab-id="credit-notes"
+                       data-tab-title="قائمة إشعارات الإضافة"
+                       data-url="@Url.Action("Index", "CreditNotes", new { frame = 1 })">عودة للقائمة</a>
+                    <a class="btn btn-outline-primary btn-sm open-tab"
+                       href="@Url.Action("Create", "CreditNotes", new { frame = 1 })"
+                       data-tab-id="credit-note-create"
+                       data-tab-title="إشعار إضافة">إشعار جديد</a>
+                </div>
+
+                <div class="d-flex gap-2 align-items-center">
+                    <a asp-action="Show"
+                       asp-route-id="@Model.CreditNoteId"
+                       asp-route-autoPrint="1"
+                       asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)"
+                       target="_blank"
+                       class="btn btn-outline-primary btn-sm">🖨️ طباعة الإشعار</a>
+                    @if (isLocked)
+                    {
+                        <a asp-action="Unlock" asp-route-id="@Model.CreditNoteId" class="btn btn-warning btn-sm">فتح للتعديل</a>
+                    }
+                    else
+                    {
+                        <button type="submit" class="btn btn-primary btn-sm">حفظ وترحيل</button>
+                    }
                 </div>
             </div>
         </div>
     </form>
 </div>
+</div>
 
 @section Scripts {
     @{ await Html.RenderPartialAsync("_ValidationScriptsPartial"); }
     <script>
-        (function() {
+        (function () {
             if (window.top !== window) {
-                try {
-                    window.top.postMessage({ type: 'erp-set-tab-title', title: 'إشعار إضافة' }, '*');
-                } catch (e) { /* تجاهل */ }
+                try { window.top.postMessage({ type: 'erp-set-tab-title', title: 'إشعار إضافة' }, '*'); } catch (e) { }
             }
         })();
     </script>
     @if (!isLocked)
     {
         <script>
-            $(document).ready(function() {
-                @if (Model.AccountId > 0)
-                {
-                    <text>$('#accountIdSelect').val('@Model.AccountId');</text>
-                }
-                $('#customerSelect').on('change', function() {
+            $(document).ready(function () {
+                var $amount = $('#Amount');
+                var $customer = $('#customerSelect');
+
+                var focusAmount = function () {
+                    if ($amount.length && !$amount.prop('readonly') && !$amount.prop('disabled')) {
+                        $amount.trigger('focus');
+                        $amount.trigger('select');
+                    }
+                };
+
+                setTimeout(function () {
+                    if ($customer.length && !$customer.prop('disabled')) {
+                        $customer.trigger('focus');
+                    } else {
+                        focusAmount();
+                    }
+                }, 120);
+
+                $customer.on('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        focusAmount();
+                    }
+                });
+
+                $amount.on('focus', function () {
+                    if (!$(this).prop('readonly')) $(this).trigger('select');
+                });
+
+                $amount.on('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        $('#creditNoteForm').trigger('submit');
+                    }
+                });
+
+                $('#customerSelect').on('change', function () {
                     var customerId = $(this).val();
                     var accountSelect = $('#accountIdSelect');
                     if (!customerId || customerId === '') { accountSelect.val(''); return; }
@@ -132,7 +248,7 @@
                         url: '@Url.Action("GetCustomerAccount", "CreditNotes")',
                         type: 'GET',
                         data: { customerId: customerId },
-                        success: function(response) {
+                        success: function (response) {
                             if (response && response.success && response.accountId) {
                                 accountSelect.val(response.accountId);
                             } else {
@@ -141,7 +257,10 @@
                                 else alert('هذا العميل غير مربوط بحساب محاسبي.');
                             }
                         },
-                        error: function() { accountSelect.val(''); alert('حدث خطأ أثناء جلب بيانات العميل.'); }
+                        error: function () {
+                            accountSelect.val('');
+                            alert('حدث خطأ أثناء جلب بيانات العميل.');
+                        }
                     });
                 });
             });

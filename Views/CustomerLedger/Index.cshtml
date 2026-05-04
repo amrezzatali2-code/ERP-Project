@@ -41,15 +41,15 @@
 
     var sort = (string?)ViewBag.Sort ?? "entryDate";
     var dir = (string?)ViewBag.Dir ?? "asc";
-    string? filterCol_id = ViewBag.FilterCol_Id as string ?? Context.Request.Query["filterCol_id"].ToString();
-    string? filterCol_idExpr = ViewBag.FilterCol_IdExpr as string ?? Context.Request.Query["filterCol_idExpr"].ToString();
-    string? filterCol_entryDate = ViewBag.FilterCol_EntryDate as string ?? Context.Request.Query["filterCol_entryDate"].ToString();
-    string? filterCol_sourceType = ViewBag.FilterCol_SourceType as string ?? Context.Request.Query["filterCol_sourceType"].ToString();
-    string? filterCol_voucherNo = ViewBag.FilterCol_VoucherNo as string ?? Context.Request.Query["filterCol_voucherNo"].ToString();
-    string? filterCol_account = ViewBag.FilterCol_Account as string ?? Context.Request.Query["filterCol_account"].ToString();
-    string? filterCol_debit = ViewBag.FilterCol_Debit as string ?? Context.Request.Query["filterCol_debit"].ToString();
-    string? filterCol_credit = ViewBag.FilterCol_Credit as string ?? Context.Request.Query["filterCol_credit"].ToString();
-    string? filterCol_description = ViewBag.FilterCol_Description as string ?? Context.Request.Query["filterCol_description"].ToString();
+    string? filterCol_id = ViewBag.FilterCol_Id as string ?? ViewContext.HttpContext.Request.Query["filterCol_id"].ToString();
+    string? filterCol_idExpr = ViewBag.FilterCol_IdExpr as string ?? ViewContext.HttpContext.Request.Query["filterCol_idExpr"].ToString();
+    string? filterCol_entryDate = ViewBag.FilterCol_EntryDate as string ?? ViewContext.HttpContext.Request.Query["filterCol_entryDate"].ToString();
+    string? filterCol_sourceType = ViewBag.FilterCol_SourceType as string ?? ViewContext.HttpContext.Request.Query["filterCol_sourceType"].ToString();
+    string? filterCol_voucherNo = ViewBag.FilterCol_VoucherNo as string ?? ViewContext.HttpContext.Request.Query["filterCol_voucherNo"].ToString();
+    string? filterCol_account = ViewBag.FilterCol_Account as string ?? ViewContext.HttpContext.Request.Query["filterCol_account"].ToString();
+    string? filterCol_debit = ViewBag.FilterCol_Debit as string ?? ViewContext.HttpContext.Request.Query["filterCol_debit"].ToString();
+    string? filterCol_credit = ViewBag.FilterCol_Credit as string ?? ViewContext.HttpContext.Request.Query["filterCol_credit"].ToString();
+    string? filterCol_description = ViewBag.FilterCol_Description as string ?? ViewContext.HttpContext.Request.Query["filterCol_description"].ToString();
 
     int ps = Model.PageSize;
     int total = Model.TotalCount;
@@ -294,13 +294,14 @@
             </div>
             <div class="col-12 col-md-3 erp-filter-section d-flex flex-wrap gap-2 align-items-end">
                 <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm flex-grow-1" style="min-width:100px;">عرض</button>
-                <button type="button" id="btnPrintCustomerLedger" class="btn btn-erp btn-erp-secondary btn-erp-sm flex-grow-1" style="min-width:100px;" title="طباعة الكشف">🖨️ طباعة</button>
             </div>
             @if (customer != null)
             {
-                <div class="col-12 col-md-2 erp-filter-section">
+                <div class="col-12 col-md-3 erp-filter-section d-flex flex-wrap justify-content-md-end gap-2 align-items-end">
+                    <button type="button" id="btnPrintCustomerLedger" class="btn btn-erp btn-erp-secondary btn-erp-sm" style="min-width: 110px;" title="طباعة الكشف">🖨️ طباعة</button>
                     <a asp-action="Show" asp-controller="Customers" asp-route-id="@customer.CustomerId" asp-route-frame="1"
-                       class="btn btn-erp btn-erp-secondary btn-erp-sm w-100 text-decoration-none app-menu-link"
+                       class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none app-menu-link"
+                       style="min-width: 120px;"
                        data-tab-id="customer-engagement"
                        data-tab-title="حجم تعامل عميل">📊 حجم التعامل</a>
                 </div>
@@ -315,13 +316,13 @@
     <div class="row g-3 mb-3 erp-list-summary-row">
         <div class="col-12 col-md-4">
             <div class="customer-ledger-summary-card customer-ledger-summary-debit rounded-3 shadow-sm border-0 p-3 text-white">
-                <div class="customer-ledger-summary-label">إجمالي المدين</div>
+                <div class="customer-ledger-summary-label">المدين</div>
                 <div class="customer-ledger-summary-value">@totalDebit.ToString("N2")</div>
             </div>
         </div>
         <div class="col-12 col-md-4">
             <div class="customer-ledger-summary-card customer-ledger-summary-credit rounded-3 shadow-sm border-0 p-3 text-white">
-                <div class="customer-ledger-summary-label">إجمالي الدائن</div>
+                <div class="customer-ledger-summary-label">الدائن</div>
                 <div class="customer-ledger-summary-value">@totalCredit.ToString("N2")</div>
             </div>
         </div>
@@ -380,25 +381,75 @@
                     }
                 }
             </tbody>
-            @if (customer != null)
-            {
-                <tfoot class="customer-ledger-table-tfoot erp-list-summary-tfoot">
-                    <tr>
-                        <td colspan="6" class="text-end customer-ledger-tfoot-label">
-                            الإجمالي
-                            <span class="customer-ledger-tfoot-hint">(بعد الفلترة — لكل النتائج)</span>
-                        </td>
-                        <td class="text-end customer-ledger-tfoot-debit" data-col="debit">@totalDebit.ToString("N2")</td>
-                        <td class="text-end customer-ledger-tfoot-credit" data-col="credit">@totalCredit.ToString("N2")</td>
-                        <td class="customer-ledger-tfoot-net" data-col="description">
-                            <span class="text-muted fw-normal small">صافي:</span>
-                            @netBalance.ToString("N2")
-                        </td>
-                    </tr>
-                </tfoot>
-            }
         </table>
     </div>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print w-100" dir="rtl">
+        <small class="text-muted">
+            عرض @start - @end من @total
+        </small>
+
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <form method="get"
+                  asp-action="Index"
+                  asp-controller="CustomerLedger"
+                  class="d-flex align-items-center gap-2">
+                <input type="hidden" name="customerId" value="@(customer?.CustomerId)" />
+                @if (fromDate.HasValue)
+                {
+                    <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("yyyy-MM-dd")" />
+                }
+                @if (toDate.HasValue)
+                {
+                    <input type="hidden" name="toDate" value="@toDate.Value.ToString("yyyy-MM-dd")" />
+                }
+                <input type="hidden" name="sort" value="@sort" />
+                <input type="hidden" name="dir" value="@dir" />
+                <input type="hidden" name="page" value="1" />
+                @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_entryDate)) { <input type="hidden" name="filterCol_entryDate" value="@filterCol_entryDate" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_sourceType)) { <input type="hidden" name="filterCol_sourceType" value="@filterCol_sourceType" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_voucherNo)) { <input type="hidden" name="filterCol_voucherNo" value="@filterCol_voucherNo" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_account)) { <input type="hidden" name="filterCol_account" value="@filterCol_account" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_debit)) { <input type="hidden" name="filterCol_debit" value="@filterCol_debit" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_credit)) { <input type="hidden" name="filterCol_credit" value="@filterCol_credit" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_description)) { <input type="hidden" name="filterCol_description" value="@filterCol_description" /> }
+
+                <label class="form-label m-0 nowrap">حجم الصفحة</label>
+                <select name="pageSize"
+                        class="form-select form-select-sm"
+                        onchange="this.form.submit()">
+                    <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
+                    <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                    <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                    <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                    <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                    <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
+                </select>
+            </form>
+        </div>
+    </div>
+
+    <nav aria-label="pagination" class="mt-3 no-print">
+        <ul class="pagination justify-content-center">
+            <li class="page-item @(page == first ? "disabled" : "")">
+                <a class="page-link" href="@Link(first)">الأول</a>
+            </li>
+            <li class="page-item @(page <= 1 ? "disabled" : "")">
+                <a class="page-link" href="@(page > 1 ? Link(prev) : "#")">السابق</a>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link">صفحة @(page) من @(pages)</span>
+            </li>
+            <li class="page-item @(page >= pages ? "disabled" : "")">
+                <a class="page-link" href="@(page < pages ? Link(next) : "#")">التالي</a>
+            </li>
+            <li class="page-item @(page == last ? "disabled" : "")">
+                <a class="page-link" href="@Link(last)">الأخير</a>
+            </li>
+        </ul>
+    </nav>
 
     </div>@* erp-print-area *@
 
@@ -432,29 +483,6 @@
         </div>
     </div>
 
-    @* الترقيم *@
-    @if (pages > 1)
-    {
-        <nav class="mt-3 no-print" aria-label="ترقيم الصفحات">
-            <ul class="pagination justify-content-center">
-                <li class="page-item @(page <= 1 ? "disabled" : "")">
-                    <a class="page-link" href="@(page > 1 ? Link(1) : "#")">الأولى</a>
-                </li>
-                <li class="page-item @(page <= 1 ? "disabled" : "")">
-                    <a class="page-link" href="@(page > 1 ? Link(prev) : "#")">السابق</a>
-                </li>
-                <li class="page-item disabled">
-                    <span class="page-link">@start - @end من @total</span>
-                </li>
-                <li class="page-item @(page >= pages ? "disabled" : "")">
-                    <a class="page-link" href="@(page < pages ? Link(next) : "#")">التالي</a>
-                </li>
-                <li class="page-item @(page >= pages ? "disabled" : "")">
-                    <a class="page-link" href="@(page < pages ? Link(last) : "#")">الأخيرة</a>
-                </li>
-            </ul>
-        </nav>
-    }
 </div>
 
 @section Scripts {
@@ -676,10 +704,32 @@
             var dropdownArrow = document.getElementById('ledgerPartyDropdownArrow');
             var form = document.getElementById('customerLedgerForm');
 
+            function hardDisableSavedInfo(el, seed) {
+                if (!el) return;
+                el.setAttribute('autocomplete', 'off');
+                el.setAttribute('autocorrect', 'off');
+                el.setAttribute('autocapitalize', 'off');
+                el.setAttribute('spellcheck', 'false');
+                el.setAttribute('data-form-type', 'other');
+                el.setAttribute('name', seed + '_' + Date.now());
+                el.setAttribute('readonly', 'readonly');
+
+                var unlock = function () {
+                    el.removeAttribute('readonly');
+                };
+                el.addEventListener('focus', unlock, { once: true });
+                el.addEventListener('pointerdown', unlock, { once: true });
+                el.addEventListener('mousedown', unlock, { once: true });
+                el.addEventListener('keydown', unlock, { once: true });
+                el.addEventListener('touchstart', unlock, { once: true });
+            }
+
+            hardDisableSavedInfo(input, 'ledger_customer_lookup');
+
             var activeIndex = -1;
             var selectableCustomers = [];
             var isSelectingCustomer = false;
-            var CUSTOMER_LIST_MAX = 80;
+            var CUSTOMER_LIST_MAX = 30;
             var partySelectionTs = 0;
 
             var allCustomers = [];

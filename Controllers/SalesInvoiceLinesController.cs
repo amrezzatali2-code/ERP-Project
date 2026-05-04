@@ -57,7 +57,7 @@ namespace ERP.Controllers
             if (creatorNames.Count == 0)
                 return query.Where(_ => false);
 
-            return query.Where(x => x.SalesInvoice != null && x.SalesInvoice.CreatedBy != null && creatorNames.Contains(x.SalesInvoice.CreatedBy.Trim()));
+            return query.Where(x => x.SalesInvoice != null && x.SalesInvoice.CreatedBy != null && creatorNames.Contains(x.SalesInvoice.CreatedBy));
         }
 
         // =========================================================

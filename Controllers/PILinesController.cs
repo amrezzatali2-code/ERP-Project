@@ -46,7 +46,7 @@ namespace ERP.Controllers
             if (creatorNames.Count == 0)
                 return query.Where(_ => false);
 
-            return query.Where(l => l.PurchaseInvoice != null && l.PurchaseInvoice.CreatedBy != null && creatorNames.Contains(l.PurchaseInvoice.CreatedBy.Trim()));
+            return query.Where(l => l.PurchaseInvoice != null && l.PurchaseInvoice.CreatedBy != null && creatorNames.Contains(l.PurchaseInvoice.CreatedBy));
         }
 
         #region Index (قائمة سطور فواتير الشراء)

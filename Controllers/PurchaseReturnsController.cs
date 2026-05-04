@@ -51,7 +51,7 @@ namespace ERP.Controllers
             if (creatorNames.Count == 0)
                 return query.Where(_ => false);
 
-            return query.Where(pr => pr.CreatedBy != null && creatorNames.Contains(pr.CreatedBy.Trim()));
+            return query.Where(pr => pr.CreatedBy != null && creatorNames.Contains(pr.CreatedBy));
         }
 
 

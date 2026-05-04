@@ -34,6 +34,16 @@
             <span asp-validation-for="PasswordHash" class="text-danger"></span>
         </div>
 
+        <div class="mb-3">
+            <label asp-for="PortalRole" class="form-label"></label>
+            <select asp-for="PortalRole" class="form-select form-select-arrow">
+                <option value="Employee">موظف</option>
+                <option value="Pharmacist">صيدلي</option>
+                <option value="Collector">موزع</option>
+            </select>
+            <span asp-validation-for="PortalRole" class="text-danger"></span>
+        </div>
+
         @* هل المستخدم أدمن؟ *@
         <div class="form-check mb-2">
             <input asp-for="IsAdmin" class="form-check-input ms-2" />

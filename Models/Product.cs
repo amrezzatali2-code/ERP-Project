@@ -67,6 +67,13 @@ namespace ERP.Models
         [Display(Name = "فعال")]
         public bool IsActive { get; set; }              // متغير: هل الصنف مفعل في النظام؟
 
+        [Display(Name = "خاضع للتتبع الدوائي")]
+        public bool IsTrackTraceEnabled { get; set; } = false; // متغير: هل الصنف يحتاج تتبعًا على مستوى كل عبوة؟
+
+        [Display(Name = "نوع كود التتبع")]
+        [StringLength(30)]
+        public string? TrackingCodeType { get; set; }  // متغير: GS1DataMatrix / Barcode / RFID ... حسب متطلبات الهيئة
+
         [Display(Name = "تاريخ آخر تغيير سعر")]
         public DateTime? LastPriceChangeDate { get; set; } // متغير: آخر تاريخ تم فيه تعديل السعر
 

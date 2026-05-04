@@ -7,6 +7,7 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin\**;obj\**;**\bin_verify*\**;**\bin_verify_*\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

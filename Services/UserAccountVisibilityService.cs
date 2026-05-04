@@ -390,18 +390,11 @@ namespace ERP.Services
                     return query.Where(_ => false);
 
                 // (1) الحساب الرئيسي ضمن المسموح الموسَّع
-                // (2) عميل/مورد + قيد على حساب مسموح
-                // (3) مستثمر بدون AccountId + قيد على حساب مسموح (لا نفتح قيوداً لمستثمر له AccountId غير مسموح — منع تسرّب 3101 مع السماح بـ 1103 فقط)
-                // PartyCategory: نستخدم Trim + مقارنة حالة-غير-حساسة حتى لا تُستبعد قيم مثل " Investor " أو اختلاف حالة
+                // (2) أي طرف (عميل/مورد/موظف/مستثمر/غيره) له قيد على حساب مسموح
+                // الهدف: إظهار كل الأسماء المصرح بها للمستخدم بغض النظر عن فئة الطرف.
                 return query.Where(c =>
                     (c.AccountId != null && allowedList.Contains(c.AccountId.Value))
-                    || ((c.PartyCategory != null
-                            && (c.PartyCategory.Trim() == "Customer" || c.PartyCategory.Trim() == "Supplier"))
-                        && _context.LedgerEntries.Any(e => e.CustomerId == c.CustomerId && allowedList.Contains(e.AccountId)))
-                    || (c.AccountId == null
-                        && c.PartyCategory != null
-                        && (c.PartyCategory.Trim().ToLower() == "investor" || c.PartyCategory.Trim() == "مستثمر")
-                        && _context.LedgerEntries.Any(e => e.CustomerId == c.CustomerId && allowedList.Contains(e.AccountId))));
+                    || _context.LedgerEntries.Any(e => e.CustomerId == c.CustomerId && allowedList.Contains(e.AccountId)));
             }
 
             var hiddenList = hiddenAccountIds.ToList();
@@ -443,4 +436,3 @@ namespace ERP.Services
         }
     }
 }
-

@@ -58,6 +58,13 @@
     bool hasPrevious = page > first;
     bool hasNext = page < last;
     var n2 = System.Globalization.CultureInfo.InvariantCulture;
+    var pageRowsCount = reportData.Count;
+    var pageQtyTotal = reportData.Sum(r => r.Qty);
+    var pageUnitPriceTotal = reportData.Sum(r => r.UnitPrice ?? 0m);
+    var pageUnitPriceAvg = reportData.Any(r => r.UnitPrice.HasValue) ? reportData.Where(r => r.UnitPrice.HasValue).Average(r => r.UnitPrice ?? 0m) : 0m;
+    var pageDiscountPercentTotal = reportData.Sum(r => r.DiscountPercent ?? 0m);
+    var pageDiscountValueTotal = reportData.Sum(r => r.DiscountValue ?? 0m);
+    var pageLineTotal = reportData.Sum(r => r.Total ?? 0m);
 
     Func<int, string> pageUrl = (p) =>
         Url.Action("ProductDetailsReport", "Reports", new
@@ -251,28 +258,28 @@
 
     @if (!string.IsNullOrEmpty(reportType) && reportData.Any())
     {
-        <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mb-2" dir="rtl">
+        <div class="row g-2 justify-content-start no-print erp-list-summary-row mb-2" dir="rtl">
             <div class="col-auto">
-                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px;">
-                    <div class="card-body py-3 px-3">
+                <div class="card h-100 border-0 erp-list-summary-card pdr-summary-card-sm" style="border: 1px solid #4338ca !important; border-radius: 10px;">
+                    <div class="card-body py-2 px-2">
                         <div class="small text-muted mb-1">عدد السطور (بعد الفلترة)</div>
-                        <div class="h5 mb-0 text-primary fw-bold">@totalCount.ToString("N0", n2)</div>
+                        <div class="mb-0 text-primary fw-bold pdr-summary-value">@totalCount.ToString("N0", n2)</div>
                     </div>
                 </div>
             </div>
             <div class="col-auto">
-                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px;">
-                    <div class="card-body py-3 px-3">
+                <div class="card h-100 border-0 erp-list-summary-card pdr-summary-card-sm" style="border: 1px solid #15803d !important; border-radius: 10px;">
+                    <div class="card-body py-2 px-2">
                         <div class="small text-muted mb-1">إجمالي الكمية</div>
-                        <div class="h5 mb-0 text-success fw-bold">@totalQtyFiltered.ToString("N2", n2)</div>
+                        <div class="mb-0 text-success fw-bold pdr-summary-value">@totalQtyFiltered.ToString("N2", n2)</div>
                     </div>
                 </div>
             </div>
             <div class="col-auto">
-                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #6366f1 !important; border-radius: 12px;">
-                    <div class="card-body py-3 px-3">
+                <div class="card h-100 border-0 erp-list-summary-card pdr-summary-card-sm" style="border: 1px solid #6366f1 !important; border-radius: 10px;">
+                    <div class="card-body py-2 px-2">
                         <div class="small text-muted mb-1">إجمالي المبالغ</div>
-                        <div class="h5 mb-0 fw-bold">@totalAmountFiltered.ToString("N2", n2)</div>
+                        <div class="mb-0 fw-bold pdr-summary-value">@totalAmountFiltered.ToString("N2", n2)</div>
                     </div>
                 </div>
             </div>
@@ -281,13 +288,14 @@
 
     <div class="erp-table-scroll-container mt-2" dir="rtl">
         <div id="productDetailsReportScrollWrapper" class="erp-table-wrapper mt-3 erp-print-area erp-list-table-after-summary" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
-            <table class="table table-striped table-hover mb-0 erp-table erp-table-sortable" id="productDetailsReportTable" data-current-sort="@sort" data-current-dir="@dir" style="min-width: 1400px; table-layout: fixed;">
+            <table class="table table-striped table-hover mb-0 erp-table erp-table-sortable" id="productDetailsReportTable" data-current-sort="@sort" data-current-dir="@dir" style="min-width: 1750px; table-layout: fixed;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                     <tr>
                         <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
                             <input type="checkbox" id="chkAllRowsPdr" title="تحديد الكل في الصفحة" />
                         </th>
                         <th data-col="date">@filterableCol("date", "Date", "التاريخ")</th>
+                        <th data-col="time">الوقت</th>
                         <th data-col="docno">@filterableCol("docno", "DocNo", "رقم المستند")</th>
                         <th data-col="author">@filterableCol("author", "Author", "الكاتب")</th>
                         <th data-col="region">@filterableCol("region", "Region", "المنطقة")</th>
@@ -296,7 +304,9 @@
                         <th data-col="productname">@filterableCol("productname", "ProductName", "اسم الصنف")</th>
                         <th class="text-end" data-col="qty" style="min-width: 90px;">@filterableCol("qty", "Qty", "الكمية")</th>
                         <th class="text-end" data-col="unitprice" style="min-width: 100px;">@filterableCol("unitprice", "UnitPrice", "السعر")</th>
+                        <th data-col="discount" style="min-width: 120px;">الخصم</th>
                         <th class="text-end" data-col="linetotal" style="min-width: 110px;">@filterableCol("linetotal", "LineTotal", "الإجمالي")</th>
+                        <th data-col="customercode" style="min-width: 90px;">كود العميل</th>
                         <th data-col="party">@filterableCol("party", "PartyName", "الطرف")</th>
                         <th data-col="warehouse">@filterableCol("warehouse", "WarehouseName", "المخزن")</th>
                         <th data-col="batch" style="min-width: 90px;">@filterableCol("batch", "BatchNo", "التشغيلة")</th>
@@ -308,7 +318,7 @@
                     @if (!reportData.Any())
                     {
                         <tr>
-                            <td colspan="16" class="text-center text-muted py-4">@(string.IsNullOrEmpty(reportType) ? "اختر نوع التقرير ثم اضغط «عرض» في شريط الفلاتر." : "لا توجد بيانات.")</td>
+                            <td colspan="19" class="text-center text-muted py-4">@(string.IsNullOrEmpty(reportType) ? "اختر نوع التقرير ثم اضغط «عرض» في شريط الفلاتر." : "لا توجد بيانات.")</td>
                         </tr>
                     }
                     else
@@ -337,6 +347,7 @@
                                     <input type="checkbox" class="row-select" value="@row.DocId" />
                                 </td>
                                 <td data-col="date">@row.Date.ToString("d/M/yyyy")</td>
+                                <td data-col="time">@(row.Time.HasValue ? row.Time.Value.ToString(@"hh\:mm") : "—")</td>
                                 <td data-col="docno">@row.DocNo</td>
                                 <td data-col="author">@(row.Author ?? "—")</td>
                                 <td data-col="region">@(row.Region ?? "—")</td>
@@ -345,7 +356,22 @@
                                 <td data-col="productname">@row.ProductName</td>
                                 <td class="text-end" data-col="qty">@row.Qty.ToString("N0")</td>
                                 <td class="text-end" data-col="unitprice">@(row.UnitPrice.HasValue ? row.UnitPrice.Value.ToString("N2") : "—")</td>
+                                <td data-col="discount">
+                                    @if (row.DiscountPercent.HasValue && row.DiscountPercent.Value != 0m)
+                                    {
+                                        <span>@row.DiscountPercent.Value.ToString("N2")%</span>
+                                    }
+                                    else if (row.DiscountValue.HasValue && row.DiscountValue.Value != 0m)
+                                    {
+                                        <span>@row.DiscountValue.Value.ToString("N2")</span>
+                                    }
+                                    else
+                                    {
+                                        <span>—</span>
+                                    }
+                                </td>
                                 <td class="text-end" data-col="linetotal">@(row.Total.HasValue ? row.Total.Value.ToString("N2") : "—")</td>
+                                <td data-col="customercode">@(row.CustomerCode ?? "—")</td>
                                 <td data-col="party">@(row.PartyName ?? "—")</td>
                                 <td data-col="warehouse">@(row.WarehouseName ?? "—")</td>
                                 <td data-col="batch">@(row.BatchNo ?? "—")</td>
@@ -355,6 +381,56 @@
                         }
                     }
                 </tbody>
+                @if (reportData.Any())
+                {
+                    <tfoot class="table-light pdr-totals-footer">
+                        <tr class="fw-semibold">
+                            <td class="text-center no-print" data-col="select">Σ</td>
+                            <td data-col="date">إجماليات الصفحة</td>
+                            <td data-col="time">—</td>
+                            <td data-col="docno">@pageRowsCount.ToString("N0", n2)</td>
+                            <td data-col="author">—</td>
+                            <td data-col="region">—</td>
+                            <td data-col="docnamear">—</td>
+                            <td data-col="productcode">—</td>
+                            <td data-col="productname">—</td>
+                            <td class="text-end" data-col="qty">@pageQtyTotal.ToString("N2", n2)</td>
+                            <td class="text-end" data-col="unitprice">@pageUnitPriceTotal.ToString("N2", n2)<div class="small text-muted">متوسط: @pageUnitPriceAvg.ToString("N2", n2)</div></td>
+                            <td data-col="discount">
+                                <div>نِسَب: @pageDiscountPercentTotal.ToString("N2", n2)%</div>
+                                <div class="small text-muted">قيم: @pageDiscountValueTotal.ToString("N2", n2)</div>
+                            </td>
+                            <td class="text-end" data-col="linetotal">@pageLineTotal.ToString("N2", n2)</td>
+                            <td data-col="customercode">—</td>
+                            <td data-col="party">—</td>
+                            <td data-col="warehouse">—</td>
+                            <td data-col="batch">—</td>
+                            <td data-col="expiry">—</td>
+                            <td data-col="notes">—</td>
+                        </tr>
+                        <tr class="fw-semibold pdr-grand-total-row">
+                            <td class="text-center no-print" data-col="select">Σ</td>
+                            <td data-col="date">إجمالي كل النتائج (بعد الفلترة)</td>
+                            <td data-col="time">—</td>
+                            <td data-col="docno">@totalCount.ToString("N0", n2)</td>
+                            <td data-col="author">—</td>
+                            <td data-col="region">—</td>
+                            <td data-col="docnamear">—</td>
+                            <td data-col="productcode">—</td>
+                            <td data-col="productname">—</td>
+                            <td class="text-end" data-col="qty">@totalQtyFiltered.ToString("N2", n2)</td>
+                            <td class="text-end" data-col="unitprice">—</td>
+                            <td data-col="discount">—</td>
+                            <td class="text-end" data-col="linetotal">@totalAmountFiltered.ToString("N2", n2)</td>
+                            <td data-col="customercode">—</td>
+                            <td data-col="party">—</td>
+                            <td data-col="warehouse">—</td>
+                            <td data-col="batch">—</td>
+                            <td data-col="expiry">—</td>
+                            <td data-col="notes">—</td>
+                        </tr>
+                    </tfoot>
+                }
             </table>
         </div>
     </div>
@@ -493,6 +569,11 @@
         .erp-col-filter-btn { color: #64748b; }
         .erp-col-filter-btn:hover { color: #475569; }
         #erpColumnFilterPanelPdr.erp-column-filter-panel { min-width: 280px; max-width: min(380px, 92vw); z-index: 1055; }
+        .product-details-report-page .pdr-summary-card-sm { min-width: 180px; }
+        .product-details-report-page .pdr-summary-card-sm .small { font-size: 0.8rem; }
+        .product-details-report-page .pdr-summary-card-sm .pdr-summary-value { font-size: 1.2rem; line-height: 1.15; }
+        #productDetailsReportTable tfoot.pdr-totals-footer td { background: #f8fafc; border-top: 2px solid #cbd5e1; }
+        #productDetailsReportTable tfoot.pdr-totals-footer .pdr-grand-total-row td { background: #eff6ff; }
     </style>
 }
 

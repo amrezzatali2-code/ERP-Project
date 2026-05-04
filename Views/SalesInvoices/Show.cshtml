@@ -29,27 +29,65 @@
 
 
         /* ===== نفس تنسيق طلب الشراء: خلفية فاتحة + كروت موحدة + إلغاء الخطوط السميكة ===== */
+        html, body {
+            min-height: 100%;
+            background: #94a3b8 !important;
+        }
+        html.in-frame body,
+        html.in-frame body.bg-light,
+        html.in-frame main,
+        html.in-frame main.container-fluid,
+        html.in-frame main[role="main"],
+        html.in-frame main[role="main"].container-fluid.py-3 {
+            background: #94a3b8 !important;
+        }
+        html.in-frame body {
+            margin-bottom: 0 !important;
+        }
+        html.in-frame main[role="main"],
+        html.in-frame main[role="main"].container-fluid.py-3 {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            margin-bottom: 0 !important;
+        }
         .invoice-page {
-            background-color: #f3f6fb;
+            background-color: #94a3b8;
             min-height: 100vh;
             padding-bottom: 1rem;
         }
         html.in-frame .invoice-page {
             min-height: 100vh;
+            margin-bottom: 0 !important;
         }
         /* صف المحتوى يمتد لارتفاع الشاشة حتى يتمدد جدول السطور للأسفل */
         .invoice-page .container-fluid > .row.g-3.align-items-start {
             align-items: stretch;
             min-height: calc(100vh - 3.25rem);
+            --bs-gutter-x: 0 !important;
+            --bs-gutter-y: 0 !important;
+            margin-right: 0 !important;
+            margin-left: 0 !important;
         }
 
         .invoice-page .container-fluid {
             padding: 0;
             max-width: 100%;
+            background: transparent !important;
         }
 
         .invoice-page .col-lg-2.order-1 {
-            padding: 0.5rem 0.5rem;
+            padding: 0 !important;
+            background: transparent !important;
+        }
+        @@media (min-width: 992px) {
+            .invoice-page .col-lg-2.order-1 {
+                flex: 0 0 15.2% !important;
+                max-width: 15.2% !important;
+            }
+            .invoice-page .col-lg-10.order-2 {
+                flex: 0 0 84.8% !important;
+                max-width: 84.8% !important;
+            }
         }
 
         /* حدود الكروت: لون أغمق (#6366f1) مطابق لطلب الشراء وفاتورة المشتريات */
@@ -67,7 +105,14 @@
 
         .invoice-side-card {
             background: #ffffff !important;
-            min-width: 220px;
+            min-width: 170px;
+            width: calc(100% - 14px);
+            max-width: calc(100% - 14px);
+            margin-inline-end: auto;
+        }
+
+        .invoice-side-card .card-body {
+            padding: 0.6rem 0.5rem !important;
         }
 
         .invoice-side-card .card-header {
@@ -81,8 +126,8 @@
         .invoice-side-card .invoice-actions-bar hr { display: none !important; }
 
         .invoice-side-card .btn-erp {
-            font-size: 0.85rem;
-            padding: 0.35rem 0.6rem;
+            font-size: 0.78rem;
+            padding: 0.34rem 0.28rem;
             border: 1px solid #64748b !important;
         }
         .invoice-side-card .btn-erp + .btn-erp { margin-top: 0.25rem; }
@@ -91,11 +136,11 @@
             position: sticky;
             top: 58px;
             z-index: 3000;
-            background: #ffffff !important;
-            border: 1px solid #6366f1 !important;
-            padding: 10px 10px !important;
+            background: transparent !important;
+            border: none !important;
+            padding: 10px 6px !important;
             border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+            box-shadow: none !important;
         }
         @@media (max-width: 992px) {
             .invoice-actions-sticky { top: 56px; }
@@ -131,7 +176,7 @@
             align-items: center;
             gap: 0.65rem;
             padding: 0.55rem 1rem !important;
-            font-size: 0.9rem;
+            font-size: 0.84rem;
             font-weight: 500;
             color: #0f172a !important;
             border-radius: 0 !important;
@@ -189,7 +234,7 @@
         .invoice-page .col-12.col-lg-10.order-2.order-lg-1,
         .invoice-page .col-lg-10.order-2 {
             background: transparent !important;
-            padding: 0.5rem 1rem;
+            padding: 0 0 0 0.75rem;
             border: none !important;
             box-shadow: none !important;
             display: flex;
@@ -205,11 +250,18 @@
             flex-direction: column;
             flex: 1 1 auto;
             min-height: 0;
-            background: transparent !important;
+            background: #94a3b8 !important;
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
             padding: 0 !important;
+        }
+        .invoice-page .row,
+        .invoice-page .col-12,
+        .invoice-page .col-lg-2,
+        .invoice-page .col-lg-10,
+        .invoice-page .card-body {
+            background: transparent !important;
         }
 
         .invoice-page .container-fluid,
@@ -223,23 +275,23 @@
             display: flex;
             flex-direction: column;
             flex: 1 1 auto;
-            min-height: 14rem;
+            min-height: 16.5rem;
             margin-top: 0.85rem;
             border: 1px solid #6366f1 !important;
             border-radius: 12px !important;
             box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
             overflow: hidden;
-            background: linear-gradient(165deg, #eef2ff 0%, #e0e7ff 42%, #dbeafe 78%, #cffafe 100%);
+            background: linear-gradient(165deg, #f5e6c8 0%, #efdebe 42%, #e8d4b1 78%, #e1cba3 100%);
         }
 
         .invoice-page .invoice-lines-container .erp-table-wrapper {
             flex: 1 1 auto;
-            min-height: 16rem;
+            min-height: 18.5rem;
             max-height: 55vh !important;
             overflow: auto;
             border: none;
             border-radius: 0;
-            background: rgba(255, 255, 255, 0.42);
+            background: rgba(251, 241, 223, 0.58);
         }
 
         /* تمييز الصف المختار: نفس قائمة المبيعات (.erp-list-selectable-row.selected في site.css) */
@@ -535,6 +587,44 @@
             font-weight: 600;
             text-align: center;
         }
+        .invoice-header-card > .invoice-header-bar {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
+            color: #ffffff !important;
+            border-bottom: none !important;
+            text-align: center;
+        }
+        .invoice-header-card > .invoice-header-bar h6 {
+            color: #ffffff !important;
+            width: 100%;
+            text-align: center;
+        }
+        .invoice-header-card > .invoice-header-bar .invoice-card-collapse-btn {
+            background: rgba(255, 255, 255, 0.16);
+            color: #ffffff;
+            border: none;
+        }
+        .invoice-header-card > .invoice-header-bar .invoice-card-collapse-btn:hover {
+            background: rgba(255, 255, 255, 0.26);
+        }
+        .invoice-header-card > .invoice-header-bar .invoice-card-collapse-btn:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, 0.45);
+        }
+        .invoice-side-card > .invoice-header-bar {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
+            color: #ffffff !important;
+            border-bottom: none !important;
+            text-align: center;
+            justify-content: center !important;
+            position: relative;
+        }
+        .invoice-side-card > .invoice-header-bar > div {
+            width: 100%;
+        }
+        .invoice-side-card > .invoice-header-bar h6 {
+            color: #ffffff !important;
+            width: 100%;
+            text-align: center;
+        }
 
         /* طي كروت فاتورة المبيعات — زر أعلى اليسار */
         .invoice-card-collapse-btn {
@@ -569,6 +659,93 @@
             line-height: 1;
             transition: transform 0.2s ease;
         }
+        .invoice-extra-toggle-wrap {
+            display: flex;
+            justify-content: center;
+            margin-top: 0.65rem;
+        }
+        .invoice-extra-toggle-btn {
+            min-width: 2.2rem;
+            height: 2rem;
+            padding: 0 0.7rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #f8fafc;
+            color: #475569;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            cursor: pointer;
+            transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+        }
+        .invoice-extra-toggle-btn:hover {
+            background: #eef2f7;
+            border-color: #94a3b8;
+            color: #0f172a;
+        }
+        .invoice-extra-toggle-btn:focus-visible {
+            outline: 2px solid rgba(99, 102, 241, 0.35);
+            outline-offset: 1px;
+        }
+        .invoice-extra-toggle-icon {
+            display: inline-block;
+            font-size: 0.74rem;
+            line-height: 1;
+            transition: transform .2s ease;
+        }
+        .invoice-header-extra-section {
+            display: none;
+        }
+        .invoice-header-extra-section.is-open {
+            display: block;
+        }
+        .invoice-product-extra-section {
+            display: none;
+        }
+        .invoice-product-extra-section.is-open {
+            display: block;
+        }
+        .invoice-add-extra-section {
+            display: none;
+        }
+        .invoice-add-extra-section.is-open {
+            display: block;
+        }
+        .invoice-header-extra-section.is-open + .invoice-extra-toggle-wrap .invoice-extra-toggle-icon,
+        .invoice-product-extra-section.is-open + .invoice-extra-toggle-wrap .invoice-extra-toggle-icon,
+        .invoice-add-extra-section.is-open + .invoice-extra-toggle-wrap .invoice-extra-toggle-icon,
+        .invoice-extra-toggle-btn[aria-expanded="true"] .invoice-extra-toggle-icon {
+            transform: rotate(180deg);
+        }
+        .invoice-product-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            gap: 0.75rem;
+            align-items: end;
+        }
+        .invoice-product-summary-grid .invoice-product-summary-item {
+            min-width: 0;
+            width: 100%;
+            flex: 1 1 0 !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .invoice-product-summary-grid .invoice-product-summary-item .form-control,
+        .invoice-product-summary-grid .invoice-product-summary-item .form-select {
+            width: 100% !important;
+        }
+        @@media (max-width: 1199.98px) {
+            .invoice-product-summary-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+        }
+        @@media (max-width: 767.98px) {
+            .invoice-product-summary-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
         .invoice-header-card.invoice-card-collapsed .invoice-card-collapse-icon,
         .invoice-product-card.invoice-card-collapsed .invoice-card-collapse-icon,
         .invoice-Add-card.invoice-card-collapsed .invoice-card-collapse-icon {
@@ -596,6 +773,28 @@
             font-weight: 600;
             margin: 0;
         }
+        .invoice-add-card-bar {
+            display: none !important;
+        }
+        #siProductDataCardBody {
+            padding-top: 0.85rem !important;
+        }
+        #siAddProductCardBody {
+            padding-top: 0.85rem !important;
+        }
+        #siAddProductCard {
+            scroll-margin-top: 84px;
+        }
+        .invoice-card-inline-toggle {
+            position: absolute;
+            left: 0.65rem;
+            top: 0.65rem;
+            z-index: 3;
+        }
+        .invoice-product-card,
+        .invoice-Add-card {
+            position: relative;
+        }
 
         /* رؤوس الكروت — نفس لون فاتورة المشتريات */
         .invoice-details-card .card-header,
@@ -614,7 +813,8 @@
         /* تصغير حقلي الكمية في كارت بيانات الصنف */
         .invoice-product-card #ProdQtyCurrentWarehouse,
         .invoice-product-card #ProdQtyAllWarehouses {
-            max-width: 90px;
+            max-width: none !important;
+            width: 100% !important;
         }
 
         /* صف البدائل + الجدول: محاذاة عمودية (بوكس البدائل في منتصف الجدول) + الجدول ينزل قليلاً */
@@ -707,8 +907,8 @@
 
         /* كارت الإجراءات الجانبية: أزرار أرفع شوية */
         .invoice-side-card .btn-erp {
-            font-size: 0.85rem;
-            padding: 0.35rem 0.6rem;
+            font-size: 0.78rem;
+            padding: 0.34rem 0.28rem;
         }
 
         .invoice-side-card .btn-erp + .btn-erp {
@@ -749,7 +949,7 @@
             margin-bottom: 0.85rem !important;
         }
         .invoice-page #PI_BodyHost .invoice-header-card {
-            margin-top: 0 !important;
+            margin-top: 0.4rem !important;
         }
         .invoice-page .card { margin-bottom: 0.85rem; }
         /* ملخص الفاتورة يبقى أسفل المنطقة المتمددة */
@@ -892,6 +1092,16 @@
         }
 
         .si-settings-panel.show { display: block; }
+        .invoice-page.theme-dark-navy,
+        .invoice-page.theme-dark-slate,
+        .invoice-page.theme-dark-plum {
+            background: #ffffff !important;
+        }
+        .invoice-page.theme-dark-navy .invoice-lines-container,
+        .invoice-page.theme-dark-slate .invoice-lines-container,
+        .invoice-page.theme-dark-plum .invoice-lines-container {
+            background: #f8fafc !important;
+        }
     </style>
 }
 
@@ -1044,6 +1254,14 @@
                                     <option value="alpha">أبجدي (حسب اسم الصنف)</option>
                                 </select>
                             </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1" for="siThemeSelect">لون الخلفية</label>
+                                <select id="siThemeSelect" class="form-select form-select-sm">
+                                    <option value="dark-navy">كحلي داكن</option>
+                                    <option value="dark-slate">فحمي داكن</option>
+                                    <option value="dark-plum">برقوقي داكن</option>
+                                </select>
+                            </div>
                             @{
                                 var canShowFullReturnBtn = (Model?.SIId ?? 0) > 0;
                             }
@@ -1120,6 +1338,13 @@
                             </button>
                         </div>
 
+                        <div>
+                            <button type="button" id="btnOpenTrackingInfo"
+                                    class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
+                                🧬 معلومات التتبع
+                            </button>
+                        </div>
+
                         <button type="button" id="btnRecentPurchaseItems"
                                 class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100"
                                 data-base-url="@Url.Action("GetRecentPurchaseItems", "SalesInvoices")">
@@ -1136,12 +1361,40 @@
 
                         @if (Model?.SIId > 0)
                         {
-                            @* زر وليس رابط — يمنع «فتح في تاب جديد» على href=# أو تنزيل يعرض تاباً أبيضاً داخل الـ iframe *@
-                            <button type="button" id="btnExportSalesInvoiceExcel" class="btn btn-erp btn-erp-success btn-erp-sm w-100"
-                                    data-export-url="@Url.Action("ExportShowExcel", "SalesInvoices", new { id = Model.SIId })"
-                                    data-default-filename="SalesInvoice_@(Model.SIId).xlsx"
-                                    data-keep-active-posted="1"
-                                    data-lock-posted="1">📥 تصدير Excel</button>
+                            <div class="dropdown w-100 si-print-dropdown" id="siExportDropdownWrap">
+                                <button type="button"
+                                        id="btnExportSalesInvoiceDropdown"
+                                        class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100 dropdown-toggle si-print-dropdown-btn"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false"
+                                        data-keep-active-posted="1"
+                                        data-lock-posted="1">
+                                    📥 تصدير
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end w-100 si-print-dropdown-menu" aria-labelledby="btnExportSalesInvoiceDropdown">
+                                    <li class="si-print-dropdown-header px-3 py-2 small text-muted border-bottom mb-0">اختر نوع التصدير</li>
+                                    <li>
+                                        <a class="dropdown-item si-print-dropdown-item js-si-export-excel"
+                                           href="#"
+                                           id="btnExportSalesInvoiceExcel"
+                                           data-export-url="@Url.Action("ExportShowExcel", "SalesInvoices", new { id = Model.SIId })"
+                                           data-default-filename="SalesInvoice_@(Model.SIId).xlsx">
+                                            <span class="si-print-opt-icon" aria-hidden="true">📗</span>
+                                            <span class="si-print-opt-text">تصدير Excel</span>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item si-print-dropdown-item"
+                                           id="btnExportSalesInvoicePdf"
+                                           href="@Url.Action("Show", "SalesInvoices", new { id = Model.SIId, frame = 1, printPdf = 1 })"
+                                           target="_blank"
+                                           rel="noopener">
+                                            <span class="si-print-opt-icon" aria-hidden="true">📕</span>
+                                            <span class="si-print-opt-text">تصدير PDF</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
                         }
 
                         <div class="dropdown w-100 si-print-dropdown">
@@ -1216,7 +1469,7 @@
 
                         <div class="card-body" id="invoiceHeaderCardBody">
 
-                                @* الصف الأول: العميل + رقم الفاتورة + التاريخ والوقت + المخزن + كاتب الفاتورة *@
+                                @* الصف الأول: كود العميل + اسم العميل + رقم الفاتورة + تاريخ الفاتورة + وقت الإنشاء + المخزن *@
                                 <div class="row g-3 align-items-end">
                                     <div class="col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">كود العميل</label>
@@ -1226,7 +1479,7 @@
                                                value="@(Model != null && Model.CustomerId > 0 ? Model.CustomerId.ToString() : "")" />
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                     </div>
-                                    <div class="col-lg-4 col-md-3">
+                                    <div class="col-lg-4 col-md-4">
                                         <label for="CustomerNameInput" class="form-label form-label-sm">اسم العميل</label>
                                         <div class="position-relative" id="customerDropdownWrap">
                                             <div class="product-dropdown-onebox" id="customerDropdownInputGroup">
@@ -1257,41 +1510,32 @@
                                                value="@(Model != null && Model.SIId > 0 ? Model.SIId.ToString() : "")"
                                                readonly />
                                     </div>
-                                    <div class="col-lg-2 col-md-6">
-                                        <div class="row g-2">
-                                            <div class="col-6">
-                                                <label class="form-label form-label-sm">تاريخ الفاتورة</label>
-                                                <input id="InvoiceDateDisplay"
-                                                       class="form-control form-control-sm text-center"
-                                                       value="@invoiceDateText"
-                                                       readonly />
-                                            </div>
-                                            <div class="col-6">
-                                                <label class="form-label form-label-sm">وقت الإنشاء</label>
-                                                <input id="InvoiceTimeDisplay"
-                                                       class="form-control form-control-sm text-center"
-                                                       value="@invoiceTimeText"
-                                                       readonly />
-                                            </div>
-                                        </div>
+                                    <div class="col-lg-2 col-md-2">
+                                        <label class="form-label form-label-sm">تاريخ الفاتورة</label>
+                                        <input id="InvoiceDateDisplay"
+                                               class="form-control form-control-sm text-center"
+                                               value="@invoiceDateText"
+                                               readonly />
                                     </div>
                                     <div class="col-lg-2 col-md-2">
+                                        <label class="form-label form-label-sm">وقت الإنشاء</label>
+                                        <input id="InvoiceTimeDisplay"
+                                               class="form-control form-control-sm text-center"
+                                               value="@invoiceTimeText"
+                                               readonly />
+                                    </div>
+                                    <div class="col-lg-2 col-md-4">
                                         <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
                                         <select asp-for="WarehouseId" asp-items="ViewBag.Warehouses" data-lock-posted="1"
                                                 class="form-select form-select-sm" data-is-posted="@(Model?.IsPosted == true ? "1" : "0")">
                                             <option value="">اختر المخزن</option>
                                         </select>
                                     </div>
-                                    <div class="col-lg-2 col-md-2">
-                                        <label class="form-label form-label-sm">كاتب الفاتورة</label>
-                                        <input id="InvoiceCreatedByDisplay" class="form-control form-control-sm text-center"
-                                               value="@(Model?.CreatedBy ?? "")" readonly />
-                                    </div>
                                 </div>
 
                                 <input type="hidden" asp-for="Status" id="InvoiceStatusHidden" />
 
-                                @* الصف الثاني: حالة الفاتورة + سياسة العميل + الهاتف + الحد الائتماني *@
+                                @* الصف الثاني: حالة الفاتورة + سياسة العميل + الكاتب + الحد الإئتماني *@
                                 <div class="row g-3 align-items-end mt-2">
                                     <div class="col-md-6 col-lg-3">
                                         <label class="form-label form-label-sm">حالة الفاتورة</label>
@@ -1303,9 +1547,9 @@
                                         <input type="hidden" id="CustomerPolicyId" value="@(Model?.Customer?.PolicyId?.ToString() ?? "")" />
                                     </div>
                                     <div class="col-md-6 col-lg-3">
-                                        <label class="form-label form-label-sm">الهاتف</label>
-                                        <input id="CustomerPhone" class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.Phone1 ?? Model?.Customer?.Phone2 ?? Model?.Customer?.Whatsapp ?? "")" readonly />
+                                        <label class="form-label form-label-sm">كاتب الفاتورة</label>
+                                        <input id="InvoiceCreatedByDisplay" class="form-control form-control-sm text-center"
+                                               value="@(Model?.CreatedBy ?? "")" readonly />
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label class="form-label form-label-sm">الحد الإتماني</label>
@@ -1314,28 +1558,45 @@
                                     </div>
                                 </div>
 
-                                @* الصف الثالث: العنوان والمحافظة والحي والمنطقة فقط *@
-                                <div class="row g-3 align-items-end mt-2">
-                                    <div class="col-12 col-md-6 col-lg-6">
-                                        <label class="form-label form-label-sm">العنوان</label>
-                                        <input id="CustomerAddress" class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.Address ?? "")" readonly data-lock-posted="1" />
+                                <div id="invoiceHeaderExtraSection" class="invoice-header-extra-section">
+                                    <div class="row g-3 align-items-end mt-2">
+                                        <div class="col-12 col-md-4 col-lg-3">
+                                            <label class="form-label form-label-sm">الهاتف</label>
+                                            <input id="CustomerPhone" class="form-control form-control-sm"
+                                                   value="@(Model?.Customer?.Phone1 ?? Model?.Customer?.Phone2 ?? Model?.Customer?.Whatsapp ?? "")" readonly />
+                                        </div>
+                                        <div class="col-12 col-md-8 col-lg-5">
+                                            <label class="form-label form-label-sm">العنوان</label>
+                                            <input id="CustomerAddress" class="form-control form-control-sm"
+                                                   value="@(Model?.Customer?.Address ?? "")" readonly data-lock-posted="1" />
+                                        </div>
+                                        <div class="col-6 col-md-4 col-lg-2">
+                                            <label class="form-label form-label-sm">المحافظة</label>
+                                            <input id="CustomerGovernorate" class="form-control form-control-sm"
+                                                   value="@(Model?.Customer?.Governorate?.GovernorateName ?? "")" readonly />
+                                        </div>
+                                        <div class="col-6 col-md-4 col-lg-1">
+                                            <label class="form-label form-label-sm">الحي</label>
+                                            <input id="CustomerDistrict" class="form-control form-control-sm"
+                                                   value="@(Model?.Customer?.District?.DistrictName ?? "")" readonly />
+                                        </div>
+                                        <div class="col-6 col-md-4 col-lg-1">
+                                            <label class="form-label form-label-sm">المنطقة</label>
+                                            <input id="CustomerArea" class="form-control form-control-sm"
+                                                   value="@(Model?.Customer?.Area?.AreaName ?? "")" readonly />
+                                        </div>
                                     </div>
-                                    <div class="col-6 col-md-3 col-lg-2">
-                                        <label class="form-label form-label-sm">المحافظة</label>
-                                        <input id="CustomerGovernorate" class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.Governorate?.GovernorateName ?? "")" readonly />
-                                    </div>
-                                    <div class="col-6 col-md-3 col-lg-2">
-                                        <label class="form-label form-label-sm">الحي</label>
-                                        <input id="CustomerDistrict" class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.District?.DistrictName ?? "")" readonly />
-                                    </div>
-                                    <div class="col-6 col-md-3 col-lg-2">
-                                        <label class="form-label form-label-sm">المنطقة</label>
-                                        <input id="CustomerArea" class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.Area?.AreaName ?? "")" readonly />
-                                    </div>
+                                </div>
+
+                                <div class="invoice-extra-toggle-wrap">
+                                    <button type="button"
+                                            id="btnInvoiceHeaderExtraToggle"
+                                            class="invoice-extra-toggle-btn"
+                                            aria-expanded="false"
+                                            aria-controls="invoiceHeaderExtraSection"
+                                            title="إظهار أو إخفاء البيانات الإضافية">
+                                        <span class="invoice-extra-toggle-icon" aria-hidden="true">▼</span>
+                                    </button>
                                 </div>
 
                                 <input type="hidden" id="CustomerCurrentBalance" value="@(hideInvestorSensitive ? "0" : (Model?.Customer?.CurrentBalance ?? 0m).ToString("0.##"))" />
@@ -1347,7 +1608,11 @@
                        ===================================================== *@
                         <div id="siProductDataCard" class="card shadow-sm mb-2 invoice-product-card">
                             <div class="invoice-product-card-bar">
-                                <button type="button" class="invoice-card-collapse-btn" title="طي أو إظهار بيانات الصنف والتشغيلات" aria-expanded="true" aria-controls="siProductDataCardBody">
+                                <button type="button"
+                                        class="invoice-card-collapse-btn"
+                                        title="طي أو إظهار بيانات الصنف والتشغيلات"
+                                        aria-expanded="true"
+                                        aria-controls="siProductDataCardBody">
                                     <span class="invoice-card-collapse-icon" aria-hidden="true">▼</span>
                                 </button>
                                 <span class="invoice-mini-bar-title">بيانات الصنف والتشغيلات</span>
@@ -1355,75 +1620,88 @@
                             <div class="card-body pt-0 pb-0" id="siProductDataCardBody">
                                 <div class="invoice-card-line"></div>
 
-                                    <div class="row g-2 mb-2 align-items-center">
-                                        <div class="col-3 col-md-1">
+                                    <div class="invoice-product-summary-grid mb-2">
+                                        <div class="invoice-product-summary-item">
                                             <label class="form-label form-label-sm">كمية المخزن</label>
                                             <input type="text" id="ProdQtyCurrentWarehouse"
                                                    class="form-control form-control-sm text-center" value="0" readonly />
                                         </div>
-                                        <div class="col-3 col-md-1">
+                                        <div class="invoice-product-summary-item">
                                             <label class="form-label form-label-sm">إجمالي الكمية</label>
                                             <input type="text" id="ProdQtyAllWarehouses"
                                                    class="form-control form-control-sm text-center" value="0" readonly />
                                         </div>
-                                        <div class="col-3 col-md-2">
+                                        <div class="invoice-product-summary-item">
                                             <label class="form-label form-label-sm">الكوتة</label>
                                             <input type="text" id="ProdQuotaText"
                                                    class="form-control form-control-sm text-center" value="بدون كوتة" readonly />
                                         </div>
-                                        <div class="col-3 col-md-2">
+                                        <div class="invoice-product-summary-item">
                                             <label class="form-label form-label-sm">البونص</label>
                                             <input type="text" id="ProdBonusText"
                                                    class="form-control form-control-sm text-center" value="بدون بونص" readonly />
                                         </div>
-                                        <div class="col-3 col-md-2">
+                                        <div class="invoice-product-summary-item">
                                             <label class="form-label form-label-sm">مجموعة الصنف</label>
                                             <input type="text" id="ProdGroupText"
                                                    class="form-control form-control-sm text-center" value="بدون مجموعة" readonly />
                                         </div>
-                                        <div class="col-3 col-md-2">
+                                        <div class="invoice-product-summary-item">
                                             <label class="form-label form-label-sm">سياسة المجموعة</label>
                                             <input type="text" id="ProdGroupPolicyText"
                                                    class="form-control form-control-sm text-center" value="—" readonly
                                                    title="السياسة المطبقة من مجموعة الصنف (الربح من جدول سياسات المخازن)" />
                                         </div>
-                                        <div class="col-3 col-md-2">
+                                        <div class="invoice-product-summary-item">
                                             <label class="form-label form-label-sm">الخصم المرجّح%</label>
                                             <input type="text" id="ProdWeightedDiscount"
                                                    class="form-control form-control-sm text-center" value="0" readonly />
                                         </div>
                                     </div>
 
-                                    @* بدائل الصنف + جدول التشغيلات — نصف الكارت لكل منهما في حذا واحد *@
-                                    <div class="row g-3 align-items-center invoice-product-alternatives-row">
-                                        <div class="col-12 col-md-6">
-                                            <label class="form-label form-label-sm invoice-alternatives-label">بدائل الصنف (حسب الاسم العلمي)</label>
-                                            <select id="AlternativeProducts" class="form-select form-select-sm w-100"></select>
-                                            <select id="ProdBatchSelect" class="form-select form-select-sm d-none" title="اختر تشغيلة (مخفي — الجدول فقط للعرض)">
-                                                <option value="">لا توجد تشغيلات</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-12 col-md-6">
-                                            <div class="table-responsive invoice-batch-table-wrap">
-                                                <table class="table table-sm table-bordered align-middle text-center mb-0 invoice-batch-table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th style="width:60px;">المسلسل</th>
-                                                            <th style="width:90px;">التشغيلة</th>
-                                                            <th style="width:100px;">الصلاحية</th>
-                                                            <th style="width:80px;">الكمية</th>
-                                                            <th style="width:110px;">سعر الجمهور</th>
-                                                            <th style="width:90px;">الخصم المرجّح %</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody id="BatchQueueBody">
-                                                        <tr>
-                                                            <td colspan="6" class="text-muted">لا توجد تشغيلات بعد.</td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
+                                    <div id="siProductExtraSection" class="invoice-product-extra-section">
+                                        @* بدائل الصنف + جدول التشغيلات — نصف الكارت لكل منهما في حذا واحد *@
+                                        <div class="row g-3 align-items-center invoice-product-alternatives-row">
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label form-label-sm invoice-alternatives-label">بدائل الصنف (حسب الاسم العلمي)</label>
+                                                <select id="AlternativeProducts" class="form-select form-select-sm w-100"></select>
+                                                <select id="ProdBatchSelect" class="form-select form-select-sm d-none" title="اختر تشغيلة (مخفي — الجدول فقط للعرض)">
+                                                    <option value="">لا توجد تشغيلات</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-12 col-md-6">
+                                                <div class="table-responsive invoice-batch-table-wrap">
+                                                    <table class="table table-sm table-bordered align-middle text-center mb-0 invoice-batch-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th style="width:60px;">المسلسل</th>
+                                                                <th style="width:90px;">التشغيلة</th>
+                                                                <th style="width:100px;">الصلاحية</th>
+                                                                <th style="width:80px;">الكمية</th>
+                                                                <th style="width:110px;">سعر الجمهور</th>
+                                                                <th style="width:90px;">الخصم المرجّح %</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="BatchQueueBody">
+                                                            <tr>
+                                                                <td colspan="6" class="text-muted">لا توجد تشغيلات بعد.</td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    <div class="invoice-extra-toggle-wrap">
+                                        <button type="button"
+                                                id="btnSiProductExtraToggle"
+                                                class="invoice-extra-toggle-btn"
+                                                aria-expanded="false"
+                                                aria-controls="siProductExtraSection"
+                                                title="إظهار أو إخفاء تفاصيل الصنف والتشغيلات">
+                                            <span class="invoice-extra-toggle-icon" aria-hidden="true">▼</span>
+                                        </button>
                                     </div>
 
                                 </div>
@@ -1523,6 +1801,41 @@
                                             إضافة
                                         </button>
                                     </div>
+                                </div>
+
+                                <div id="siAddScanExtraSection" class="invoice-add-extra-section">
+                                    <div class="row g-2 align-items-end mt-1">
+                                        <div class="col-lg-6 col-md-8">
+                                            <label class="form-label form-label-sm">SCAN 2D للتتبع</label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" id="Prod2DScanInput"
+                                                       class="form-control form-control-sm pi-input"
+                                                       placeholder="امسح كود GS1 DataMatrix هنا..."
+                                                       autocomplete="one-time-code"
+                                                       data-lpignore="true"
+                                                       data-1p-ignore="true"
+                                                       data-bwignore="true"
+                                                       data-lock-posted="1" />
+                                                <button type="button" id="btnAddTrackedScan" class="btn btn-outline-primary" data-lock-posted="1">SCAN</button>
+                                                <button type="button" id="btnClearTrackedScans" class="btn btn-outline-secondary" data-lock-posted="1">تفريغ</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-lg-6 col-12">
+                                            <label class="form-label form-label-sm">حالة SCAN</label>
+                                            <div id="TrackedScanHint" class="small text-muted border rounded px-2 py-2 bg-light-subtle">لا يوجد SCAN بعد.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="invoice-extra-toggle-wrap">
+                                    <button type="button"
+                                            id="btnSiAddScanExtraToggle"
+                                            class="invoice-extra-toggle-btn"
+                                            aria-expanded="false"
+                                            aria-controls="siAddScanExtraSection"
+                                            title="إظهار أو إخفاء جزء SCAN">
+                                        <span class="invoice-extra-toggle-icon" aria-hidden="true">▼</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1942,7 +2255,7 @@
                 if (window.__SI_EXCEL_EXPORT_DELEGATION__) return;
                 window.__SI_EXCEL_EXPORT_DELEGATION__ = true;
                 document.addEventListener('click', async function (e) {
-                    var btn = e.target && e.target.closest('#btnExportSalesInvoiceExcel');
+                    var btn = e.target && e.target.closest('.js-si-export-excel');
                     if (!btn) return;
                     e.preventDefault();
                     e.stopPropagation();
@@ -2125,6 +2438,34 @@
             // =========================================================
             // (0.5) إعدادات واجهة الفاتورة (حاليًا: إظهار/إخفاء زر مسح كل الأصناف)
             // =========================================================
+            const SI_THEME_STORAGE_KEY = 'erp.salesinvoice.page.theme.v2';
+            const SI_THEME_DEFAULT = 'dark-navy';
+            function normalizeInvoiceTheme(value) {
+                const theme = (value || '').toString().toLowerCase();
+                return (theme === 'dark-slate' || theme === 'dark-plum' || theme === 'dark-navy')
+                    ? theme
+                    : SI_THEME_DEFAULT;
+            }
+            function readStoredInvoiceTheme() {
+                try {
+                    return normalizeInvoiceTheme(localStorage.getItem(SI_THEME_STORAGE_KEY));
+                } catch {
+                    return SI_THEME_DEFAULT;
+                }
+            }
+            function writeStoredInvoiceTheme(theme) {
+                try {
+                    localStorage.setItem(SI_THEME_STORAGE_KEY, normalizeInvoiceTheme(theme));
+                } catch {
+                }
+            }
+            function applyInvoiceTheme(theme) {
+                const invoicePage = document.querySelector('.invoice-page');
+                if (!invoicePage) return;
+                invoicePage.classList.remove('theme-dark-navy', 'theme-dark-slate', 'theme-dark-plum');
+                const themeSelect = document.getElementById('siThemeSelect');
+                if (themeSelect) themeSelect.value = 'dark-navy';
+            }
             const SI_UI_SETTINGS_KEY = 'erp.salesinvoice.ui.settings.v1';
             function readSiUiSettings() {
                 try {
@@ -2174,15 +2515,22 @@
                 const chk = document.getElementById('siShowClearAllChk');
                 const maxItemsInput = document.getElementById('siMaxItemsInput');
                 const sortModeSelect = document.getElementById('siSortModeSelect');
+                const themeSelect = document.getElementById('siThemeSelect');
                 if (toggleBtn && panel) {
                     toggleBtn.addEventListener('click', function () {
                         panel.classList.toggle('show');
+                    });
+                }
+                if (themeSelect) {
+                    themeSelect.addEventListener('change', function () {
+                        applyInvoiceTheme(themeSelect.value);
                     });
                 }
                 if (saveBtn && chk) {
                     saveBtn.addEventListener('click', function () {
                         const maxItems = maxItemsInput ? parseInt(maxItemsInput.value || '35', 10) : 35;
                         const sortMode = sortModeSelect ? sortModeSelect.value : 'location';
+                        writeStoredInvoiceTheme(themeSelect ? themeSelect.value : SI_THEME_DEFAULT);
                         writeSiUiSettings({
                             showClearAll: chk.checked,
                             maxItems: (isNaN(maxItems) ? 35 : maxItems),
@@ -2195,6 +2543,7 @@
                         showToast('تم حفظ إعدادات الفاتورة.', 'success', 2000);
                     });
                 }
+                applyInvoiceTheme(readStoredInvoiceTheme());
                 applySiUiSettings();
             });
 
@@ -2800,6 +3149,10 @@
                         const prodExpiryInput = document.getElementById('ProdExpiryInput');   // متغير: تاريخ الصلاحية
                         const prodHiddenId    = document.getElementById('ProdId');            // متغير: المعرّف الداخلي للصنف
                         const btnAddLine      = document.getElementById('btnAddInvoiceLine'); // متغير: زر إضافة السطر
+                        const prod2DScanInput = document.getElementById('Prod2DScanInput');   // متغير: حقل SCAN 2D
+                        const btnAddTrackedScan = document.getElementById('btnAddTrackedScan');// متغير: زر SCAN
+                        const btnClearTrackedScans = document.getElementById('btnClearTrackedScans'); // متغير: زر تفريغ SCAN
+                        const trackedScanHint = document.getElementById('TrackedScanHint');    // متغير: حالة SCAN
 
                         // 2) عناصر كارت بيانات الصنف
                         const prodQtyWarehouse = document.getElementById('ProdQtyCurrentWarehouse'); // متغير: كمية هذا المخزن
@@ -2810,6 +3163,13 @@
 
                         // 3) مصدر بيانات الأصناف (داتاليست مخفي — القائمة تعرض حتى PRODUCT_LIST_MAX)
                         const prodDataList = document.getElementById('productsList');
+                        const trackedSalesState = {
+                            productId: 0,
+                            productName: '',
+                            batchNo: '',
+                            expiryText: '',
+                            units: []
+                        };
 
                         // 4) جدول تشغيلات FEFO داخل كارت بيانات الصنف
                         const batchQueueBody = document.getElementById('BatchQueueBody'); // متغير: جسم جدول التشغيلات (tbody)
@@ -2825,6 +3185,43 @@
 
 
                         if (!prodDataList) console.warn('⚠️ قائمة الأصناف (productsList) غير موجودة.');
+
+                        renderTrackedSalesState();
+
+                        function normalizeScanText(value) {
+                            return (value || '').toString().trim();
+                        }
+
+                        function resetTrackedSalesState(silent = false, clearDisplays = false) {
+                            trackedSalesState.productId = 0;
+                            trackedSalesState.productName = '';
+                            trackedSalesState.batchNo = '';
+                            trackedSalesState.expiryText = '';
+                            trackedSalesState.units = [];
+                            renderTrackedSalesState();
+
+                            if (clearDisplays && trackedScanHint) {
+                                trackedScanHint.textContent = 'لا يوجد SCAN بعد.';
+                            }
+
+                            if (!silent && typeof showToast === 'function') {
+                                showToast('تم تفريغ بيانات SCAN.', 'muted', 1200);
+                            }
+                        }
+
+                        function renderTrackedSalesState() {
+                            if (trackedScanHint) {
+                                trackedScanHint.textContent = trackedSalesState.units.length > 0
+                                    ? `جاهز لإضافة عبوة ${trackedSalesState.productName || ('#' + trackedSalesState.productId)}`
+                                    : 'لا يوجد SCAN بعد.';
+                            }
+                        }
+
+                        function setTrackedSalesDisplays(unit, productName) {
+                            if (trackedScanHint) trackedScanHint.textContent = productName
+                                ? `آخر SCAN: ${productName}`
+                                : 'تمت قراءة آخر كود بنجاح.';
+                        }
 
                         // =========================================================
                         // دوال مساعدة (أرقام + توحيد نص) — نفس منطق بحث اسم العميل
@@ -3366,6 +3763,111 @@
                             // عرض قائمة «تركيزات/أشكال أخرى» من الداتاليست (بدون طلب سيرفر)
                             if (typeof refreshVariantsDropdown === 'function') refreshVariantsDropdown(opt);
                             recalcProductLineTotalPreview();
+                        }
+
+                        async function setProductFromTrackedScan(product) {
+                            if (!product) return;
+
+                            const matchingOpt = findProductByCode(String(product.id || product.code || ''));
+                            if (matchingOpt) {
+                                fillProductFromOption(matchingOpt);
+                                await loadSalesProductInfo(parseInt(product.id || '0', 10) || 0);
+                                return;
+                            }
+
+                            if (prodHiddenId) prodHiddenId.value = String(product.id || '');
+                            if (prodCodeInput) prodCodeInput.value = String(product.code || product.id || '');
+                            if (prodNameInput) prodNameInput.value = product.name || '';
+                            await loadSalesProductInfo(parseInt(product.id || '0', 10) || 0);
+                        }
+
+                        async function addTrackedSalesScan() {
+                            const rawScan = normalizeScanText(prod2DScanInput ? prod2DScanInput.value : '');
+                            if (!rawScan) {
+                                prod2DScanInput?.focus();
+                                return;
+                            }
+
+                            if (typeof isInvoicePosted === 'function' && isInvoicePosted()) {
+                                showToast('الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً.', 'danger');
+                                return;
+                            }
+
+                            const warehouseId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
+                            if (warehouseId <= 0) {
+                                showToast('يجب اختيار مخزن قبل استخدام SCAN التتبع.', 'warning');
+                                document.getElementById('WarehouseId')?.focus();
+                                return;
+                            }
+
+                            const token = getAntiForgeryToken();
+                            if (btnAddTrackedScan) btnAddTrackedScan.disabled = true;
+
+                            try {
+                                const resp = await fetch('@Url.Action("ParseTrackedSalesScanJson", "SalesInvoices")', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'RequestVerificationToken': token
+                                    },
+                                    body: JSON.stringify({ rawScan, warehouseId })
+                                });
+
+                                const data = await resp.json().catch(() => null);
+                                if (!resp.ok || !data || data.ok !== true) {
+                                    showToast((data && data.message) ? data.message : 'تعذر قراءة الكود الممسوح.', 'danger');
+                                    return;
+                                }
+
+                                const product = data.product || {};
+                                const scan = data.scan || {};
+                                const incomingProductId = Number(product.id || 0);
+                                const incomingBatch = normalizeScanText(scan.batchNo || '');
+                                const incomingExpiry = normalizeScanText(scan.expiryText || '');
+                                const incomingUid = normalizeScanText(scan.uid || '');
+
+                                if (!incomingProductId || !incomingUid) {
+                                    showToast('بيانات كود التتبع غير مكتملة.', 'danger');
+                                    return;
+                                }
+
+                                trackedSalesState.productId = incomingProductId;
+                                trackedSalesState.productName = product.name || '';
+                                trackedSalesState.batchNo = incomingBatch;
+                                trackedSalesState.expiryText = incomingExpiry;
+                                const trackedUnit = {
+                                    rawScan: rawScan,
+                                    uid: incomingUid,
+                                    gtin: normalizeScanText(scan.gtin || ''),
+                                    serialNo: normalizeScanText(scan.serialNo || ''),
+                                    batchNo: incomingBatch,
+                                    expiryText: incomingExpiry
+                                };
+                                trackedSalesState.units = [trackedUnit];
+
+                                await setProductFromTrackedScan(product);
+                                const matchedBatchIndex = currentProductBatches.findIndex(b =>
+                                    normalizeScanText(b.batchNo || '') === incomingBatch &&
+                                    normalizeScanText(b.expiryText || '') === incomingExpiry);
+                                if (matchedBatchIndex >= 0) {
+                                    applyBatchSelectionFromIndex(matchedBatchIndex);
+                                }
+                                if (prodBatchInput) prodBatchInput.value = incomingBatch;
+                                if (prodExpiryInput) prodExpiryInput.value = incomingExpiry;
+                                if (prodQtyInput) {
+                                    prodQtyInput.value = '1';
+                                    prodQtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                    prodQtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                                setTrackedSalesDisplays(trackedUnit, product.name || '');
+                                renderTrackedSalesState();
+                                await addLineAjax({ autoScan: true, keepScanFocus: true, scannedUnits: [trackedUnit] });
+                            } catch (err) {
+                                console.error('Tracked sales scan error:', err);
+                                showToast('حدث خطأ أثناء قراءة كود التتبع.', 'danger');
+                            } finally {
+                                if (btnAddTrackedScan) btnAddTrackedScan.disabled = false;
+                            }
                         }
 
 
@@ -4826,7 +5328,7 @@
                      // =========================================================
                     // إضافة سطر (AJAX) — مع حماية من أخطاء الدوال غير المعرفة
                     // =========================================================
-                    async function addLineAjax() {
+                    async function addLineAjax(opts = {}) {
 
                         // 1) لازم يكون عندنا رقم فاتورة محفوظ
                         const invoiceIdInput = document.getElementById('InvoiceId'); // متغير: Hidden رقم الفاتورة
@@ -4891,7 +5393,7 @@
                             return;
                         }
 
-                        if (isExistingProduct) {
+                        if (isExistingProduct && !opts.autoScan) {
                             let okMerge = false;
                             if (typeof ERP !== 'undefined' && ERP.showConfirmModal) {
                                 okMerge = await ERP.showConfirmModal({
@@ -4921,7 +5423,15 @@
                             allowLoss: false,
 
                             batchNo: batchNo,
-                            expiryText: expiryText
+                            expiryText: expiryText,
+                            scannedUnits: (Array.isArray(opts.scannedUnits) ? opts.scannedUnits : trackedSalesState.units).map(x => ({
+                                rawScan: x.rawScan,
+                                uid: x.uid,
+                                gtin: x.gtin,
+                                serialNo: x.serialNo,
+                                batchNo: x.batchNo,
+                                expiryText: x.expiryText
+                            }))
                         };
 
                         // 5) استدعاء السيرفر
@@ -5054,6 +5564,9 @@
                             if (prodQtyInput) prodQtyInput.value = '';
                             if (prodBatchInput) prodBatchInput.value = '';
                             if (prodExpiryInput) prodExpiryInput.value = '';
+                            if (opts.autoScan || dto.scannedUnits.length > 0) {
+                                resetTrackedSalesState(true, true);
+                            }
 
              // =========================================================
             // 6.5) ✅ تحديث بيانات الصنف بعد الإضافة (منفصل عن تحديث الجدول)
@@ -5077,8 +5590,14 @@
                             // =========================================================
                             // 7) فوكس على اسم الصنف
                             // =========================================================
-                            document.getElementById('ProdNameInput')?.focus();
-                            document.getElementById('ProdNameInput')?.select?.();
+                            if (opts.keepScanFocus && prod2DScanInput) {
+                                prod2DScanInput.value = '';
+                                prod2DScanInput.focus();
+                                prod2DScanInput.select?.();
+                            } else {
+                                document.getElementById('ProdNameInput')?.focus();
+                                document.getElementById('ProdNameInput')?.select?.();
+                            }
 
                         } catch (err) {
                             // ✅ هنا هنطلع السبب الحقيقي بدل رسالة عامة
@@ -5096,6 +5615,36 @@
                         btnAddLine.addEventListener('click', function (e) {
                             e.preventDefault();
                             addLineAjax();
+                        });
+                    }
+
+                    if (btnAddTrackedScan && !btnAddTrackedScan.dataset.boundTrackedScan) {
+                        btnAddTrackedScan.dataset.boundTrackedScan = '1';
+                        btnAddTrackedScan.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            addTrackedSalesScan();
+                        });
+                    }
+
+                    if (btnClearTrackedScans && !btnClearTrackedScans.dataset.boundClearTrackedScans) {
+                        btnClearTrackedScans.dataset.boundClearTrackedScans = '1';
+                        btnClearTrackedScans.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            resetTrackedSalesState(false, true);
+                            if (prod2DScanInput) {
+                                prod2DScanInput.value = '';
+                                prod2DScanInput.focus();
+                            }
+                        });
+                    }
+
+                    if (prod2DScanInput && !prod2DScanInput.dataset.boundTrackedEnter) {
+                        prod2DScanInput.dataset.boundTrackedEnter = '1';
+                        prod2DScanInput.addEventListener('keydown', function (e) {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addTrackedSalesScan();
+                            }
                         });
                     }
 
@@ -5188,11 +5737,22 @@
                         // =========================================================
                         const btnProdMovement = document.getElementById('btnOpenProductMovement'); // متغير: زر حركة الصنف
                         const btnProdEdit     = document.getElementById('btnOpenProductEdit');     // متغير: زر تعديل بيانات الصنف
+                        const btnTrackingInfo = document.getElementById('btnOpenTrackingInfo');    // متغير: زر معلومات التتبع
 
                         function getCurrentProdId() {
                             if (prodHiddenId && prodHiddenId.value.trim() !== '') return prodHiddenId.value.trim();
                             if (prodCodeInput && prodCodeInput.value.trim() !== '') return prodCodeInput.value.trim();
                             return '';
+                        }
+
+                        function getSelectedSalesLineNo() {
+                            const row = document.querySelector('#PILinesTbody tr.erp-list-selectable-row.selected[data-line-no]');
+                            if (!row) return 0;
+                            return parseInt(row.getAttribute('data-line-no') || '0', 10) || 0;
+                        }
+
+                        function getCurrentSalesInvoiceId() {
+                            return parseInt((document.getElementById('SIId')?.value || '0'), 10) || 0;
                         }
 
                         function openTabFromFrame(url, tabId, title) {
@@ -5219,6 +5779,7 @@
 
                         const editBaseUrl     = '@Url.Action("Edit", "Products")'; // متغير: /Products/Edit
                         const movementBaseUrl = '@Url.Action("Show", "Products")'; // متغير: /Products/Show
+                        const trackingInfoBaseUrl = '@Url.Action("Index", "TrackTrace")';
 
                         function buildEditUrl(id) {
                             const base = editBaseUrl.replace(/\/$/, '');
@@ -5234,6 +5795,16 @@
                             params.set('frame', '1');
                             const sep = base.includes('?') ? '&' : '?';
                             return base + sep + params.toString();
+                        }
+
+                        function buildTrackingInfoUrl(siId, lineNo) {
+                            const params = new URLSearchParams();
+                            params.set('frame', '1');
+                            params.set('sourceType', 'sales-invoice');
+                            params.set('documentId', String(siId));
+                            params.set('lineNo', String(lineNo));
+                            const sep = trackingInfoBaseUrl.includes('?') ? '&' : '?';
+                            return trackingInfoBaseUrl + sep + params.toString();
                         }
 
                         if (btnProdEdit && !btnProdEdit.dataset.boundProdEdit) {
@@ -5267,6 +5838,26 @@
                                 }
 
                                 openTabFromFrame(buildMovementUrl(id), 'product-movement-tab', 'حركة الصنف');
+                            });
+                        }
+
+                        if (btnTrackingInfo && !btnTrackingInfo.dataset.boundTrackingInfo) {
+                            btnTrackingInfo.dataset.boundTrackingInfo = '1';
+                            btnTrackingInfo.addEventListener('click', function (e) {
+                                e.preventDefault();
+                                const siId = getCurrentSalesInvoiceId();
+                                if (!siId) {
+                                    if (typeof showToast === 'function') showToast('من فضلك احفظ الفاتورة أولاً قبل فتح معلومات التتبع.', 'warning');
+                                    else alert('من فضلك احفظ الفاتورة أولاً قبل فتح معلومات التتبع.');
+                                    return;
+                                }
+                                const lineNo = getSelectedSalesLineNo();
+                                if (!lineNo) {
+                                    if (typeof showToast === 'function') showToast('من فضلك اختر سطر تشغيلة من الجدول أولاً.', 'warning');
+                                    else alert('من فضلك اختر سطر تشغيلة من الجدول أولاً.');
+                                    return;
+                                }
+                                openTabFromFrame(buildTrackingInfoUrl(siId, lineNo), 'track-trace-info', 'معلومات التتبع');
                             });
                         }
 
@@ -5622,7 +6213,7 @@
                                         if (addCb) addCb.setAttribute('aria-expanded', 'true');
                                     }
                                     try {
-                                        addProductCard.style.scrollMarginTop = '12px';
+                                        addProductCard.style.scrollMarginTop = '84px';
                                     } catch (e) { /* ignore */ }
                                     addProductCard.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
                                 }
@@ -5660,6 +6251,39 @@
                         card.classList.toggle('invoice-card-collapsed');
                         const expanded = !card.classList.contains('invoice-card-collapsed');
                         collapseBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                    });
+
+                    document.addEventListener('click', function (ev) {
+                        const toggleBtn = ev.target.closest('#btnInvoiceHeaderExtraToggle');
+                        if (!toggleBtn) return;
+                        const extraSection = document.getElementById('invoiceHeaderExtraSection');
+                        if (!extraSection) return;
+                        ev.preventDefault();
+                        const willOpen = !extraSection.classList.contains('is-open');
+                        extraSection.classList.toggle('is-open', willOpen);
+                        toggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+                    });
+
+                    document.addEventListener('click', function (ev) {
+                        const toggleBtn = ev.target.closest('#btnSiProductExtraToggle');
+                        if (!toggleBtn) return;
+                        const extraSection = document.getElementById('siProductExtraSection');
+                        if (!extraSection) return;
+                        ev.preventDefault();
+                        const willOpen = !extraSection.classList.contains('is-open');
+                        extraSection.classList.toggle('is-open', willOpen);
+                        toggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+                    });
+
+                    document.addEventListener('click', function (ev) {
+                        const toggleBtn = ev.target.closest('#btnSiAddScanExtraToggle');
+                        if (!toggleBtn) return;
+                        const extraSection = document.getElementById('siAddScanExtraSection');
+                        if (!extraSection) return;
+                        ev.preventDefault();
+                        const willOpen = !extraSection.classList.contains('is-open');
+                        extraSection.classList.toggle('is-open', willOpen);
+                        toggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
                     });
 
 
@@ -6295,7 +6919,7 @@
                         // — نستدعيها بعد إضافة سطر حتى يختفي الصنف إذا استُنفد رصيده
                         function refreshProductsDatalist() {
                             const list = document.getElementById('productsList');
-                            if (list) list.innerHTML = ''; // تفريغ فوراً حتى لا يظهر أصناف قديمة قبل وصول الاستجابة
+                            if (list) list.innerHTML = '';
                             if (typeof closeProductDropdown === 'function') closeProductDropdown();
                             const chk = document.getElementById('chkIncludeZeroQty');
                             const warehouseId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
@@ -6322,46 +6946,12 @@
                                         opt.setAttribute('data-bonusgroup', p.bonusGroupName || '');
                                         listEl.appendChild(opt);
                                     });
-                                    // إذا «عرض الصفر» غير مفعّل والصنف الحالي غير موجود في القائمة الجديدة — مسح انبوت الصنف وتفاصيله
-                                    if (!includeZero) {
-                                        const currentId = (document.getElementById('ProdId')?.value || '').toString();
-                                        if (currentId && !productIds.includes(currentId)) {
-                                            document.getElementById('ProdId').value = '';
-                                            const nameInp = document.getElementById('ProdNameInput');
-                                            if (nameInp) nameInp.value = '';
-                                            const prodQtyWarehouse = document.getElementById('ProdQtyCurrentWarehouse');
-                                            const prodQtyAll = document.getElementById('ProdQtyAllWarehouses');
-                                            const prodWeightedDisc = document.getElementById('ProdWeightedDiscount');
-                                            const batchQueueBody = document.getElementById('BatchQueueBody');
-                                            const prodBatchSelect = document.getElementById('ProdBatchSelect');
-                                            const prodBatchSelectInRow = document.getElementById('ProdBatchSelectInRow');
-                                            if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
-                                            if (prodQtyAll) prodQtyAll.value = '0';
-                                            if (prodWeightedDisc) prodWeightedDisc.value = '0';
-                                            if (batchQueueBody) batchQueueBody.innerHTML = '<tr><td colspan="6" class="text-muted">لا توجد تشغيلات بعد.</td></tr>';
-                                            if (prodBatchSelect) { prodBatchSelect.innerHTML = ''; prodBatchSelect.appendChild(new Option('لا توجد تشغيلات', '', true, true)); }
-                                            if (prodBatchSelectInRow) { prodBatchSelectInRow.innerHTML = '<option value="">—</option>'; prodBatchSelectInRow.classList.add('d-none'); }
-                                            const probatchInputShow = document.getElementById('ProdBatchInput');
-                                            if (probatchInputShow) probatchInputShow.classList.remove('d-none');
-                                            const prodQtyInput = document.getElementById('ProdQtyInput');
-                                            const prodDisc1Input = document.getElementById('ProdDisc1Input');
-                                            const prodBatchInput = document.getElementById('ProdBatchInput');
-                                            const prodExpiryInput = document.getElementById('ProdExpiryInput');
-                                            const prodPriceInput = document.getElementById('ProdPriceInput');
-                                            if (prodQtyInput) prodQtyInput.value = '0';
-                                            if (prodDisc1Input) prodDisc1Input.value = '0';
-                                            if (prodBatchInput) prodBatchInput.value = '';
-                                            if (prodExpiryInput) prodExpiryInput.value = '';
-                                            if (prodPriceInput) prodPriceInput.value = '';
-                                        }
-                                    }
                                 })
                                 .catch(e => console.warn('refreshProductsDatalist:', e));
                         }
 
                         // تشيك بوكس "عرض الصفر" + تغيير المخزن: تحديث الداتاليست (ومسح الصنف إن لم يعد في القائمة)
                         document.addEventListener("DOMContentLoaded", function () {
-                            // عند فتح الصفحة: جلب قائمة الأصناف الحالية من الـ API لضمان عدم عرض أصناف قديمة أو بدون رصيد في المخزن الحالي
                             if (typeof refreshProductsDatalist === 'function') refreshProductsDatalist();
                             document.body.addEventListener('change', function (ev) {
                                 const chk = ev.target;
@@ -6529,8 +7119,9 @@
                             }
                         }
 
-                        // قالب رابط تصدير Excel (يُستبدل رقم العنصر النائب بـ NavCurrentId)
+                        // قالب روابط التصدير (يُستبدل رقم العنصر النائب بـ NavCurrentId)
                         var SI_EXPORT_EXCEL_URL_TEMPLATE = '@Html.Raw(Url.Action("ExportShowExcel", "SalesInvoices", new { id = 987654321 }))';
+                        var SI_EXPORT_PDF_URL_TEMPLATE = '@Html.Raw(Url.Action("Show", "SalesInvoices", new { id = 987654321, frame = 1, printPdf = 1 }))';
 
                         // =========================
                         // تحديث أزرار السايد بار بعد تحميل body
@@ -6655,16 +7246,27 @@
                                 btnEmptyReturn.setAttribute('aria-disabled', isEnabled ? 'false' : 'true');
                             }
 
+                            const exportWrap = document.getElementById('siExportDropdownWrap');
                             const btnExportSi = document.getElementById('btnExportSalesInvoiceExcel');
+                            const btnExportPdf = document.getElementById('btnExportSalesInvoicePdf');
                             if (btnExportSi && SI_EXPORT_EXCEL_URL_TEMPLATE) {
                                 if (currentId > 0) {
                                     btnExportSi.setAttribute('data-export-url', SI_EXPORT_EXCEL_URL_TEMPLATE.replace(/987654321/g, String(currentId)));
                                     btnExportSi.setAttribute('data-default-filename', 'SalesInvoice_' + currentId + '.xlsx');
-                                    btnExportSi.classList.remove('d-none');
-                                    btnExportSi.style.display = '';
+                                    if (btnExportPdf && SI_EXPORT_PDF_URL_TEMPLATE) {
+                                        btnExportPdf.setAttribute('href', SI_EXPORT_PDF_URL_TEMPLATE.replace(/987654321/g, String(currentId)));
+                                        btnExportPdf.setAttribute('target', '_blank');
+                                        btnExportPdf.setAttribute('rel', 'noopener');
+                                    }
+                                    if (exportWrap) {
+                                        exportWrap.classList.remove('d-none');
+                                        exportWrap.style.display = '';
+                                    }
                                 } else {
-                                    btnExportSi.classList.add('d-none');
-                                    btnExportSi.style.display = 'none';
+                                    if (exportWrap) {
+                                        exportWrap.classList.add('d-none');
+                                        exportWrap.style.display = 'none';
+                                    }
                                 }
                             }
 
@@ -6927,6 +7529,28 @@
                 let printing = false;
                 let printWrapperParent = null;
                 let printWrapperNext = null;
+                let printRegistrationBusy = false;
+
+                async function registerSalesInvoicePrint(invoiceId) {
+                    if (!invoiceId || invoiceId <= 0 || printRegistrationBusy) return;
+                    printRegistrationBusy = true;
+                    try {
+                        const token = getAntiForgeryToken();
+                        await fetch('@Url.Action("RegisterPrintJson", "SalesInvoices")', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'RequestVerificationToken': token
+                            },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({ invoiceId: invoiceId })
+                        });
+                    } catch (e) {
+                        console.warn('RegisterPrintJson failed:', e);
+                    } finally {
+                        printRegistrationBusy = false;
+                    }
+                }
 
                 function prepareSalesInvoicePrint() {
                     const printArea = document.getElementById("piPrintArea");
@@ -7047,6 +7671,8 @@
                         wrapper.classList.add("print-mode-1");
                     }
 
+                    registerSalesInvoicePrint(invoiceId);
+
                     // نقل منطقة الطباعة إلى body حتى تظهر (بدون ذلك الأب display:none يخفيها)
                     printWrapperParent = null;
                     printWrapperNext = null;
@@ -7067,6 +7693,22 @@
                         doPrint(mode);
                     });
                 });
+
+                (function autoOpenPdfPrintIfRequested() {
+                    try {
+                        const params = new URLSearchParams(window.location.search || "");
+                        if (params.get("printPdf") !== "1") return;
+                        if (window.__siAutoPdfPrintDone) return;
+                        window.__siAutoPdfPrintDone = true;
+
+                        const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
+                        document.title = invoiceId > 0 ? ("فاتورة مبيعات " + invoiceId) : "فاتورة مبيعات";
+
+                        setTimeout(function () {
+                            doPrint(1);
+                        }, 450);
+                    } catch { }
+                })();
 
                 window.addEventListener("afterprint", function () {
                     document.body.classList.remove("printing-invoice");

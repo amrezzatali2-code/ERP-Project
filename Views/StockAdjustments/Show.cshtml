@@ -535,6 +535,11 @@
                                 ✏️ تعديل الصنف
                             </button>
                         </div>
+                        <div>
+                            <button type="button" id="btnOpenTrackingInfo" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
+                                🧬 معلومات التتبع
+                            </button>
+                        </div>
 
                         @* طباعة — نفس نظام فاتورة المبيعات (قائمة منسدلة) *@
                         <div class="dropdown w-100 si-print-dropdown">
@@ -1102,10 +1107,12 @@
 
         // تحميل بيانات الصنف تلقائياً + ملء قائمة التشغيلات
         let busyLoadInfo = false;
+        let lastProductInfoKey = '';
         async function loadProductInfo() {
             const prodId = parseInt(document.getElementById('ProdId').value || '0', 10);
             const warehouseId = parseInt(document.querySelector('[name="WarehouseId"]')?.value || '0', 10);
             if (!prodId || prodId <= 0 || !warehouseId || warehouseId <= 0) {
+                lastProductInfoKey = '';
                 currentBatches = [];
                 var bl = document.getElementById('batchList');
                 if (bl) bl.innerHTML = '';
@@ -1123,6 +1130,9 @@
             busyLoadInfo = true;
             const batchNo = document.getElementById('BatchNoInput').value?.trim() || '';
             const expiry = getExpiryForApi();
+            const productInfoKey = String(prodId) + '|' + String(warehouseId);
+            const isContextChanged = productInfoKey !== lastProductInfoKey;
+            const shouldAutofillFirstBatch = !batchNo || isContextChanged;
             try {
                 const url = '@Url.Action("GetStockAdjustmentProductInfo", "StockAdjustments")'
                     + '?prodId=' + encodeURIComponent(prodId)
@@ -1149,9 +1159,12 @@
                             batchListEl.appendChild(opt);
                         });
                     }
-                    // عند تحميل صنف جديد نعيّن دائماً التشغيلة وتاريخ الصلاحية لأول تشغيلة له (حتى بعد تغيير الصنف بالاسم/الكود + Enter)
-                    document.getElementById('BatchNoInput').value = data.firstBatchNo ?? '';
-                    setExpiryFieldFromIso(data.firstExpiry || '');
+                    // التعيين التلقائي لأول تشغيلة يكون فقط عند تغيير الصنف/المخزن
+                    // أو عندما يكون حقل التشغيلة فارغاً. لا نطغى على إدخال المستخدم اليدوي.
+                    if (shouldAutofillFirstBatch) {
+                        document.getElementById('BatchNoInput').value = data.firstBatchNo ?? '';
+                        setExpiryFieldFromIso(data.firstExpiry || '');
+                    }
                     var batchToggle = document.getElementById('BatchDropdownToggle');
                     if (batchToggle) batchToggle.style.visibility = (currentBatches && currentBatches.length > 1) ? 'visible' : 'hidden';
                 } else {
@@ -1160,7 +1173,10 @@
                     if (bl) bl.innerHTML = '';
                 }
             } catch (e) { console.warn('GetStockAdjustmentProductInfo:', e); currentBatches = []; }
-            finally { busyLoadInfo = false; }
+            finally {
+                lastProductInfoKey = productInfoKey;
+                busyLoadInfo = false;
+            }
         }
 
         // عند اختيار أو كتابة التشغيلة: إن وافقت إحدى القائمة نملأ تاريخ الصلاحية أوتوماتيك ونحدّث الكمية قبل
@@ -1667,6 +1683,7 @@
 
         // دالة مسح حقول إضافة السطر وإعادة الفوكس لاسم الصنف (بعد إعادة تفعيل زر الإضافة حتى لا ينتقل التركيز للتشغيلة)
         function clearAddLineFormAndFocus() {
+            lastProductInfoKey = '';
             document.getElementById('ProdId').value = '';
             document.getElementById('ProdCodeInput').value = '';
             document.getElementById('ProdNameInput').value = '';
@@ -2282,6 +2299,7 @@
             }
             var editBaseUrl = '@Url.Action("Edit", "Products")';
             var movementBaseUrl = '@Url.Action("Show", "Products")';
+            var trackingInfoBaseUrl = '@Url.Action("Index", "TrackTrace")';
             function buildEditUrl(id) {
                 var base = editBaseUrl.replace(/\/$/, '');
                 return base + '/' + encodeURIComponent(id) + '?frame=1';
@@ -2290,8 +2308,18 @@
                 var sep = movementBaseUrl.indexOf('?') >= 0 ? '&' : '?';
                 return movementBaseUrl + sep + 'prodId=' + encodeURIComponent(id) + '&frame=1';
             }
+            function buildTrackingInfoUrl(adjustmentId, lineId) {
+                var params = new URLSearchParams();
+                params.set('frame', '1');
+                params.set('sourceType', 'stock-adjustment');
+                params.set('documentId', String(adjustmentId));
+                params.set('lineId', String(lineId));
+                var sep = trackingInfoBaseUrl.indexOf('?') >= 0 ? '&' : '?';
+                return trackingInfoBaseUrl + sep + params.toString();
+            }
             var btnEdit = document.getElementById('btnOpenProductEdit');
             var btnMovement = document.getElementById('btnOpenProductMovement');
+            var btnTracking = document.getElementById('btnOpenTrackingInfo');
             if (btnEdit && !btnEdit.dataset.boundEdit) {
                 btnEdit.dataset.boundEdit = '1';
                 btnEdit.addEventListener('click', function(e) {
@@ -2308,6 +2336,24 @@
                     var id = getCurrentProdId();
                     if (!id) { showToast('من فضلك اختر صنفاً أولاً.', 'warning'); document.getElementById('ProdNameInput')?.focus(); return; }
                     openTabFromFrame(buildMovementUrl(id), 'product-movement-tab', 'حركة الصنف');
+                });
+            }
+            if (btnTracking && !btnTracking.dataset.boundTracking) {
+                btnTracking.dataset.boundTracking = '1';
+                btnTracking.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    var adjustmentId = parseInt(document.getElementById('AdjustmentId')?.value || '0', 10) || 0;
+                    if (adjustmentId <= 0) {
+                        showToast('من فضلك احفظ التسوية أولاً قبل فتح معلومات التتبع.', 'warning');
+                        return;
+                    }
+                    var tr = document.querySelector('#AdjustmentLinesTbody tr[data-line-id].erp-sa-row-selected');
+                    var lineId = tr ? (parseInt(tr.getAttribute('data-line-id') || '0', 10) || 0) : 0;
+                    if (lineId <= 0) {
+                        showToast('من فضلك اختر سطراً من جدول التسوية أولاً.', 'warning');
+                        return;
+                    }
+                    openTabFromFrame(buildTrackingInfoUrl(adjustmentId, lineId), 'track-trace-info', 'معلومات التتبع');
                 });
             }
         })();

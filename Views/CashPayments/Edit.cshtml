@@ -75,7 +75,11 @@
             </div>
 
             <div class="card-footer d-flex justify-content-between">
-                <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
+                <a class="btn btn-secondary btn-sm open-same-tab"
+                   href="@Url.Action("Index", "CashPayments", new { frame = 1 })"
+                   data-tab-id="cash-payments"
+                   data-tab-title="قائمة أذون دفع نقدية"
+                   data-url="@Url.Action("Index", "CashPayments", new { frame = 1 })">عودة للقائمة</a>
                 <button type="submit" class="btn btn-primary btn-sm">حفظ التعديلات</button>
             </div>
         </div>

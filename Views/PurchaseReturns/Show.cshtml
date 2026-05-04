@@ -372,6 +372,10 @@
                             📊 حركة الصنف
                         </button>
 
+                        <button type="button" id="btnOpenTrackingInfo" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100" title="يعرض العبوات المتتبعة المرتبطة بالسطر المحدد">
+                            🧬 معلومات التتبع
+                        </button>
+
                         <a href="#"
                            id="btnCustomerEngagement"
                            class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab w-100 text-decoration-none"
@@ -1699,6 +1703,23 @@
                 return '';
             }
 
+            function getSelectedPurchaseReturnLineNo() {
+                var tbody = document.getElementById('PurchaseReturnLinesTableBody');
+                var sel = tbody && tbody.querySelector('tr.erp-list-selectable-row.selected');
+                return sel ? (parseInt(sel.getAttribute('data-line-no') || '0', 10) || 0) : 0;
+            }
+
+            function buildPurchaseReturnTrackingUrl(pretId, lineNo) {
+                var params = new URLSearchParams();
+                params.set('frame', '1');
+                params.set('sourceType', 'purchase-return');
+                params.set('documentId', String(pretId));
+                params.set('lineNo', String(lineNo));
+                var base = '@Url.Action("Index", "TrackTrace")';
+                var sep = base.indexOf('?') >= 0 ? '&' : '?';
+                return base + sep + params.toString();
+            }
+
             var btnProdMove = document.getElementById('btnOpenProductMovement');
             if (btnProdMove && !btnProdMove.dataset.boundPrMove) {
                 btnProdMove.dataset.boundPrMove = '1';
@@ -1712,6 +1733,25 @@
                         return;
                     }
                     openPrTabFromFrame(buildPrMovementUrl(id), 'product-movement-tab', 'حركة الصنف');
+                });
+            }
+
+            var btnTracking = document.getElementById('btnOpenTrackingInfo');
+            if (btnTracking && !btnTracking.dataset.boundPrTracking) {
+                btnTracking.dataset.boundPrTracking = '1';
+                btnTracking.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    var pretId = parseInt(document.getElementById('PRetId')?.value || '0', 10) || 0;
+                    if (pretId <= 0) {
+                        showToast('من فضلك احفظ المرتجع أولاً قبل فتح معلومات التتبع.', 'warning');
+                        return;
+                    }
+                    var lineNo = getSelectedPurchaseReturnLineNo();
+                    if (lineNo <= 0) {
+                        showToast('من فضلك اختر سطراً من جدول المرتجع أولاً.', 'warning');
+                        return;
+                    }
+                    openPrTabFromFrame(buildPurchaseReturnTrackingUrl(pretId, lineNo), 'track-trace-info', 'معلومات التتبع');
                 });
             }
 

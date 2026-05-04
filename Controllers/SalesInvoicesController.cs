@@ -34,6 +34,8 @@ namespace ERP.Controllers
         private readonly IListVisibilityService _listVisibilityService;
         private readonly IUserAccountVisibilityService _accountVisibilityService;
         private readonly SalesFifoCostRepairService _fifoCostRepairService;
+        private readonly SalesInvoiceMissingStockRepairService _missingStockRepairService;
+        private readonly IGs1DataMatrixParser _gs1DataMatrixParser;
 
         // مصفوفة طرق الدفع الثابتة لعرضها في الفورم
         private static readonly string[] PaymentMethods = new[] { "نقدي", "شبكة", "آجل", "مختلط" };
@@ -49,7 +51,9 @@ namespace ERP.Controllers
                                         IPermissionService permissionService,
                                         IListVisibilityService listVisibilityService,
                                         IUserAccountVisibilityService accountVisibilityService,
-                                        SalesFifoCostRepairService fifoCostRepairService)
+                                        SalesFifoCostRepairService fifoCostRepairService,
+                                        SalesInvoiceMissingStockRepairService missingStockRepairService,
+                                        IGs1DataMatrixParser? gs1DataMatrixParser = null)
 
         {
             _context = context;
@@ -62,6 +66,8 @@ namespace ERP.Controllers
             _listVisibilityService = listVisibilityService ?? throw new ArgumentNullException(nameof(listVisibilityService));
             _accountVisibilityService = accountVisibilityService ?? throw new ArgumentNullException(nameof(accountVisibilityService));
             _fifoCostRepairService = fifoCostRepairService ?? throw new ArgumentNullException(nameof(fifoCostRepairService));
+            _missingStockRepairService = missingStockRepairService ?? throw new ArgumentNullException(nameof(missingStockRepairService));
+            _gs1DataMatrixParser = gs1DataMatrixParser ?? new Gs1DataMatrixParser();
         }
 
 
@@ -84,6 +90,7 @@ namespace ERP.Controllers
             // (1) تحميل كل العملاء من جدول Customers + بياناتهم + سياسة العميل
             // =========================================================
             // ✅ عرض كل العملاء (نشطين وموقوفين) — العميل الموقوف يظهر مع رسالة تمنع الحفظ
+            var nowForCredit = DateTime.Now;
             var customers = await customerBaseQuery
                 .Include(c => c.Governorate)
                 .Include(c => c.District)
@@ -105,7 +112,13 @@ namespace ERP.Controllers
                     Area = c.Area != null
                         ? c.Area.AreaName
                         : string.Empty,
-                    Credit = c.CreditLimit,
+                    Credit = c.CreditLimit
+                        + ((c.CreditLimitTemporaryIncrease.HasValue
+                            && c.CreditLimitTemporaryIncrease.Value > 0
+                            && c.CreditLimitTemporaryUntil.HasValue
+                            && c.CreditLimitTemporaryUntil.Value > nowForCredit)
+                            ? c.CreditLimitTemporaryIncrease.Value
+                            : 0m),
                     CurrentBalance = c.CurrentBalance,
                     PolicyId = c.PolicyId,
                     PolicyName = c.Policy != null ? c.Policy.Name : "",
@@ -132,7 +145,13 @@ namespace ERP.Controllers
                         Gov = c.Governorate != null ? c.Governorate.GovernorateName : string.Empty,
                         District = c.District != null ? c.District.DistrictName : string.Empty,
                         Area = c.Area != null ? c.Area.AreaName : string.Empty,
-                        Credit = c.CreditLimit,
+                        Credit = c.CreditLimit
+                            + ((c.CreditLimitTemporaryIncrease.HasValue
+                                && c.CreditLimitTemporaryIncrease.Value > 0
+                                && c.CreditLimitTemporaryUntil.HasValue
+                                && c.CreditLimitTemporaryUntil.Value > nowForCredit)
+                                ? c.CreditLimitTemporaryIncrease.Value
+                                : 0m),
                         CurrentBalance = c.CurrentBalance,
                         PolicyId = c.PolicyId,
                         PolicyName = c.Policy != null ? c.Policy.Name : "",
@@ -201,7 +220,7 @@ namespace ERP.Controllers
             if (creatorNames.Count == 0)
                 return query.Where(_ => false);
 
-            return query.Where(si => si.CreatedBy != null && creatorNames.Contains(si.CreatedBy.Trim()));
+            return query.Where(si => si.CreatedBy != null && creatorNames.Contains(si.CreatedBy));
         }
 
         /// <summary>
@@ -341,13 +360,17 @@ namespace ERP.Controllers
             {
                 decimal invoiceNet = existing.Lines.Sum(l => l.LineNetTotal);
                 var newCust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == dto.CustomerId);
-                if (newCust != null && newCust.CreditLimit > 0)
+                if (newCust != null)
                 {
-                    decimal newDebit = newCust.CurrentBalance + invoiceNet;
-                    if (newDebit > newCust.CreditLimit)
+                    decimal effectiveLimit = CustomerCreditLimitCalculator.GetEffectiveCreditLimit(newCust, DateTime.Now);
+                    if (effectiveLimit > 0m)
                     {
-                        decimal remaining = Math.Max(0, newCust.CreditLimit - newCust.CurrentBalance);
-                        return BadRequest(new { ok = false, message = $"هذا العميل متخطى الحد الائتماني. المبلغ المتبقي له: {remaining:N2} جنيه." });
+                        decimal newDebit = newCust.CurrentBalance + invoiceNet;
+                        if (newDebit > effectiveLimit)
+                        {
+                            decimal remaining = Math.Max(0, effectiveLimit - newCust.CurrentBalance);
+                            return BadRequest(new { ok = false, message = $"هذا العميل متخطى الحد الائتماني. المبلغ المتبقي له: {remaining:N2} جنيه." });
+                        }
                     }
                 }
             }
@@ -853,6 +876,93 @@ namespace ERP.Controllers
             public string? BatchNo { get; set; }          // متغير: رقم التشغيلة (جاية من الواجهة)
             public string? expiryText { get; set; }       // متغير: الصلاحية كنص MM/YYYY أو yyyy-MM-dd حسب الواجهة
             public bool allowLoss { get; set; }           // متغير: موافقة المستخدم الصريحة على البيع بخسارة
+            public List<TrackedSalesUnitDto>? scannedUnits { get; set; } // متغير: عبوات ممسوحة اختياريًا
+        }
+
+        public class TrackedSalesUnitDto
+        {
+            public string? RawScan { get; set; }
+            public string? Uid { get; set; }
+            public string? Gtin { get; set; }
+            public string? SerialNo { get; set; }
+            public string? BatchNo { get; set; }
+            public string? expiryText { get; set; }
+            public DateTime? Expiry { get; set; }
+        }
+
+        public class ParseTrackedSalesScanDto
+        {
+            public string? RawScan { get; set; }
+            public int WarehouseId { get; set; }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ParseTrackedSalesScanJson([FromBody] ParseTrackedSalesScanDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.RawScan))
+                return BadRequest(new { ok = false, message = "لم يتم إرسال كود SCAN." });
+
+            if (dto.WarehouseId <= 0)
+                return BadRequest(new { ok = false, message = "يجب اختيار مخزن قبل استخدام SCAN التتبع." });
+
+            var parsed = _gs1DataMatrixParser.Parse(dto.RawScan);
+            if (!parsed.IsValid)
+                return BadRequest(new { ok = false, message = "تعذر قراءة كود 2D. تأكد من أن الكود من نوع GS1 DataMatrix." });
+
+            var gtin = NormalizeNullable(parsed.Gtin);
+            if (string.IsNullOrWhiteSpace(gtin))
+                return BadRequest(new { ok = false, message = "الكود الممسوح لا يحتوي على GTIN يمكن ربطه بصنف." });
+
+            var product = await FindProductByTrackingCodeAsync(gtin);
+            if (product == null)
+                return BadRequest(new { ok = false, message = $"لم يتم العثور على صنف يطابق GTIN {gtin}." });
+
+            var uid = BuildTrackedUid(gtin, parsed.SerialNo, parsed.Cleaned);
+            var normalizedBatch = NormalizeNullable(parsed.BatchNo);
+            var parsedExpiry = parsed.Expiry?.Date;
+
+            var itemUnit = await _context.ItemUnits
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.WarehouseId == dto.WarehouseId &&
+                    x.ProdId == product.ProdId &&
+                    x.Uid == uid &&
+                    x.Status == "InStock");
+
+            if (itemUnit == null)
+            {
+                return BadRequest(new
+                {
+                    ok = false,
+                    message = "هذه العبوة غير متاحة للبيع من هذا المخزن، أو لم تُسجل بالتتبع في المخزون بعد."
+                });
+            }
+
+            var expiryText = (itemUnit.Expiry ?? parsedExpiry)?.ToString("MM/yyyy");
+
+            return Json(new
+            {
+                ok = true,
+                product = new
+                {
+                    id = product.ProdId,
+                    code = product.ProdId.ToString(),
+                    name = product.ProdName ?? string.Empty,
+                    priceRetail = product.PriceRetail,
+                    barcode = product.Barcode,
+                    isTrackTraceEnabled = product.IsTrackTraceEnabled
+                },
+                scan = new
+                {
+                    rawScan = dto.RawScan,
+                    uid,
+                    gtin,
+                    serialNo = NormalizeNullable(parsed.SerialNo) ?? itemUnit.SerialNo,
+                    batchNo = itemUnit.BatchNo ?? normalizedBatch,
+                    expiryText
+                }
+            });
         }
 
         private DateTime? ParseExpiryText(string? expiryText)
@@ -948,6 +1058,8 @@ namespace ERP.Controllers
                 if (validationMessage != null)
                     return BadRequest(new { ok = false, message = validationMessage });
 
+                var normalizedTrackedUnits = NormalizeTrackedSalesUnits(dto.scannedUnits);
+
                 // =========================
                 // 0.1) تنظيف خصم البيع (Disc1)
                 // =========================
@@ -976,6 +1088,68 @@ namespace ERP.Controllers
                         return BadRequest(new { ok = false, message = invoiceErr });
                     }
                     return BadRequest(new { ok = false, message = invoiceErr });
+                }
+
+                List<ItemUnit> trackedInventoryUnits = new();
+                if (normalizedTrackedUnits.Count > 0)
+                {
+                    if (normalizedTrackedUnits.Count != dto.qty)
+                        return BadRequest(new { ok = false, message = "عدد العبوات الممسوحة يجب أن يساوي كمية السطر في البيع التتبعي." });
+
+                    var duplicateUid = normalizedTrackedUnits
+                        .Select(x => x.Uid)
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .GroupBy(x => x!, StringComparer.OrdinalIgnoreCase)
+                        .FirstOrDefault(g => g.Count() > 1);
+
+                    if (duplicateUid != null)
+                        return BadRequest(new { ok = false, message = $"تم تكرار نفس العبوة في السطر: {duplicateUid.Key}" });
+
+                    var trackedUids = normalizedTrackedUnits
+                        .Select(x => x.Uid!)
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    trackedInventoryUnits = await _context.ItemUnits
+                        .Where(x => trackedUids.Contains(x.Uid))
+                        .ToListAsync();
+
+                    if (trackedInventoryUnits.Count != trackedUids.Count)
+                        return BadRequest(new { ok = false, message = "بعض العبوات الممسوحة غير موجودة في نظام التتبع." });
+
+                    if (trackedInventoryUnits.Any(x => x.WarehouseId != invoice.WarehouseId))
+                        return BadRequest(new { ok = false, message = "بعض العبوات الممسوحة موجودة في مخزن آخر." });
+
+                    if (trackedInventoryUnits.Any(x => x.ProdId != dto.prodId))
+                        return BadRequest(new { ok = false, message = "العبوات الممسوحة لا تطابق الصنف الحالي." });
+
+                    if (trackedInventoryUnits.Any(x => !string.Equals(x.Status, "InStock", StringComparison.OrdinalIgnoreCase)))
+                        return BadRequest(new { ok = false, message = "بعض العبوات الممسوحة ليست متاحة للبيع حاليًا." });
+
+                    var trackedBatchValues = trackedInventoryUnits
+                        .Select(x => NormalizeNullable(x.BatchNo))
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    if (trackedBatchValues.Count > 1)
+                        return BadRequest(new { ok = false, message = "لا يمكن بيع عبوات من أكثر من تشغيلة في نفس السطر." });
+
+                    var trackedExpiryValues = trackedInventoryUnits
+                        .Select(x => x.Expiry?.Date)
+                        .Where(x => x.HasValue)
+                        .Distinct()
+                        .ToList();
+
+                    if (trackedExpiryValues.Count > 1)
+                        return BadRequest(new { ok = false, message = "لا يمكن بيع عبوات من أكثر من صلاحية في نفس السطر." });
+
+                    if (string.IsNullOrWhiteSpace(startBatchNo) && trackedBatchValues.Count == 1)
+                        startBatchNo = trackedBatchValues[0];
+
+                    if (!expDate.HasValue && trackedExpiryValues.Count == 1)
+                        expDate = trackedExpiryValues[0]?.Date;
                 }
 
                 // =========================
@@ -1057,6 +1231,7 @@ namespace ERP.Controllers
 
                 // متغير: قائمة segments (كل segment = تشغيلة + كمية ستباع منها)
                 var segments = new List<(string BatchNo, DateTime Expiry, int Qty)>();
+                var trackedLineMappings = new List<(int LineNo, string BatchNo, DateTime Expiry)>();
 
                 // دالة محلية: قراءة المتاح من StockBatches لتشغيلة محددة
                 async Task<int> GetOnHandAsync(string bno, DateTime exp)
@@ -1488,6 +1663,50 @@ namespace ERP.Controllers
 
                     // حفظ تأثير هذا الجزء قبل الانتقال للجزء التالي
                     await _context.SaveChangesAsync();
+                    trackedLineMappings.Add((affectedLine.LineNo, batchNo, expiry.Date));
+                }
+
+                if (trackedInventoryUnits.Count > 0)
+                {
+                    foreach (var itemUnit in trackedInventoryUnits)
+                    {
+                        var itemBatch = NormalizeNullable(itemUnit.BatchNo) ?? string.Empty;
+                        var itemExpiry = itemUnit.Expiry?.Date;
+
+                        var lineMap = trackedLineMappings.FirstOrDefault(x =>
+                            string.Equals(x.BatchNo ?? string.Empty, itemBatch, StringComparison.OrdinalIgnoreCase) &&
+                            x.Expiry.Date == (itemExpiry ?? x.Expiry.Date));
+
+                        if (lineMap.LineNo <= 0)
+                        {
+                            await tx.RollbackAsync();
+                            return BadRequest(new { ok = false, message = $"تعذر ربط العبوة {itemUnit.Uid} بسطر البيع المناسب." });
+                        }
+
+                        itemUnit.Status = "Sold";
+                        itemUnit.CurrentSourceType = "Sales";
+                        itemUnit.CurrentSourceId = invoice.SIId;
+                        itemUnit.CurrentSourceLineNo = lineMap.LineNo;
+                        itemUnit.UpdatedAt = DateTime.UtcNow;
+
+                        var hasLink = await _context.SalesInvoiceLineUnits.AnyAsync(x =>
+                            x.SIId == invoice.SIId &&
+                            x.LineNo == lineMap.LineNo &&
+                            x.ItemUnitId == itemUnit.Id);
+
+                        if (!hasLink)
+                        {
+                            _context.SalesInvoiceLineUnits.Add(new SalesInvoiceLineUnit
+                            {
+                                SIId = invoice.SIId,
+                                LineNo = lineMap.LineNo,
+                                ItemUnitId = itemUnit.Id,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
                 }
 
                 // =========================
@@ -1521,19 +1740,23 @@ namespace ERP.Controllers
                 if (invoice.CustomerId > 0)
                 {
                     var cust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == invoice.CustomerId);
-                    if (cust != null && cust.CreditLimit > 0)
+                    if (cust != null)
                     {
-                        decimal currentBalance = cust.CurrentBalance;
-                        decimal newDebit = currentBalance + netTotal;
-                        if (newDebit > cust.CreditLimit)
+                        decimal effectiveLimit = CustomerCreditLimitCalculator.GetEffectiveCreditLimit(cust, DateTime.Now);
+                        if (effectiveLimit > 0m)
                         {
-                            decimal remaining = Math.Max(0, cust.CreditLimit - currentBalance);
-                            await tx.RollbackAsync();
-                            return BadRequest(new
+                            decimal currentBalance = cust.CurrentBalance;
+                            decimal newDebit = currentBalance + netTotal;
+                            if (newDebit > effectiveLimit)
                             {
-                                ok = false,
-                                message = $"هذا العميل متخطى الحد الائتماني. المبلغ المتبقي له: {remaining:N2} جنيه."
-                            });
+                                decimal remaining = Math.Max(0, effectiveLimit - currentBalance);
+                                await tx.RollbackAsync();
+                                return BadRequest(new
+                                {
+                                    ok = false,
+                                    message = $"هذا العميل متخطى الحد الائتماني. المبلغ المتبقي له: {remaining:N2} جنيه."
+                                });
+                            }
                         }
                     }
                 }
@@ -1625,6 +1848,96 @@ namespace ERP.Controllers
                 await tx.RollbackAsync();
                 return BadRequest(new { ok = false, message = ex.Message });
             }
+        }
+
+        private async Task<Product?> FindProductByTrackingCodeAsync(string gtin)
+        {
+            var normalized = NormalizeTrackingCode(gtin);
+            if (string.IsNullOrWhiteSpace(normalized))
+                return null;
+
+            var variants = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { normalized };
+            var trimmed = normalized.TrimStart('0');
+            if (!string.IsNullOrWhiteSpace(trimmed))
+                variants.Add(trimmed);
+            if (!normalized.StartsWith("0", StringComparison.Ordinal) && normalized.Length == 13)
+                variants.Add("0" + normalized);
+            var variantList = variants.ToList();
+
+            return await _context.Products
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Barcode != null && variantList.Contains(p.Barcode));
+        }
+
+        private static string NormalizeTrackingCode(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            return new string(value.Trim().Where(char.IsLetterOrDigit).ToArray());
+        }
+
+        private static string? NormalizeNullable(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        private static string BuildTrackedUid(string? gtin, string? serialNo, string? fallbackRaw)
+        {
+            var normalizedGtin = NormalizeNullable(gtin);
+            var normalizedSerial = NormalizeNullable(serialNo);
+            if (!string.IsNullOrWhiteSpace(normalizedGtin) && !string.IsNullOrWhiteSpace(normalizedSerial))
+                return $"{normalizedGtin}:{normalizedSerial}";
+
+            if (!string.IsNullOrWhiteSpace(normalizedSerial))
+                return normalizedSerial;
+
+            if (!string.IsNullOrWhiteSpace(normalizedGtin))
+                return normalizedGtin;
+
+            return NormalizeNullable(fallbackRaw) ?? Guid.NewGuid().ToString("N");
+        }
+
+        private static DateTime? ParseTrackedExpiryText(string? expiryText)
+        {
+            if (string.IsNullOrWhiteSpace(expiryText))
+                return null;
+
+            var value = expiryText.Trim();
+            if (DateTime.TryParseExact(value, "MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var mmYyyy))
+                return new DateTime(mmYyyy.Year, mmYyyy.Month, 1);
+
+            if (DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var iso))
+                return iso.Date;
+
+            return null;
+        }
+
+        private static List<TrackedSalesUnitDto> NormalizeTrackedSalesUnits(List<TrackedSalesUnitDto>? scannedUnits)
+        {
+            var result = new List<TrackedSalesUnitDto>();
+            if (scannedUnits == null || scannedUnits.Count == 0)
+                return result;
+
+            foreach (var unit in scannedUnits)
+            {
+                if (unit == null)
+                    continue;
+
+                var uid = BuildTrackedUid(unit.Gtin, unit.SerialNo, unit.Uid ?? unit.RawScan);
+                result.Add(new TrackedSalesUnitDto
+                {
+                    RawScan = NormalizeNullable(unit.RawScan),
+                    Uid = uid,
+                    Gtin = NormalizeNullable(unit.Gtin),
+                    SerialNo = NormalizeNullable(unit.SerialNo),
+                    BatchNo = NormalizeNullable(unit.BatchNo),
+                    Expiry = ParseTrackedExpiryText(unit.expiryText)?.Date,
+                    expiryText = ParseTrackedExpiryText(unit.expiryText)?.ToString("yyyy-MM-dd")
+                });
+            }
+
+            return result;
         }
 
 
@@ -2374,6 +2687,27 @@ namespace ERP.Controllers
                 }
 
                 // ================================
+                // 2.1) حماية: لا نفتح فاتورة قديمة مكسورة مخزنيًا قبل إصلاحها
+                // ================================
+                if (await _missingStockRepairService.HasMissingSalesOutLedgersAsync(invoice.SIId))
+                {
+                    var repairMessage = "هذه الفاتورة مُرحّلة محاسبيًا لكن لا تحتوي على حركة مخزون بيع. أصلح حركة المخزون أولًا أو احذف الفاتورة إذا كانت تجريبية.";
+                    if (isAjax)
+                    {
+                        return BadRequest(new
+                        {
+                            ok = false,
+                            needsStockRepair = true,
+                            invoiceId = invoice.SIId,
+                            message = repairMessage
+                        });
+                    }
+
+                    TempData["Error"] = repairMessage;
+                    return RedirectToAction("Show", new { id = invoice.SIId });
+                }
+
+                // ================================
                 // 2.5) الفتح مسموح حتى لو وُجد مرتجع (كامل أو جزئي). منع الحذف يكون على مستوى السطر في RemoveLineJson إن وُجد مرتجع مرتبط به.
                 // ================================
 
@@ -2971,6 +3305,124 @@ namespace ERP.Controllers
             return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", asciiFileName);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> ExportShowCsv(int id, string? format = "csv")
+        {
+            if (id <= 0)
+                return new ContentResult
+                {
+                    StatusCode = 400,
+                    Content = "رقم الفاتورة غير صالح.",
+                    ContentType = "text/plain; charset=utf-8"
+                };
+
+            if (!await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Show")))
+            {
+                return new ContentResult
+                {
+                    StatusCode = 403,
+                    Content = "ليس لديك صلاحية تصدير فاتورة المبيعات.",
+                    ContentType = "text/plain; charset=utf-8"
+                };
+            }
+
+            var invoice = await _context.SalesInvoices
+                .Include(s => s.Customer)
+                .Include(s => s.Warehouse)
+                .Include(s => s.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.SIId == id);
+
+            if (invoice == null)
+                return new ContentResult
+                {
+                    StatusCode = 404,
+                    Content = "الفاتورة غير موجودة.",
+                    ContentType = "text/plain; charset=utf-8"
+                };
+
+            static string CsvEscape(string? value)
+            {
+                if (string.IsNullOrEmpty(value)) return "";
+                if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+                    return "\"" + value.Replace("\"", "\"\"") + "\"";
+                return value;
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("نوع السجل,رقم الفاتورة,تاريخ الفاتورة,العميل,المخزن,رقم الصنف,اسم الصنف,الكمية,سعر الجمهور,خصم البيع,قيمة السطر,الإجمالي");
+            sb.AppendLine(string.Join(",",
+                CsvEscape("رأس الفاتورة"),
+                CsvEscape(invoice.SIId.ToString()),
+                CsvEscape(invoice.SIDate.ToString("yyyy-MM-dd")),
+                CsvEscape(invoice.Customer?.CustomerName ?? ""),
+                CsvEscape(invoice.Warehouse?.WarehouseName ?? ""),
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                CsvEscape(invoice.NetTotal.ToString("N2"))));
+
+            foreach (var line in invoice.Lines.OrderBy(l => l.LineNo))
+            {
+                sb.AppendLine(string.Join(",",
+                    CsvEscape("سطر"),
+                    CsvEscape(invoice.SIId.ToString()),
+                    CsvEscape(invoice.SIDate.ToString("yyyy-MM-dd")),
+                    CsvEscape(invoice.Customer?.CustomerName ?? ""),
+                    CsvEscape(invoice.Warehouse?.WarehouseName ?? ""),
+                    CsvEscape(line.ProdId.ToString()),
+                    CsvEscape(line.Product?.ProdName ?? ""),
+                    CsvEscape(line.Qty.ToString("N2")),
+                    CsvEscape(line.PriceRetail.ToString("N2")),
+                    CsvEscape(line.Disc1Percent.ToString("N2")),
+                    CsvEscape(line.LineNetTotal.ToString("N2")),
+                    CsvEscape(invoice.NetTotal.ToString("N2"))));
+            }
+
+            var utf8Bom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+            var bytes = utf8Bom.GetBytes(sb.ToString());
+            var normalizedFormat = (format ?? "csv").Trim().ToLowerInvariant();
+            var extension = normalizedFormat == "pdf" ? ".pdf" : ".csv";
+            var fileName = $"SalesInvoice_{id}_{DateTime.Now:yyyyMMdd_HHmmss}{extension}";
+
+            return File(bytes, "text/csv; charset=utf-8", fileName);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RegisterPrintJson([FromBody] RegisterSalesInvoicePrintDto dto)
+        {
+            if (dto == null || dto.InvoiceId <= 0)
+                return BadRequest(new { ok = false, message = "رقم الفاتورة غير صالح." });
+
+            var invoice = await _context.SalesInvoices.FirstOrDefaultAsync(s => s.SIId == dto.InvoiceId);
+            if (invoice == null)
+                return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+
+            invoice.PrintCount = Math.Max(0, invoice.PrintCount) + 1;
+            invoice.LastPrintedAt = DateTime.Now;
+            invoice.UpdatedAt = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+
+            return Json(new
+            {
+                ok = true,
+                printCount = invoice.PrintCount,
+                isPrinted = invoice.PrintCount > 0,
+                lastPrintedAt = invoice.LastPrintedAt
+            });
+        }
+
+        public sealed class RegisterSalesInvoicePrintDto
+        {
+            public int InvoiceId { get; set; }
+        }
+
         /// <summary>
         /// دالة مساعدة: تجهيز بيانات التنقل (أول/سابق/التالي/آخر) لفاتورة المبيعات.
         /// </summary>
@@ -3360,8 +3812,11 @@ namespace ERP.Controllers
                     query = query.Where(si => si.CreatedBy != null && vals.Contains(si.CreatedBy));
             }
 
-            // إجمالي الصافي والعدد قبل OrderBy — تجنب SQL غير صالح مع Sum/Count على استعلام مرتب (EF + SQL Server)
-            decimal totalNet = await query.SumAsync(si => (decimal?)si.NetTotal) ?? 0m;
+            // إجمالي الصافي يُحسب فقط عند تفعيل ملخصات القوائم؛ العدّ مطلوب دائماً للترقيم.
+            var showListSummaries = HttpContext.Items["ShowListSummaries"] is bool sls ? sls : true;
+            decimal totalNet = showListSummaries
+                ? (await query.SumAsync(si => (decimal?)si.NetTotal) ?? 0m)
+                : 0m;
             int totalCount = await query.CountAsync();
 
             // 2) تطبيق الترتيب ثم الترقيم
@@ -4650,6 +5105,33 @@ namespace ERP.Controllers
                 $"إصلاح تكلفة FIFO: تم تحديث {r.Fixed} حركة. تخطي (خرائط FIFO موجودة مسبقاً): {r.SkippedHadFifoMap}. لم يُصلح (لا رصيد كافٍ أو تكلفة صفر): {r.SkippedStillZero}. أخطاء: {r.Errors}.";
             if (r.Messages.Count > 0)
                 TempData["Warning"] = string.Join(" | ", r.Messages.Take(15));
+            return RedirectToAction(nameof(Index));
+        }
+
+        /// <summary>
+        /// إصلاح الفواتير القديمة التي تم ترحيلها بدون إنشاء حركة مخزون بيع.
+        /// لو تم تمرير id يتم إصلاح فاتورة واحدة، وإلا يُفحص كل النظام.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("SalesInvoices.Edit")]
+        public async Task<IActionResult> RepairMissingStockMovements(int? id, System.Threading.CancellationToken cancellationToken)
+        {
+            var r = await _missingStockRepairService.RepairMissingSalesOutLedgersAsync(id, cancellationToken);
+
+            TempData["Success"] =
+                $"إصلاح حركة المخزون الناقصة: تم إصلاح {r.Fixed} فاتورة. " +
+                $"سليم/متخطى: {r.SkippedAlreadyHealthy}. " +
+                $"غير موجود: {r.SkippedNotFound}. " +
+                $"حركة جزئية تحتاج مراجعة: {r.SkippedPartialLedger}. " +
+                $"أخطاء: {r.Errors}.";
+
+            if (r.Messages.Count > 0)
+                TempData["Warning"] = string.Join(" | ", r.Messages.Take(15));
+
+            if (id.HasValue)
+                return RedirectToAction(nameof(Show), new { id = id.Value });
+
             return RedirectToAction(nameof(Index));
         }
 

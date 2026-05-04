@@ -383,6 +383,13 @@
                             🗑️ مسح كل أصناف المرتجع
                         </button>
 
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100"
+                                id="btnOpenTrackingInfo"
+                                title="يعرض العبوات المتتبعة المرتبطة بالسطر المحدد">
+                            🧬 معلومات التتبع
+                        </button>
+
                         @if (Model?.SRId > 0)
                         {
                             <a href="@Url.Action("ExportShowExcel", "SalesReturns", new { id = Model.SRId })" target="_blank" rel="noopener" class="btn btn-erp btn-erp-success btn-erp-sm w-100 text-decoration-none">📥 تصدير Excel</a>
@@ -459,7 +466,9 @@
                                 <label class="form-label form-label-sm">كود العميل</label>
                                 <input id="CustomerCodeDisplay"
                                        class="form-control form-control-sm text-center invoice-small-input"
-                                       readonly />
+                                       inputmode="numeric"
+                                       placeholder="كود العميل"
+                                       data-lock-posted="1" />
                                 <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                 <input type="hidden" id="SRId" value="@Model.SRId" />
                                 <input type="hidden" id="ReturnCreatedByDisplay" value="@Model.CreatedBy" />
@@ -923,6 +932,16 @@
                     }
                 }
 
+                var standaloneMode = (typeof isStandaloneMode === 'function' && isStandaloneMode());
+                if (standaloneMode) {
+                    var custCode = document.getElementById('CustomerCodeDisplay');
+                    if (custCode) {
+                        custCode.focus();
+                        if (typeof custCode.select === 'function') custCode.select();
+                        return;
+                    }
+                }
+
                 var custName = document.getElementById('CustomerNameInput');
                 if (custName) {
                     custName.focus();
@@ -1057,6 +1076,7 @@
             // =========================================================
             (function () {
                 var custNameInput = document.getElementById('CustomerNameInput');
+                var custCodeInput = document.getElementById('CustomerCodeDisplay');
                 var custDataList = document.getElementById('customersList');
                 if (!custNameInput || !custDataList) return;
 
@@ -1150,10 +1170,25 @@
                     return null;
                 }
                 function findByCode(code) {
-                    var search = (code || '').toString().trim();
+                    var search = normalizeDigits((code || '').toString().trim());
                     if (!search) return null;
                     for (var i = 0; i < allCustomers.length; i++) {
-                        if ((allCustomers[i].id || '').toString() === search) return allCustomers[i];
+                        if (normalizeDigits((allCustomers[i].id || '').toString()) === search) return allCustomers[i];
+                    }
+                    return null;
+                }
+                function findByCodeLoose(code) {
+                    var search = normalizeDigits((code || '').toString().trim());
+                    if (!search) return null;
+                    var exact = findByCode(search);
+                    if (exact) return exact;
+                    for (var i = 0; i < allCustomers.length; i++) {
+                        var idStr = normalizeDigits((allCustomers[i].id || '').toString());
+                        if (idStr.indexOf(search) === 0) return allCustomers[i];
+                    }
+                    for (var j = 0; j < allCustomers.length; j++) {
+                        var idStr2 = normalizeDigits((allCustomers[j].id || '').toString());
+                        if (idStr2.indexOf(search) >= 0) return allCustomers[j];
                     }
                     return null;
                 }
@@ -1292,6 +1327,35 @@
                 custNameInput.addEventListener('change', function () {
                     fillCustomerFromRecord(findByName(custNameInput.value));
                 });
+                if (custCodeInput) {
+                    custCodeInput.addEventListener('input', function () {
+                        var normalized = normalizeDigits((custCodeInput.value || '').replace(/\s+/g, ''));
+                        if (custCodeInput.value !== normalized) custCodeInput.value = normalized;
+                    });
+                    custCodeInput.addEventListener('change', function () {
+                        var rec = findByCodeLoose(custCodeInput.value);
+                        if (rec) {
+                            fillCustomerFromRecord(rec);
+                            custNameInput.value = (rec.name || '').trim();
+                        } else if ((custCodeInput.value || '').trim() === '') {
+                            fillCustomerFromRecord(null);
+                            custNameInput.value = '';
+                        }
+                    });
+                    custCodeInput.addEventListener('keydown', function (e) {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        var rec = findByCodeLoose(custCodeInput.value);
+                        if (rec) {
+                            fillCustomerFromRecord(rec);
+                            custNameInput.value = (rec.name || '').trim();
+                        } else if ((custCodeInput.value || '').trim() === '') {
+                            fillCustomerFromRecord(null);
+                            custNameInput.value = '';
+                        }
+                        moveStandaloneFlowAfterCustomerEnter();
+                    });
+                }
                 custNameInput.addEventListener('input', function () { openCustomerDropdown(); });
                 if (customerDropdownWrap && !customerDropdownWrap.dataset.boundSrCustomerDropdownClick) {
                     customerDropdownWrap.dataset.boundSrCustomerDropdownClick = '1';
@@ -2359,6 +2423,63 @@
                     linesTableBody.querySelectorAll('tr.erp-list-selectable-row.selected').forEach(function (r) { r.classList.remove('selected'); });
                     tr.classList.add('selected');
                     syncDeleteSelectedReturnLineButton();
+                });
+            }
+
+            function openSrTabFromFrame(url, tabId, title) {
+                try {
+                    if (window.top && window.top !== window) {
+                        window.top.postMessage({
+                            type: 'erp-open-tab',
+                            tabId: tabId || '',
+                            title: title || '',
+                            url: url
+                        }, '*');
+                        return;
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+                if (window.erpTabs && typeof window.erpTabs.openTab === 'function') {
+                    window.erpTabs.openTab(tabId, url, title);
+                } else {
+                    window.location.href = url;
+                }
+            }
+
+            function getSelectedSalesReturnLineNo() {
+                var tbody = document.getElementById('SalesReturnLinesTableBody');
+                var sel = tbody && tbody.querySelector('tr.erp-list-selectable-row.selected');
+                return sel ? (parseInt(sel.getAttribute('data-line-no') || '0', 10) || 0) : 0;
+            }
+
+            function buildSalesReturnTrackingUrl(srId, lineNo) {
+                var params = new URLSearchParams();
+                params.set('frame', '1');
+                params.set('sourceType', 'sales-return');
+                params.set('documentId', String(srId));
+                params.set('lineNo', String(lineNo));
+                var base = '@Url.Action("Index", "TrackTrace")';
+                var sep = base.indexOf('?') >= 0 ? '&' : '?';
+                return base + sep + params.toString();
+            }
+
+            var btnTrackingInfo = document.getElementById('btnOpenTrackingInfo');
+            if (btnTrackingInfo && !btnTrackingInfo.dataset.boundTrackingInfo) {
+                btnTrackingInfo.dataset.boundTrackingInfo = '1';
+                btnTrackingInfo.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    var srId = parseInt(document.getElementById('SRId')?.value || '0', 10) || 0;
+                    if (srId <= 0) {
+                        showToast('من فضلك احفظ المرتجع أولاً قبل فتح معلومات التتبع.', 'warning');
+                        return;
+                    }
+                    var lineNo = getSelectedSalesReturnLineNo();
+                    if (lineNo <= 0) {
+                        showToast('من فضلك اختر سطراً من جدول المرتجع أولاً.', 'warning');
+                        return;
+                    }
+                    openSrTabFromFrame(buildSalesReturnTrackingUrl(srId, lineNo), 'track-trace-info', 'معلومات التتبع');
                 });
             }
 

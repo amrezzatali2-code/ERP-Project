@@ -75,6 +75,12 @@
 }
 
 <style>
+    html, body,
+    main[role="main"],
+    .product-dashboard,
+    .dashboard-content {
+        background: #ffffff !important;
+    }
     /* تحسينات التصميم — نفس حجم التعامل */
     .product-dashboard {
         min-height: calc(100vh - 120px);
@@ -266,6 +272,10 @@
         background: transparent !important;
         border-radius: 0.45rem !important;
     }
+    #productMovementDropdownWrap .product-dropdown-onebox:focus-within {
+        box-shadow: none !important;
+        border-color: transparent !important;
+    }
     #productMovementDropdownWrap .product-dropdown-onebox {
         position: relative;
     }
@@ -354,7 +364,12 @@
                                inputmode="numeric"
                                class="form-control form-control-sm erp-filter-input text-center px-1"
                                placeholder="كود"
-                               autocomplete="off"
+                               autocomplete="new-password"
+                               autocorrect="off"
+                               autocapitalize="off"
+                               spellcheck="false"
+                               data-form-type="other"
+                               readonly
                                dir="ltr"
                                value="@(selectedProdId?.ToString() ?? "")" />
                     </div>
@@ -367,9 +382,15 @@
                             <span class="product-dropdown-arrow-inside" id="productMovementDropdownArrow" title="افتح القائمة">▼</span>
                             <input id="productSearchInput"
                                    type="text"
+                                   name="pm_product_display"
                                    class="form-control form-control-sm erp-filter-input product-dropdown-input"
                                    placeholder="بحث بالاسم..."
-                                   autocomplete="off"
+                                   autocomplete="new-password"
+                                   autocorrect="off"
+                                   autocapitalize="off"
+                                   spellcheck="false"
+                                   data-form-type="other"
+                                   readonly
                                    title="بحث مثل فاتورة المبيعات: عدة كلمات، أرقام عربية، تطبيع الألف"
                                    value="@selectedProductDisplay" />
                         </div>
@@ -992,6 +1013,26 @@
             var dropdownArrow = document.getElementById('productMovementDropdownArrow');
             var form = document.getElementById('productMovementForm');
 
+            function hardDisableSavedInfo(el, seed) {
+                if (!el) return;
+                el.setAttribute('autocomplete', 'off');
+                el.setAttribute('autocorrect', 'off');
+                el.setAttribute('autocapitalize', 'off');
+                el.setAttribute('spellcheck', 'false');
+                el.setAttribute('data-form-type', 'other');
+                el.setAttribute('name', seed + '_' + Date.now());
+                el.setAttribute('readonly', 'readonly');
+
+                var unlock = function () {
+                    el.removeAttribute('readonly');
+                };
+                el.addEventListener('focus', unlock, { once: true });
+                el.addEventListener('pointerdown', unlock, { once: true });
+                el.addEventListener('mousedown', unlock, { once: true });
+                el.addEventListener('keydown', unlock, { once: true });
+                el.addEventListener('touchstart', unlock, { once: true });
+            }
+
             // حد النتائج كما في فاتورة المبيعات (PRODUCT_LIST_MAX)
             var PRODUCT_MOVEMENT_MAX = 15;
             var activeIndex = -1;
@@ -1160,6 +1201,8 @@
             }
 
             var codeInput = document.getElementById('productCodeSearchInput');
+            hardDisableSavedInfo(input, 'pm_product');
+            hardDisableSavedInfo(codeInput, 'pm_code');
 
             function fillFromProductOpt(opt) {
                 if (!opt) {

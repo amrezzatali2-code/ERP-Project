@@ -175,12 +175,12 @@
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في إذون الدفع</label>
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100 flex-wrap">
-                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
                         <select name="searchMode" class="form-select form-select-arrow erp-filter-input" style="max-width:130px;min-width:90px" title="نمط مطابقة النص">
                             <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
                             <option value="contains"@Html.Raw(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? " selected" : "")>يحتوي</option>
                             <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
                         </select>
+                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px;min-width:100px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>رقم الإذن</option>
@@ -231,22 +231,26 @@
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
-                        <a asp-action="Create" asp-controller="CashPayments" class="btn btn-erp btn-erp-success btn-erp-sm">إذن جديد</a>
+                        <a asp-action="Create"
+                           asp-controller="CashPayments"
+                           asp-route-frame="1"
+                           class="btn btn-erp btn-erp-success btn-erp-sm open-tab"
+                           data-tab-id="cash-payment-create"
+                           data-tab-title="إذن دفع نقدية">إذن جديد</a>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModalCashPayments">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalCashPayments">اختيار الأعمدة</button>
                         <button type="button" id="btnPrintCashPayments" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
                         <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات السجل المحدد">
                             <button type="button" id="btnShowCr" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض">عرض</button>
-                            <button type="button" id="btnEditCr" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="تعديل">تعديل</button>
-                            <button type="button" id="btnDeleteCr" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حذف (تأكيد)">حذف</button>
                         </span>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
+                        <button type="button" id="btnCustomerVolumeCr" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حجم تعامل العميل">حجم التعامل</button>
                         <div class="btn-group">
                             <button type="button" class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><button type="button" id="btnBulkDelete" class="dropdown-item">حذف المحدد</button></li>
-                                <li><button type="button" id="btnDeleteAll" class="dropdown-item text-danger">حذف الكل</button></li>
+                                <li><button type="button" id="btnDeleteAll" class="dropdown-item text-danger">حذف الجميع</button></li>
                             </ul>
                         </div>
                         <form method="get" asp-action="Export" asp-controller="CashPayments" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
@@ -338,10 +342,13 @@
                     {
                         var desc = r.Description ?? "";
                         var descShort = desc.Length > 80 ? desc.Substring(0, 80) + "…" : desc;
-                        var showU = Url.Action("Show", "CashPayments", new { id = r.CashPaymentId }) + "?frame=1";
+                        var showU = Url.Action("Edit", "CashPayments", new { id = r.CashPaymentId, frame = 1 });
                         var editU = Url.Action("Edit", "CashPayments", new { id = r.CashPaymentId }) + "?frame=1";
                         var delU = Url.Action("Delete", "CashPayments", new { id = r.CashPaymentId });
-                        <tr class="erp-list-selectable-row" data-row-id="@r.CashPaymentId" data-show-url="@showU" data-edit-url="@editU" data-delete-url="@delU" data-tab-title="إذن دفع @r.CashPaymentId">
+                        var volUrl = r.CustomerId.HasValue && r.CustomerId.Value > 0
+                            ? Url.Action("Show", "Customers", new { id = r.CustomerId.Value, frame = 1 })
+                            : "";
+                        <tr class="erp-list-selectable-row" data-row-id="@r.CashPaymentId" data-show-url="@showU" data-edit-url="@editU" data-delete-url="@delU" data-customer-volume-url="@volUrl" data-tab-title="إذن دفع @r.CashPaymentId">
                             <td class="no-print text-center" data-col="select"><input type="checkbox" class="form-check-input row-select" value="@r.CashPaymentId" aria-label="تحديد" /></td>
                             <td data-col="id">@r.CashPaymentId</td>
                             <td data-col="number">@r.PaymentNumber</td>
@@ -537,19 +544,14 @@
     ERP.initListSelection({
         rowSelector: '.erp-list-selectable-row',
         showButtonId: 'btnShowCr',
-        editButtonId: 'btnEditCr',
+        movementButtonId: 'btnCustomerVolumeCr',
+        movementUrlAttribute: 'data-customer-volume-url',
+        movementTabTitle: 'حجم تعامل عميل',
+        movementTabId: 'customer-engagement',
         idAttribute: 'data-row-id',
         showUrlAttribute: 'data-show-url',
-        editUrlAttribute: 'data-edit-url',
         tabTitleAttribute: 'data-tab-title',
         multiSelectCheckboxes: true
-    });
-
-    document.getElementById('btnDeleteCr')?.addEventListener('click', function () {
-        var row = document.querySelector('.erp-list-selectable-row.selected');
-        if (!row) return;
-        var url = row.getAttribute('data-delete-url');
-        if (url) window.location.href = url;
     });
 
     (function () {
@@ -632,13 +634,5 @@
         btnClear?.addEventListener("click", function () { fromInp.value = ""; toInp.value = ""; window.location.href = buildUrl("", ""); });
     })();
 
-    (function () {
-        function syncDeleteBtn() {
-            var row = document.querySelector('.erp-list-selectable-row.selected');
-            var btn = document.getElementById('btnDeleteCr');
-            if (btn) btn.disabled = !row;
-        }
-        document.getElementById('cashPaymentsTable')?.addEventListener('click', function () { setTimeout(syncDeleteBtn, 0); });
-    })();
 </script>
 }

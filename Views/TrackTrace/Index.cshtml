@@ -1,0 +1,188 @@
+@using ERP.ViewModels
+@model TrackTraceInfoIndexViewModel
+
+@{
+    ViewData["Title"] = "معلومات التتبع";
+    var rows = Model.Result.Items;
+    var currentPage = Model.Result.PageNumber;
+    var totalPages = Model.Result.TotalPages;
+    var prevPage = Math.Max(1, currentPage - 1);
+    var nextPage = Math.Min(totalPages, currentPage + 1);
+
+    string BuildPageLink(int targetPage) => Url.Action("Index", "TrackTrace", new
+    {
+        frame = 1,
+        search = Model.Search,
+        status = Model.Status,
+        batchNo = Model.BatchNo,
+        sourceType = Model.SourceType,
+        documentId = Model.DocumentId,
+        lineNo = Model.LineNo,
+        lineId = Model.SourceLineId,
+        page = targetPage,
+        pageSize = Model.Result.PageSize
+    })!;
+}
+
+<div class="container-fluid py-3" dir="rtl">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h2 class="mb-0">معلومات التتبع</h2>
+        <div class="text-muted small">
+            @if (!string.IsNullOrWhiteSpace(Model.SourceTitle) && Model.DocumentId.HasValue)
+            {
+                <span>@Model.SourceTitle رقم @Model.DocumentId@(Model.LineNo.HasValue ? $" - سطر {Model.LineNo}" : "")</span>
+            }
+            else
+            {
+                <span>عرض كل العبوات المتتبعة المرتبطة بالمستندات المختلفة</span>
+            }
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-lg-4 col-md-6">
+            <div class="card shadow-sm border-primary-subtle h-100">
+                <div class="card-body">
+                    <div class="text-muted small mb-1">إجمالي العبوات</div>
+                    <div class="fs-3 fw-bold text-primary">@Model.TotalUnits</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 col-md-6">
+            <div class="card shadow-sm border-success-subtle h-100">
+                <div class="card-body">
+                    <div class="text-muted small mb-1">داخل المخزن</div>
+                    <div class="fs-3 fw-bold text-success">@Model.InStockUnits</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 col-md-6">
+            <div class="card shadow-sm border-secondary-subtle h-100">
+                <div class="card-body">
+                    <div class="text-muted small mb-1">تم صرفها/بيعها</div>
+                    <div class="fs-3 fw-bold text-secondary">@Model.SoldUnits</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body">
+            <form method="get" class="row g-2 align-items-end">
+                <input type="hidden" name="frame" value="1" />
+                @if (!string.IsNullOrWhiteSpace(Model.SourceType))
+                {
+                    <input type="hidden" name="sourceType" value="@Model.SourceType" />
+                }
+                @if (Model.DocumentId.HasValue)
+                {
+                    <input type="hidden" name="documentId" value="@Model.DocumentId" />
+                }
+                @if (Model.LineNo.HasValue)
+                {
+                    <input type="hidden" name="lineNo" value="@Model.LineNo" />
+                }
+                @if (Model.SourceLineId.HasValue)
+                {
+                    <input type="hidden" name="lineId" value="@Model.SourceLineId" />
+                }
+
+                <div class="col-lg-4 col-md-6">
+                    <label class="form-label">بحث</label>
+                    <input type="text" name="search" value="@Model.Search" class="form-control" placeholder="UID / GTIN / الصنف / المورد" />
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label">الحالة</label>
+                    <select name="status" class="form-select">
+                        <option value="">الكل</option>
+                        <option value="InStock" selected="@(Model.Status == "InStock")">InStock</option>
+                        <option value="Sold" selected="@(Model.Status == "Sold")">Sold</option>
+                        <option value="Returned" selected="@(Model.Status == "Returned")">Returned</option>
+                        <option value="Transferred" selected="@(Model.Status == "Transferred")">Transferred</option>
+                    </select>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label">التشغيلة</label>
+                    <input type="text" name="batchNo" value="@Model.BatchNo" class="form-control" placeholder="رقم التشغيلة" />
+                </div>
+                <div class="col-lg-2 col-md-6 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary w-100">عرض</button>
+                    <a class="btn btn-outline-secondary w-100" href="@Url.Action("Index", "TrackTrace", new { frame = 1, sourceType = Model.SourceType, documentId = Model.DocumentId, lineNo = Model.LineNo, lineId = Model.SourceLineId })">إلغاء</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle text-center mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>الصنف</th>
+                            <th>المستند</th>
+                            <th>UID</th>
+                            <th>GTIN</th>
+                            <th>التشغيلة</th>
+                            <th>الصلاحية</th>
+                            <th>الحالة</th>
+                            <th>المخزن</th>
+                            <th>الرقم</th>
+                            <th>السطر</th>
+                            <th>الطرف/البيان</th>
+                            <th>آخر مصدر</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (rows.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="13" class="py-4 text-muted">لا توجد بيانات تتبع مطابقة للفلتر الحالي.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var row in rows)
+                            {
+                                var sourceText = string.IsNullOrWhiteSpace(row.CurrentSourceType)
+                                    ? "—"
+                                    : $"{row.CurrentSourceType} / {row.CurrentSourceId?.ToString() ?? "—"} / {row.CurrentSourceLineNo?.ToString() ?? "—"}";
+                                <tr>
+                                    <td>@row.ItemUnitId</td>
+                                    <td class="text-end">
+                                        <div>@row.ProductName</div>
+                                        <div class="text-muted small">@row.ProdId</div>
+                                    </td>
+                                    <td>@row.SourceTitle</td>
+                                    <td class="font-monospace">@row.Uid</td>
+                                    <td class="font-monospace">@(!string.IsNullOrWhiteSpace(row.Gtin) ? row.Gtin : "—")</td>
+                                    <td>@(!string.IsNullOrWhiteSpace(row.BatchNo) ? row.BatchNo : "—")</td>
+                                    <td>@(row.Expiry.HasValue ? row.Expiry.Value.ToString("MM/yyyy") : "—")</td>
+                                    <td>@row.Status</td>
+                                    <td>@(string.IsNullOrWhiteSpace(row.WarehouseName) ? "—" : row.WarehouseName)</td>
+                                    <td>@row.PIId</td>
+                                    <td>@row.LineNo</td>
+                                    <td>@(string.IsNullOrWhiteSpace(row.SupplierName) ? "—" : row.SupplierName)</td>
+                                    <td class="small">@sourceText</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="text-muted small">
+                عرض @Model.Result.StartIndex - @Model.Result.EndIndex من @Model.Result.TotalCount
+            </div>
+            <div class="btn-group">
+                <a class="btn btn-outline-secondary @(currentPage <= 1 ? "disabled" : "")" href="@(currentPage <= 1 ? "#" : BuildPageLink(1))">الأول</a>
+                <a class="btn btn-outline-secondary @(currentPage <= 1 ? "disabled" : "")" href="@(currentPage <= 1 ? "#" : BuildPageLink(prevPage))">السابق</a>
+                <span class="btn btn-light disabled">صفحة @currentPage من @totalPages</span>
+                <a class="btn btn-outline-secondary @(currentPage >= totalPages ? "disabled" : "")" href="@(currentPage >= totalPages ? "#" : BuildPageLink(nextPage))">التالي</a>
+                <a class="btn btn-outline-secondary @(currentPage >= totalPages ? "disabled" : "")" href="@(currentPage >= totalPages ? "#" : BuildPageLink(totalPages))">الأخير</a>
+            </div>
+        </div>
+    </div>
+</div>

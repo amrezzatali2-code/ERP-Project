@@ -2857,18 +2857,9 @@ namespace ERP.Controllers
                 // ملفات كبيرة (أكثر من 24 ألف صنف): نزيد مهلة أوامر قاعدة البيانات لتجنّب انقطاع الطلب
                 try { _db.Database.SetCommandTimeout(300); } catch { /* 300 ثانية = 5 دقائق */ }
 
-                // ===== مسح القديم كله ثم استيراد الجديد: الجداول المرتبطة ثم الأصناف =====
-                var allStock = await _db.StockLedger.ToListAsync();
-                if (allStock.Count > 0) _db.StockLedger.RemoveRange(allStock);
-                var allPriceHist = await _db.ProductPriceHistories.ToListAsync();
-                if (allPriceHist.Count > 0) _db.ProductPriceHistories.RemoveRange(allPriceHist);
-                var allDiscountOverrides = await _db.ProductDiscountOverrides.ToListAsync();
-                if (allDiscountOverrides.Count > 0) _db.ProductDiscountOverrides.RemoveRange(allDiscountOverrides);
-                var allProds = await _db.Products.ToListAsync();
-                if (allProds.Count > 0) _db.Products.RemoveRange(allProds);
-                if (allStock.Count > 0 || allPriceHist.Count > 0 || allDiscountOverrides.Count > 0 || allProds.Count > 0)
-                    await _db.SaveChangesAsync();
-                _productCache.ClearProductsCache(); // بعد حذف الأصناف القديمة قبل إعادة الاستيراد
+                // ===== استيراد آمن (إضافة/تحديث فقط) بدون حذف البيانات القديمة =====
+                // ملاحظة: كان النظام سابقاً يحذف الأصناف قبل الاستيراد، وهذا يسبب
+                // تعارضات FK مع جداول الحركة (مثل PRLines). لذلك ألغينا الحذف التلقائي.
 
                 // ===== 2) قراءة ملف الإكسل فى الذاكرة =====
                 using var stream = new MemoryStream();                 // متغيّر: stream يحمل بيانات الملف
@@ -3681,47 +3672,7 @@ namespace ERP.Controllers
 
             try
             {
-                // مسح القديم كله ثم استيراد الجديد: حذف الجداول المرتبطة بالعملاء ثم حذف كل العملاء (نفس سياسة الأصناف)
-                var ledgerCust = await _db.LedgerEntries.Where(e => e.CustomerId != null).ToListAsync();
-                if (ledgerCust.Count > 0) { _db.LedgerEntries.RemoveRange(ledgerCust); await _db.SaveChangesAsync(); }
-                var cashR = await _db.CashReceipts.ToListAsync();
-                if (cashR.Count > 0) { _db.CashReceipts.RemoveRange(cashR); await _db.SaveChangesAsync(); }
-                var cashP = await _db.CashPayments.ToListAsync();
-                if (cashP.Count > 0) { _db.CashPayments.RemoveRange(cashP); await _db.SaveChangesAsync(); }
-                var sil = await _db.SalesInvoiceLines.ToListAsync();
-                if (sil.Count > 0) { _db.SalesInvoiceLines.RemoveRange(sil); await _db.SaveChangesAsync(); }
-                var si = await _db.SalesInvoices.ToListAsync();
-                if (si.Count > 0) { _db.SalesInvoices.RemoveRange(si); await _db.SaveChangesAsync(); }
-                var srl = await _db.SalesReturnLines.ToListAsync();
-                if (srl.Count > 0) { _db.SalesReturnLines.RemoveRange(srl); await _db.SaveChangesAsync(); }
-                var sr = await _db.SalesReturns.ToListAsync();
-                if (sr.Count > 0) { _db.SalesReturns.RemoveRange(sr); await _db.SaveChangesAsync(); }
-                var pil = await _db.PILines.ToListAsync();
-                if (pil.Count > 0) { _db.PILines.RemoveRange(pil); await _db.SaveChangesAsync(); }
-                var pi = await _db.PurchaseInvoices.ToListAsync();
-                if (pi.Count > 0) { _db.PurchaseInvoices.RemoveRange(pi); await _db.SaveChangesAsync(); }
-                var prl = await _db.PurchaseReturnLines.ToListAsync();
-                if (prl.Count > 0) { _db.PurchaseReturnLines.RemoveRange(prl); await _db.SaveChangesAsync(); }
-                var pr = await _db.PurchaseReturns.ToListAsync();
-                if (pr.Count > 0) { _db.PurchaseReturns.RemoveRange(pr); await _db.SaveChangesAsync(); }
-                var so = await _db.SalesOrders.ToListAsync();
-                if (so.Count > 0) { _db.SalesOrders.RemoveRange(so); await _db.SaveChangesAsync(); }
-                var prLines = await _db.PRLines.ToListAsync();
-                if (prLines.Count > 0) { _db.PRLines.RemoveRange(prLines); await _db.SaveChangesAsync(); }
-                var preq = await _db.PurchaseRequests.ToListAsync();
-                if (preq.Count > 0) { _db.PurchaseRequests.RemoveRange(preq); await _db.SaveChangesAsync(); }
-                var dn = await _db.DebitNotes.ToListAsync();
-                if (dn.Count > 0) { _db.DebitNotes.RemoveRange(dn); await _db.SaveChangesAsync(); }
-                var cn = await _db.CreditNotes.ToListAsync();
-                if (cn.Count > 0) { _db.CreditNotes.RemoveRange(cn); await _db.SaveChangesAsync(); }
-                var usersWithCust = await _db.Users.Where(u => u.CustomerId != null).ToListAsync();
-                foreach (var u in usersWithCust) u.CustomerId = null;
-                if (usersWithCust.Count > 0) await _db.SaveChangesAsync();
-                var batchesWithCust = await _db.Batches.Where(b => b.CustomerId != null).ToListAsync();
-                foreach (var b in batchesWithCust) b.CustomerId = null;
-                if (batchesWithCust.Count > 0) await _db.SaveChangesAsync();
-                var allCust = await _db.Customers.ToListAsync();
-                if (allCust.Count > 0) { _db.Customers.RemoveRange(allCust); await _db.SaveChangesAsync(); }
+                // استيراد آمن للعملاء: إضافة/تحديث فقط بدون حذف أي بيانات حركة أو أرصدة.
 
                 using var stream = new MemoryStream();
                 await excelFile.CopyToAsync(stream);

@@ -1,0 +1,517 @@
+@{
+    Layout = null;
+    ViewData["Title"] = "بوابة الموزع";
+}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        :root {
+            --bg: #eef7fc;
+            --surface: #ffffff;
+            --surface-soft: #f7fbfe;
+            --line: #bfd6e6;
+            --line-strong: #8db4cc;
+            --ink: #0b2235;
+            --muted: #466276;
+            --brand: #0d86c0;
+            --brand-strong: #0a6a98;
+            --danger: #c43d3d;
+            --ok: #15805d;
+            --accent: #0ea5d7;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--ink);
+            font-family: "Cairo", "Tajawal", "Segoe UI", sans-serif;
+            font-size: 16px;
+            line-height: 1.65;
+            background:
+                radial-gradient(circle at top right, rgba(102, 196, 234, .2), transparent 26%),
+                linear-gradient(180deg, #d7effa 0%, var(--bg) 220px, #f8fcff 100%);
+        }
+        .page { max-width: 1220px; margin: 0 auto; padding: 18px 18px 108px; }
+        .hero {
+            margin-bottom: 12px;
+            border-radius: 22px;
+            border: 1px solid rgba(255,255,255,.28);
+            color: #fff;
+            background: linear-gradient(120deg, #0d7eb2 0%, #10b8d9 52%, #5dc8e7 100%);
+            box-shadow: 0 12px 30px rgba(11, 125, 184, .24);
+            padding: 18px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .hero-title { margin: 0; font-size: 1.25rem; font-weight: 900; }
+        .hero-sub { margin: 6px 0 0; font-size: .98rem; opacity: .95; }
+        .panel {
+            background: var(--surface);
+            border-radius: 22px;
+            border: 1px solid var(--line);
+            box-shadow: 0 16px 32px rgba(8, 61, 92, .08);
+            padding: 18px;
+            margin-bottom: 14px;
+        }
+        .top-row, .toolbar-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            border: 1px solid transparent;
+            border-radius: 14px;
+            color: #fff;
+            background: linear-gradient(120deg, var(--accent), var(--brand-strong));
+            padding: 12px 16px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: 800;
+            transition: .18s ease;
+            text-decoration: none;
+            box-shadow: 0 8px 18px rgba(13, 106, 152, .18);
+        }
+        .btn:hover { background: #fff; color: var(--brand-strong); border-color: var(--brand-strong); }
+        .btn-logout { background: linear-gradient(120deg, #627788, #4f6576); }
+        .btn-danger { background: linear-gradient(120deg, #de5d5d, #c74646); }
+        .btn-success { background: linear-gradient(120deg, #1aa780, #159f7c); }
+        .input {
+            width: 100%;
+            border: 1px solid var(--line-strong);
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: 1rem;
+            background: #fff;
+            min-height: 54px;
+            color: var(--ink);
+        }
+        .input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px rgba(14, 165, 215, .14);
+        }
+        .small { color: var(--muted); font-size: .92rem; }
+        .customers {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 14px;
+        }
+        .customer-card {
+            background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+            border-radius: 20px;
+            padding: 16px;
+            border: 1px solid #cfe1ed;
+            box-shadow: 0 14px 28px rgba(10, 78, 116, .08);
+            display: grid;
+            gap: 10px;
+        }
+        .customer-card-title { font-weight: 900; font-size: 1.08rem; color: #123047; line-height: 1.55; }
+        .customer-card-meta { color: var(--muted); font-size: .92rem; }
+        .customer-card-balance { color: #0b70b8; font-size: 1.32rem; font-weight: 900; }
+        .customer-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .summary-card {
+            border: 1px solid #d2e4f0;
+            background: linear-gradient(180deg, #fbfeff 0%, #f1f9fe 100%);
+            border-radius: 18px;
+            padding: 12px 14px;
+            min-height: 92px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .summary-card .label { color: var(--muted); font-size: .88rem; font-weight: 700; }
+        .summary-card .value { margin-top: 6px; color: #0b5d87; font-size: 1.18rem; font-weight: 900; }
+        .table-wrap { overflow: auto; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border-bottom: 1px solid #e7f0f7; padding: 12px 10px; text-align: right; white-space: nowrap; font-size: .95rem; }
+        th { background: #f7fbff; color: #35566d; font-weight: 800; position: sticky; top: 0; }
+        .hidden { display: none !important; }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(9, 42, 66, .35);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 16px;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal-card {
+            width: min(520px, 100%);
+            background: #fff;
+            border-radius: 22px;
+            border: 1px solid #cde4f2;
+            box-shadow: 0 18px 36px rgba(8, 82, 122, .24);
+            padding: 18px;
+            display: grid;
+            gap: 12px;
+        }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-start; flex-wrap: wrap; }
+        .toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(.96);
+            z-index: 10000;
+            min-width: 240px;
+            max-width: 90vw;
+            text-align: center;
+            color: #fff;
+            background: linear-gradient(120deg, #10a6cf, #0d7fb7);
+            border-radius: 18px;
+            box-shadow: 0 14px 28px rgba(8, 82, 122, .32);
+            padding: 14px 18px;
+            font-size: 1.02rem;
+            font-weight: 800;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s ease, transform .2s ease;
+        }
+        .toast.error { background: linear-gradient(120deg, #d64f4f, #bf3f3f); }
+        .toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        @@media (max-width: 920px) {
+            .summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .page { padding: 14px 12px 108px; }
+            .panel, .hero { border-radius: 18px; padding: 14px; }
+            .customers { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <section class="hero">
+            <div>
+                <p class="hero-title">بوابة الموزع</p>
+                <p class="hero-sub">عرض العملاء المرتبطين وتسجيل إذن الاستلام مباشرة من الموقع</p>
+            </div>
+            <button id="logoutBtn" type="button" class="btn btn-logout">تسجيل خروج</button>
+        </section>
+
+        <section class="panel">
+            <div class="top-row">
+                <div>
+                    <h1 style="margin:0;font-size:1.05rem;">عملاء الموزع</h1>
+                    <div id="userInfo" class="small"></div>
+                </div>
+                <div id="assignedCount" class="small"></div>
+            </div>
+            <div style="margin-top:10px;">
+                <input id="searchInput" class="input" placeholder="ابحث باسم العميل أو كوده..." />
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="toolbar-top">
+                <span style="font-weight:800;">قائمة العملاء</span>
+                <span id="resultCount" class="small">0 عميل</span>
+            </div>
+            <section id="customersHost" class="customers" style="margin-top:12px;"></section>
+        </section>
+
+        <section id="detailsPanel" class="panel hidden">
+            <div class="top-row">
+                <div>
+                    <h2 id="detailsTitle" style="margin:0;font-size:1.02rem;">تفاصيل العميل</h2>
+                    <div id="detailsSub" class="small"></div>
+                </div>
+            </div>
+            <div id="volumeHost" class="hidden"></div>
+            <div id="statementHost" class="hidden"></div>
+        </section>
+    </main>
+
+    <div id="receiptModal" class="modal-backdrop" aria-hidden="true">
+        <div class="modal-card">
+            <div style="font-size:1rem;font-weight:800;">إذن استلام مباشر</div>
+            <div id="receiptCustomerName" class="small"></div>
+            <input id="receiptAmount" type="number" min="0.01" step="0.01" class="input" placeholder="المبلغ" />
+            <input id="receiptNotes" class="input" placeholder="ملاحظات (اختياري)" />
+            <div class="modal-actions">
+                <button id="saveReceiptBtn" type="button" class="btn btn-success">حفظ الإيصال</button>
+                <button id="closeReceiptBtn" type="button" class="btn btn-danger">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="centerToast" class="toast">تم الحفظ</div>
+
+    <script>
+        const state = {
+            customers: [],
+            activeCustomerId: 0,
+            pendingReceiptCustomerId: 0
+        };
+
+        const ui = {
+            userInfo: document.getElementById('userInfo'),
+            assignedCount: document.getElementById('assignedCount'),
+            searchInput: document.getElementById('searchInput'),
+            resultCount: document.getElementById('resultCount'),
+            customersHost: document.getElementById('customersHost'),
+            detailsPanel: document.getElementById('detailsPanel'),
+            detailsTitle: document.getElementById('detailsTitle'),
+            detailsSub: document.getElementById('detailsSub'),
+            volumeHost: document.getElementById('volumeHost'),
+            statementHost: document.getElementById('statementHost'),
+            receiptModal: document.getElementById('receiptModal'),
+            receiptCustomerName: document.getElementById('receiptCustomerName'),
+            receiptAmount: document.getElementById('receiptAmount'),
+            receiptNotes: document.getElementById('receiptNotes'),
+            saveReceiptBtn: document.getElementById('saveReceiptBtn'),
+            closeReceiptBtn: document.getElementById('closeReceiptBtn'),
+            logoutBtn: document.getElementById('logoutBtn'),
+            centerToast: document.getElementById('centerToast')
+        };
+
+        let toastTimer = 0;
+
+        function money(v) { return Number(v || 0).toFixed(2); }
+
+        async function getJson(url, options) {
+            const res = await fetch(url, { cache: 'no-store', ...(options || {}) });
+            const data = await res.json();
+            if (!res.ok || data.ok === false) throw new Error(data.message || 'حدث خطأ غير متوقع');
+            return data;
+        }
+
+        function showToast(message, isError = false, duration = 1600) {
+            clearTimeout(toastTimer);
+            ui.centerToast.textContent = message;
+            ui.centerToast.classList.toggle('error', !!isError);
+            ui.centerToast.classList.add('show');
+            toastTimer = window.setTimeout(() => ui.centerToast.classList.remove('show'), duration);
+        }
+
+        function renderCustomers(items) {
+            state.customers = items || [];
+            ui.resultCount.textContent = `${state.customers.length} عميل`;
+
+            if (!state.customers.length) {
+                ui.customersHost.innerHTML = '<div class="small">لا يوجد عملاء مربوطون بهذا الموزع.</div>';
+                return;
+            }
+
+            ui.customersHost.innerHTML = state.customers.map(item => `
+                <article class="customer-card">
+                    <div class="customer-card-title">${item.CustomerName ?? '-'}</div>
+                    <div class="customer-card-meta">الكود: ${item.CustomerCode ?? '-'} | المنطقة: ${item.AreaName ?? '-'}</div>
+                    <div class="customer-card-meta">خط السير: ${item.RouteName ?? '-'}</div>
+                    <div class="customer-card-balance">الرصيد الحالي: ${money(item.CurrentBalance)} ج.م</div>
+                    <div class="customer-card-meta">الحد الفعّال: ${money(item.EffectiveCreditLimit)} ج.م | المتاح: ${money(item.RemainingCredit)} ج.م</div>
+                    <div class="customer-card-actions">
+                        <button type="button" class="btn" data-statement="${item.CustomerId}">كشف حساب</button>
+                        <button type="button" class="btn" data-volume="${item.CustomerId}">حجم التعامل</button>
+                        <button type="button" class="btn btn-success" data-receipt="${item.CustomerId}">إذن استلام</button>
+                    </div>
+                </article>
+            `).join('');
+        }
+
+        function renderVolume(customer, summary) {
+            ui.detailsTitle.textContent = `حجم تعامل العميل - ${customer.CustomerName}`;
+            ui.detailsSub.textContent = `كود العميل: ${customer.CustomerCode ?? '-'} | المنطقة: ${customer.AreaName ?? '-'}`;
+            ui.volumeHost.classList.remove('hidden');
+            ui.statementHost.classList.add('hidden');
+            ui.volumeHost.innerHTML = `
+                <div class="summary-cards">
+                    <div class="summary-card"><div class="label">المبيعات</div><div class="value">${money(summary.TotalSales)} ج.م</div></div>
+                    <div class="summary-card"><div class="label">مرتجع البيع</div><div class="value">${money(summary.TotalSalesReturns)} ج.م</div></div>
+                    <div class="summary-card"><div class="label">إذن الاستلام</div><div class="value">${money(summary.TotalReceipts)} ج.م</div></div>
+                    <div class="summary-card"><div class="label">إذن الدفع</div><div class="value">${money(summary.TotalPayments)} ج.م</div></div>
+                    <div class="summary-card"><div class="label">الرصيد الحالي</div><div class="value">${money(summary.CurrentBalance)} ج.م</div></div>
+                </div>
+            `;
+            ui.detailsPanel.classList.remove('hidden');
+        }
+
+        function renderStatement(customer, statement) {
+            const summary = statement.summary || {};
+            const entries = statement.entries || [];
+            ui.detailsTitle.textContent = `كشف حساب العميل - ${customer.CustomerName}`;
+            ui.detailsSub.textContent = `الكود: ${summary.CustomerCode ?? customer.CustomerCode ?? '-'} | الرصيد الحالي: ${money(summary.CurrentBalance)} ج.م`;
+            ui.statementHost.classList.remove('hidden');
+            ui.volumeHost.classList.add('hidden');
+            ui.statementHost.innerHTML = `
+                <div class="summary-cards">
+                    <div class="summary-card"><div class="label">إجمالي المدين</div><div class="value">${money(summary.TotalDebit)} ج.م</div></div>
+                    <div class="summary-card"><div class="label">إجمالي الدائن</div><div class="value">${money(summary.TotalCredit)} ج.م</div></div>
+                    <div class="summary-card"><div class="label">الرصيد الحالي</div><div class="value">${money(summary.CurrentBalance)} ج.م</div></div>
+                    <div class="summary-card"><div class="label">الحد الفعّال</div><div class="value">${money(summary.EffectiveCreditLimit)} ج.م</div></div>
+                    <div class="summary-card"><div class="label">المتاح</div><div class="value">${money(summary.RemainingCredit)} ج.م</div></div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>التاريخ</th>
+                                <th>النوع</th>
+                                <th>الوصف</th>
+                                <th>مدين</th>
+                                <th>دائن</th>
+                                <th>الرصيد الجاري</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${entries.length ? entries.map(row => `
+                                <tr>
+                                    <td>${row.EntryDateText ?? '-'}</td>
+                                    <td>${row.SourceTypeText ?? '-'}</td>
+                                    <td>${row.Description ?? '-'}</td>
+                                    <td>${money(row.Debit)}</td>
+                                    <td>${money(row.Credit)}</td>
+                                    <td>${money(row.RunningBalance)}</td>
+                                </tr>
+                            `).join('') : '<tr><td colspan="6" class="small">لا توجد حركات.</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            ui.detailsPanel.classList.remove('hidden');
+        }
+
+        function openReceiptModal(customer) {
+            state.pendingReceiptCustomerId = customer.CustomerId;
+            ui.receiptCustomerName.textContent = `العميل: ${customer.CustomerName}`;
+            ui.receiptAmount.value = '';
+            ui.receiptNotes.value = '';
+            ui.receiptModal.classList.add('open');
+        }
+
+        function closeReceiptModal() {
+            ui.receiptModal.classList.remove('open');
+            state.pendingReceiptCustomerId = 0;
+        }
+
+        async function loadCustomers(search = '') {
+            const data = await getJson(`/PharmacyMobile/CollectorCustomers?search=${encodeURIComponent(search)}`);
+            renderCustomers(data.items || []);
+        }
+
+        async function loadVolume(customerId) {
+            const customer = state.customers.find(x => Number(x.CustomerId) === Number(customerId));
+            if (!customer) return;
+            const data = await getJson(`/PharmacyMobile/CollectorCustomerVolume?customerId=${customerId}`);
+            renderVolume(customer, data.summary || {});
+        }
+
+        async function loadStatement(customerId) {
+            const customer = state.customers.find(x => Number(x.CustomerId) === Number(customerId));
+            if (!customer) return;
+            const data = await getJson(`/PharmacyMobile/CustomerStatement?customerId=${customerId}&take=60&_=${Date.now()}`);
+            renderStatement(customer, data);
+        }
+
+        async function saveReceipt() {
+            if (!state.pendingReceiptCustomerId) return;
+            const amount = Number(ui.receiptAmount.value || 0);
+            if (!(amount > 0)) {
+                showToast('أدخل مبلغًا أكبر من صفر.', true);
+                return;
+            }
+
+            const payload = {
+                customerId: state.pendingReceiptCustomerId,
+                amount,
+                notes: (ui.receiptNotes.value || '').trim()
+            };
+
+            const data = await getJson('/PharmacyMobile/CollectorCreateReceipt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            closeReceiptModal();
+            showToast(data.message || 'تم تسجيل الإيصال بنجاح.', false, 1800);
+            await loadCustomers(ui.searchInput.value || '');
+            await loadStatement(payload.customerId);
+        }
+
+        async function logoutApp() {
+            await getJson('/PharmacyMobile/AppLogout', { method: 'POST' });
+            window.location.replace('/PharmacyMobile');
+        }
+
+        async function init() {
+            const session = await getJson('/PharmacyMobile/AppSession');
+            if (!session.authenticated) {
+                window.location.replace('/PharmacyMobile');
+                return;
+            }
+            if ((session.user?.PortalRole || '') !== 'Collector') {
+                window.location.replace('/PharmacyMobile');
+                return;
+            }
+
+            const boot = await getJson('/PharmacyMobile/CollectorBootstrapData');
+            const displayName = boot.user?.DisplayName || boot.user?.UserName || '';
+            ui.userInfo.textContent = `المستخدم: ${displayName}`;
+            ui.assignedCount.textContent = `العملاء المرتبطون: ${boot.assignedCustomerCount ?? 0}`;
+            await loadCustomers();
+        }
+
+        ui.searchInput.addEventListener('input', async () => {
+            try {
+                await loadCustomers(ui.searchInput.value || '');
+            } catch (err) {
+                showToast(err.message || 'تعذر تحميل العملاء', true);
+            }
+        });
+
+        ui.customersHost.addEventListener('click', async (e) => {
+            const statementBtn = e.target.closest('[data-statement]');
+            if (statementBtn) {
+                try { await loadStatement(statementBtn.getAttribute('data-statement')); }
+                catch (err) { showToast(err.message || 'تعذر تحميل كشف الحساب', true); }
+                return;
+            }
+
+            const volumeBtn = e.target.closest('[data-volume]');
+            if (volumeBtn) {
+                try { await loadVolume(volumeBtn.getAttribute('data-volume')); }
+                catch (err) { showToast(err.message || 'تعذر تحميل حجم التعامل', true); }
+                return;
+            }
+
+            const receiptBtn = e.target.closest('[data-receipt]');
+            if (receiptBtn) {
+                const customer = state.customers.find(x => Number(x.CustomerId) === Number(receiptBtn.getAttribute('data-receipt')));
+                if (customer) openReceiptModal(customer);
+            }
+        });
+
+        ui.saveReceiptBtn.addEventListener('click', async () => {
+            try { await saveReceipt(); }
+            catch (err) { showToast(err.message || 'تعذر حفظ الإيصال', true); }
+        });
+
+        ui.closeReceiptBtn.addEventListener('click', closeReceiptModal);
+        ui.receiptModal.addEventListener('click', (e) => {
+            if (e.target === ui.receiptModal) closeReceiptModal();
+        });
+        ui.logoutBtn.addEventListener('click', async () => {
+            try { await logoutApp(); } catch (err) { showToast(err.message || 'تعذر تسجيل الخروج', true); }
+        });
+
+        init().catch(err => {
+            showToast(err.message || 'تعذر تهيئة صفحة الموزع', true, 2200);
+        });
+    </script>
+</body>
+</html>

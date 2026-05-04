@@ -16,10 +16,14 @@
         .pi-input[type="number"] { -moz-appearance: textfield; }
 
         /* خلفية الصفحة والعمود — مثل فاتورة المبيعات */
+        html, body {
+            min-height: 100%;
+            background: #ffffff !important;
+        }
         .invoice-page {
-            background-color: #f3f6fb !important;
-            min-height: 0;
-            padding-bottom: 1rem;
+            background: #ffffff !important;
+            min-height: 100vh;
+            padding-bottom: 3rem;
             border: none !important;
             box-shadow: none !important;
         }
@@ -90,6 +94,25 @@
             margin-top: 0.25rem;
         }
         .si-settings-panel.show { display: block; }
+        .invoice-page.theme-dark-navy,
+        .invoice-page.theme-dark-slate,
+        .invoice-page.theme-dark-plum {
+            background: #ffffff !important;
+        }
+        .invoice-page.theme-dark-navy .invoice-lines-container {
+            background: #f8fafc !important;
+        }
+        .invoice-page.theme-dark-slate .invoice-lines-container {
+            background: #f8fafc !important;
+        }
+        .invoice-page.theme-dark-plum .invoice-lines-container {
+            background: #f8fafc !important;
+        }
+        .invoice-page.theme-dark-navy,
+        .invoice-page.theme-dark-slate,
+        .invoice-page.theme-dark-plum {
+            min-height: 100vh;
+        }
         .invoice-actions-sticky {
             position: sticky;
             top: 58px;
@@ -836,6 +859,14 @@
                                     <option value="alpha">أبجدي (حسب اسم الصنف)</option>
                                 </select>
                             </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1" for="siThemeSelect">لون الخلفية</label>
+                                <select id="siThemeSelect" class="form-select form-select-sm">
+                                    <option value="dark-navy">كحلي داكن</option>
+                                    <option value="dark-slate">فحمي داكن</option>
+                                    <option value="dark-plum">برقوقي داكن</option>
+                                </select>
+                            </div>
                             <button type="button" id="btnSaveInvoiceSettingsInline" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
                                 حفظ الإعدادات
                             </button>
@@ -895,6 +926,13 @@
                                 <button type="button" id="btnOpenProductEdit"
                                         class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
                                     ✏️ تعديل بيانات الصنف
+                                </button>
+                        </div>
+
+                        <div>
+                                <button type="button" id="btnOpenTrackingInfo"
+                                        class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
+                                    🧬 معلومات التتبع
                                 </button>
                         </div>
 
@@ -993,7 +1031,12 @@
 
                                         <input id="CustomerCodeDisplay"
                                                class="form-control form-control-sm text-center invoice-small-input"
-                                               type="number" data-lock-posted="1"  />
+                                               type="number"
+                                               autocomplete="one-time-code"
+                                               data-lpignore="true"
+                                               data-1p-ignore="true"
+                                               data-bwignore="true"
+                                               data-lock-posted="1" />
 
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                     </div>
@@ -1005,15 +1048,16 @@
                                             <div class="product-dropdown-onebox" id="supplierDropdownInputGroup">
                                                 <span class="product-dropdown-arrow-inside" id="supplierDropdownArrow" title="افتح القائمة">▼</span>
                                                 <input id="CustomerNameInput"
-                                                       name="CustomerNameInput"
                                                        type="text"
                                                        class="form-control form-control-sm product-dropdown-input"
                                                        placeholder="اكتب اسم المورد"
-                                                       autocomplete="new-password"
+                                                       autocomplete="one-time-code"
                                                        autocorrect="off"
                                                        autocapitalize="none"
                                                        spellcheck="false"
                                                        data-lpignore="true"
+                                                       data-1p-ignore="true"
+                                                       data-bwignore="true"
                                                        value="@ViewBag.SelectedCustomerName"
                                                        data-lock-posted="1" />
                                             </div>
@@ -1216,9 +1260,12 @@
                                     <label class="form-label form-label-sm">كود الصنف</label>
                                     <input type="number" id="ProdCodeInput"
                                            class="form-control form-control-sm text-center pi-input"
-                                               placeholder="بحث بالكود..." 
-                                               data-lock-posted="1" 
-                                             />
+                                           placeholder="بحث بالكود..."
+                                           autocomplete="one-time-code"
+                                           data-lpignore="true"
+                                           data-1p-ignore="true"
+                                           data-bwignore="true"
+                                           data-lock-posted="1" />
                                 </div>
 
                                 <div class="col-lg-4 col-md-8">
@@ -1231,11 +1278,13 @@
                                                    type="text"
                                                    class="form-control form-control-sm pi-input pi-product-name-input product-dropdown-input"
                                                    placeholder="اختر صنف..."
-                                                   autocomplete="new-password"
+                                                   autocomplete="one-time-code"
                                                    autocorrect="off"
                                                    autocapitalize="none"
                                                    spellcheck="false"
                                                    data-lpignore="true"
+                                                   data-1p-ignore="true"
+                                                   data-bwignore="true"
                                                    data-lock-posted="1" />
                                         </div>
                                         <div id="productDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
@@ -1294,6 +1343,29 @@
                                     </button>
                                 </div>
 
+                            </div>
+
+                            <div class="row g-2 align-items-end">
+                                <div class="col-lg-6 col-md-8">
+                                    <label class="form-label form-label-sm">SCAN 2D للتتبع</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" id="Prod2DScanInput"
+                                               class="form-control form-control-sm pi-input"
+                                               placeholder="امسح كود GS1 DataMatrix هنا..."
+                                               autocomplete="one-time-code"
+                                               data-lpignore="true"
+                                               data-1p-ignore="true"
+                                               data-bwignore="true"
+                                               data-lock-posted="1" />
+                                        <button type="button" id="btnAddTrackedScan" class="btn btn-outline-primary" data-lock-posted="1">SCAN</button>
+                                        <button type="button" id="btnClearTrackedScans" class="btn btn-outline-secondary" data-lock-posted="1">تفريغ</button>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-6 col-12">
+                                    <label class="form-label form-label-sm">حالة SCAN</label>
+                                    <div id="TrackedScanHint" class="small text-muted border rounded px-2 py-2 bg-light-subtle">لا يوجد SCAN بعد.</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1631,24 +1703,46 @@
         // =========================================================
         // (0.5) إعدادات واجهة الفاتورة — مثل فاتورة المبيعات
         // =========================================================
-        const SI_UI_SETTINGS_KEY = 'erp.purchaseinvoice.ui.settings.v1';
-        function readSiUiSettings() {
+        const SI_UI_SETTINGS_DEFAULTS = { showClearAll: true, maxItems: 35, sortMode: 'location' };
+        const SI_THEME_STORAGE_KEY = 'erp.purchaseinvoice.page.theme.v2';
+        const SI_THEME_DEFAULT = 'dark-slate';
+        function normalizeInvoiceTheme(value) {
+            const theme = (value || '').toString().toLowerCase();
+            return (theme === 'dark-slate' || theme === 'dark-plum' || theme === 'dark-navy')
+                ? theme
+                : SI_THEME_DEFAULT;
+        }
+        function readStoredInvoiceTheme() {
             try {
-                const raw = localStorage.getItem(SI_UI_SETTINGS_KEY);
-                if (!raw) return { showClearAll: true, maxItems: 35, sortMode: 'location' };
-                const parsed = JSON.parse(raw);
-                const sortModeRaw = (parsed.sortMode || '').toString().toLowerCase();
-                const sortMode = (sortModeRaw === 'alpha' || sortModeRaw === 'location' || sortModeRaw === 'auto')
-                    ? sortModeRaw
-                    : 'location';
-                return {
-                    showClearAll: parsed.showClearAll !== false,
-                    maxItems: (Number(parsed.maxItems) > 0 ? Number(parsed.maxItems) : 35),
-                    sortMode: sortMode
-                };
+                return normalizeInvoiceTheme(localStorage.getItem(SI_THEME_STORAGE_KEY));
             } catch {
-                return { showClearAll: true, maxItems: 35, sortMode: 'location' };
+                return SI_THEME_DEFAULT;
             }
+        }
+        function writeStoredInvoiceTheme(theme) {
+            try {
+                localStorage.setItem(SI_THEME_STORAGE_KEY, normalizeInvoiceTheme(theme));
+            } catch {
+            }
+        }
+        function applyInvoiceTheme(theme) {
+            const invoicePage = document.querySelector('.invoice-page');
+            if (!invoicePage) return;
+            invoicePage.classList.remove('theme-dark-navy', 'theme-dark-slate', 'theme-dark-plum');
+            const themeSelect = document.getElementById('siThemeSelect');
+            if (themeSelect) themeSelect.value = 'dark-navy';
+        }
+        let siUiSettingsMemory = { ...SI_UI_SETTINGS_DEFAULTS };
+        function readSiUiSettings() {
+            const sortModeRaw = (siUiSettingsMemory.sortMode || '').toString().toLowerCase();
+            const sortMode = (sortModeRaw === 'alpha' || sortModeRaw === 'location' || sortModeRaw === 'auto')
+                ? sortModeRaw
+                : 'location';
+            return {
+                showClearAll: siUiSettingsMemory.showClearAll !== false,
+                maxItems: (Number(siUiSettingsMemory.maxItems) > 0 ? Number(siUiSettingsMemory.maxItems) : 35),
+                sortMode: sortMode
+            };
         }
         function writeSiUiSettings(s) {
             const maxItems = (Number(s.maxItems) > 0 ? Number(s.maxItems) : 35);
@@ -1656,11 +1750,11 @@
             const sortMode = (sortModeRaw === 'alpha' || sortModeRaw === 'location' || sortModeRaw === 'auto')
                 ? sortModeRaw
                 : 'location';
-            localStorage.setItem(SI_UI_SETTINGS_KEY, JSON.stringify({
+            siUiSettingsMemory = {
                 showClearAll: !!s.showClearAll,
                 maxItems: maxItems,
                 sortMode: sortMode
-            }));
+            };
         }
         function getInvoiceMaxItemsFromSettings() {
             return readSiUiSettings().maxItems || 35;
@@ -1686,15 +1780,22 @@
             const chk = document.getElementById('siShowClearAllChk');
             const maxItemsInput = document.getElementById('siMaxItemsInput');
             const sortModeSelect = document.getElementById('siSortModeSelect');
+            const themeSelect = document.getElementById('siThemeSelect');
             if (toggleBtn && panel) {
                 toggleBtn.addEventListener('click', function () {
                     panel.classList.toggle('show');
+                });
+            }
+            if (themeSelect) {
+                themeSelect.addEventListener('change', function () {
+                    applyInvoiceTheme(themeSelect.value);
                 });
             }
             if (saveBtn && chk) {
                 saveBtn.addEventListener('click', function () {
                     const maxItems = maxItemsInput ? parseInt(maxItemsInput.value || '35', 10) : 35;
                     const sortMode = sortModeSelect ? sortModeSelect.value : 'location';
+                    writeStoredInvoiceTheme(themeSelect ? themeSelect.value : SI_THEME_DEFAULT);
                     writeSiUiSettings({
                         showClearAll: chk.checked,
                         maxItems: (isNaN(maxItems) ? 35 : maxItems),
@@ -1707,6 +1808,7 @@
                     showToast('تم حفظ إعدادات الفاتورة.', 'success', 2000);
                 });
             }
+            applyInvoiceTheme(readStoredInvoiceTheme());
             applySiUiSettings();
         });
 
@@ -1735,25 +1837,28 @@
             }
 
             // =========================================================
-            // حد أقصى لعرض اقتراحات الأسماء (حتى 10) — مثل فاتورة المبيعات
+            // حد أقصى لعرض اقتراحات الأسماء (نفس طلب الشراء)
             // =========================================================
-            const CUSTOMER_LIST_MAX = 10;
+            const CUSTOMER_LIST_MAX = 80;
             const allSupplierOptions = Array.from(custDataList.options || []);
 
             function getFilteredSupplierOptions(search) {
-                const q = normalizeSupplierText(search);
-                if (!q) return allSupplierOptions.slice(0, CUSTOMER_LIST_MAX);
+                const raw = (search || '').trim();
+                if (!raw) return allSupplierOptions.slice(0, CUSTOMER_LIST_MAX);
 
-                // نفس منطق البوكس في المبيعات: نركّز على أول كلمة
-                const q1 = q.indexOf(' ') !== -1 ? (q.split(/\s+/)[0] || q) : q;
-
-                const out = [];
-                for (let i = 0; i < allSupplierOptions.length && out.length < CUSTOMER_LIST_MAX; i++) {
-                    const name = normalizeSupplierText(allSupplierOptions[i].value);
+                const filtered = [];
+                for (let i = 0; i < allSupplierOptions.length; i++) {
+                    const opt = allSupplierOptions[i];
+                    const name = (opt.value || '').trim();
                     if (!name) continue;
-                    if (name.indexOf(q1) !== -1) out.push(allSupplierOptions[i]);
+                    if (supplierNameMatchesSearch(name, raw)) filtered.push(opt);
                 }
-                return out;
+
+                filtered.sort((a, b) =>
+                    supplierSearchRank(a.value || '', raw) - supplierSearchRank(b.value || '', raw)
+                );
+
+                return filtered.slice(0, CUSTOMER_LIST_MAX);
             }
 
             // =========================================================
@@ -1805,10 +1910,7 @@
                 if (!supplierDropdownList || !supplierDropdownWrap || !custNameInput) return;
 
                 const searchTermRaw = (custNameInput.value || '').trim();
-                let searchTerm = searchTermRaw;
-                if (searchTerm.indexOf(' ') !== -1) searchTerm = searchTerm.split(/\s+/)[0] || searchTerm;
-
-                const list = getFilteredSupplierOptions(searchTerm);
+                const list = getFilteredSupplierOptions(searchTermRaw);
 
                 supplierDropdownList.innerHTML = '';
                 supplierDropdownSelectableSuppliers = [];
@@ -1908,23 +2010,84 @@
                 });
             }
 
-            // دالة: توحيد نص المورد (وتجاهل الألف في أول الكلمة)
+            function normalizeDigits(s) {
+                if (!s) return '';
+                const map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4', '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+                let out = '';
+                for (let i = 0; i < s.length; i++) {
+                    const c = s[i];
+                    out += map[c] !== undefined ? map[c] : c;
+                }
+                return out;
+            }
+
+            function normalizeSupplierWord(word) {
+                return normalizeDigits((word || '').trim().toLowerCase()).replace(/^[اأإآ]/u, '');
+            }
+
+            // دالة: توحيد نص المورد (وتجاهل الألف في أول الكلمة + الأرقام العربية)
             function normalizeSupplierText(txt) {
                 return (txt || '')
                     .trim()
                     .toLowerCase()
-                    .replace(/^[اأإآ]/, '')
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .map((w) => normalizeSupplierWord(w))
+                    .filter(Boolean)
+                    .join(' ')
                     .replace(/\s+/g, ' ');
+            }
+
+            function wordMatchesQueryWord(nameWord, queryWord) {
+                const nw0 = normalizeDigits((nameWord || '').trim().toLowerCase());
+                const qw0 = normalizeDigits((queryWord || '').trim().toLowerCase());
+                const nw = nw0.replace(/^[اأإآ]/u, '');
+                const qw = qw0.replace(/^[اأإآ]/u, '');
+                if (!qw) return true;
+                return nw === qw || nw.startsWith(qw);
+            }
+
+            function supplierNameMatchesSearch(supplierName, rawSearch) {
+                const raw = (rawSearch || '').trim();
+                if (!raw) return true;
+                const qWords = raw.split(/\s+/).filter(Boolean);
+                const nWords = (supplierName || '').trim().split(/\s+/).filter(Boolean);
+                if (qWords.length === 0) return true;
+                return qWords.every((qw) => nWords.some((nw) => wordMatchesQueryWord(nw, qw)));
+            }
+
+            function supplierSearchRank(name, rawSearch) {
+                const raw = (rawSearch || '').trim();
+                const nm = (name || '').trim();
+                if (!raw) return 50;
+                if (nm === raw) return 0;
+                if (nm.startsWith(raw)) return 1;
+                const rawWords = raw.split(/\s+/).filter(Boolean);
+                const firstQ = rawWords[0] || '';
+                const nmWords = nm.split(/\s+/).filter(Boolean);
+                if (firstQ && nmWords.length) {
+                    if (nmWords[0].startsWith(firstQ)) return 2;
+                    const nw0 = normalizeDigits(nmWords[0].toLowerCase());
+                    const qw0 = normalizeDigits(firstQ.toLowerCase());
+                    const nw = nw0.replace(/^[اأإآ]/u, '');
+                    const qw = qw0.replace(/^[اأإآ]/u, '');
+                    if (qw && (nw === qw || nw.startsWith(qw))) return 3;
+                }
+                return 4;
             }
 
             // دالة: البحث عن مورد بالاسم (تطابق كامل)
             function findSupplierByName(name) {
+                const raw = (name || '').trim();
                 const search = normalizeSupplierText(name);
                 if (!search) return null;
 
                 const opts = allSupplierOptions;
                 for (let i = 0; i < opts.length; i++) {
                     if (normalizeSupplierText(opts[i].value) === search) return opts[i];
+                }
+                for (let i = 0; i < opts.length; i++) {
+                    if ((opts[i].value || '').trim() === raw) return opts[i];
                 }
                 return null;
             }
@@ -2103,6 +2266,10 @@
             const prodExpiryInput = document.getElementById('ProdExpiryInput');   // متغير: تاريخ الصلاحية
             const prodHiddenId    = document.getElementById('ProdId');            // متغير: المعرّف الداخلي للصنف
             const btnAddLine      = document.getElementById('btnAddInvoiceLine'); // متغير: زر إضافة السطر
+            const prod2DScanInput = document.getElementById('Prod2DScanInput');   // متغير: حقل مسح 2D
+            const btnAddTrackedScan = document.getElementById('btnAddTrackedScan');// متغير: زر مسح عبوة
+            const btnClearTrackedScans = document.getElementById('btnClearTrackedScans'); // متغير: زر تفريغ العبوات
+            const trackedScanHint = document.getElementById('TrackedScanHint');    // متغير: نص إرشادي
 
             // تنسيق الصلاحية عند الخروج من الحقل (شهر+سنة بدون شرطة -> شهر/سنة) — مثل طلب الشراء
             if (prodExpiryInput && typeof formatExpiryWithSlash === 'function') {
@@ -2129,11 +2296,141 @@
 
             // 3) datalist الخاصة بالأصناف (مخفي — مصدر بيانات القائمة المخصصة)
             const prodDataList = document.getElementById('productsList');
+            const trackedPurchaseState = {
+                productId: 0,
+                productName: '',
+                batchNo: '',
+                expiryText: '',
+                units: []
+            };
 
             if (!prodDataList) {
                 console.error('❌ لم يتم العثور على قائمة الأصناف (productsList) في صفحة فاتورة المشتريات.');
             } else {
                 console.log('✅ تم العثور على datalist، عدد الأصناف:', prodDataList.options.length);
+            }
+
+            renderTrackedPurchaseState();
+
+            function normalizeScanText(value) {
+                return (value || '').toString().trim();
+            }
+
+            function resetTrackedPurchaseState(silent = false, clearDisplays = false) {
+                trackedPurchaseState.productId = 0;
+                trackedPurchaseState.productName = '';
+                trackedPurchaseState.batchNo = '';
+                trackedPurchaseState.expiryText = '';
+                trackedPurchaseState.units = [];
+                renderTrackedPurchaseState();
+
+                if (clearDisplays) {
+                    if (trackedScanHint) trackedScanHint.textContent = 'لا يوجد SCAN بعد.';
+                }
+
+                if (!silent && typeof showToast === 'function') {
+                    showToast('تم تفريغ العبوات الممسوحة.', 'muted', 1200);
+                }
+            }
+
+            function renderTrackedPurchaseState() {
+                if (trackedScanHint) {
+                    trackedScanHint.textContent = trackedPurchaseState.units.length > 0
+                        ? `جاهز لإضافة عبوة ${trackedPurchaseState.productName || ('#' + trackedPurchaseState.productId)}`
+                        : 'لا يوجد SCAN بعد.';
+                }
+            }
+
+            function setTrackedScanDisplays(unit, productName) {
+                if (trackedScanHint) trackedScanHint.textContent = productName
+                    ? `آخر SCAN: ${productName}`
+                    : 'تم قراءة آخر كود بنجاح.';
+            }
+
+            function setProductFromTrackedScan(product) {
+                if (!product) return;
+
+                if (prodHiddenId) prodHiddenId.value = String(product.id || '');
+                if (prodCodeInput) prodCodeInput.value = String(product.code || product.id || '');
+                if (prodNameInput) prodNameInput.value = product.name || '';
+                if (prodPriceInput) {
+                    const priceValue = Number(product.priceRetail || 0);
+                    prodPriceInput.value = isNaN(priceValue) ? '' : priceValue.toFixed(2);
+                    prodPriceInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    prodPriceInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+
+            async function addTrackedPurchaseScan() {
+                const rawScan = normalizeScanText(prod2DScanInput ? prod2DScanInput.value : '');
+                if (!rawScan) {
+                    prod2DScanInput?.focus();
+                    return;
+                }
+
+                if (typeof isInvoicePosted === 'function' && isInvoicePosted()) {
+                    showToast('الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً.', 'danger');
+                    return;
+                }
+
+                const token = getAntiForgeryToken();
+                if (btnAddTrackedScan) btnAddTrackedScan.disabled = true;
+
+                try {
+                    const resp = await fetch('@Url.Action("ParseTrackedPurchaseScanJson", "PurchaseInvoices")', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': token
+                        },
+                        body: JSON.stringify({ rawScan })
+                    });
+
+                    const data = await resp.json().catch(() => null);
+                    if (!resp.ok || !data || data.ok !== true) {
+                        showToast((data && data.message) ? data.message : 'تعذر قراءة الكود الممسوح.', 'danger');
+                        return;
+                    }
+
+                    const product = data.product || {};
+                    const scan = data.scan || {};
+                    const incomingProductId = Number(product.id || 0);
+                    const incomingBatch = normalizeScanText(scan.batchNo || '');
+                    const incomingExpiry = normalizeScanText(scan.expiryText || '');
+                    const incomingUid = normalizeScanText(scan.uid || '');
+
+                    if (!incomingProductId || !incomingUid) {
+                        showToast('بيانات الكود الممسوح غير مكتملة.', 'danger');
+                        return;
+                    }
+
+                    trackedPurchaseState.productId = incomingProductId;
+                    trackedPurchaseState.productName = product.name || '';
+                    trackedPurchaseState.batchNo = incomingBatch;
+                    trackedPurchaseState.expiryText = incomingExpiry;
+                    const trackedUnit = {
+                        rawScan: rawScan,
+                        uid: incomingUid,
+                        gtin: normalizeScanText(scan.gtin || ''),
+                        serialNo: normalizeScanText(scan.serialNo || ''),
+                        batchNo: incomingBatch,
+                        expiryText: incomingExpiry
+                    };
+                    trackedPurchaseState.units = [trackedUnit];
+
+                    setProductFromTrackedScan(product);
+                    if (prodBatchInput) prodBatchInput.value = incomingBatch;
+                    if (prodExpiryInput) prodExpiryInput.value = incomingExpiry;
+                    if (prodQtyInput) prodQtyInput.value = '1';
+                    setTrackedScanDisplays(trackedUnit, product.name || '');
+                    renderTrackedPurchaseState();
+                    await addLineAjax({ autoScan: true, keepScanFocus: true, scannedUnits: [trackedUnit] });
+                } catch (err) {
+                    console.error('Tracked purchase scan error:', err);
+                    showToast('حدث خطأ أثناء قراءة كود التتبع.', 'danger');
+                } finally {
+                    if (btnAddTrackedScan) btnAddTrackedScan.disabled = false;
+                }
             }
 
             // =========================================================
@@ -2214,6 +2511,9 @@
                 // لو مفيش صنف مطابق → نفرّغ
                 if (!opt) {
                     console.warn('⚠️ fillProductFromOption: لم يتم العثور على صنف مطابق');
+                    if (trackedPurchaseState.units.length > 0) {
+                        resetTrackedPurchaseState(true, true);
+                    }
                     if (prodHiddenId)    prodHiddenId.value    = '';
                     if (prodCodeInput)   prodCodeInput.value   = '';
                     // لا نمسح اسم الصنف المكتوب (نتركه للمستخدم)
@@ -2249,6 +2549,10 @@
                 priceRaw = priceRaw.toString().replace(',', '.');
                 let price = parseFloat(priceRaw);
                 if (isNaN(price)) price = 0;
+
+                if (trackedPurchaseState.units.length > 0 && trackedPurchaseState.productId > 0 && trackedPurchaseState.productId !== Number(id || 0)) {
+                    resetTrackedPurchaseState(true, true);
+                }
 
                 if (prodHiddenId)  prodHiddenId.value  = id;
                 if (prodCodeInput) prodCodeInput.value = code;
@@ -2703,7 +3007,6 @@
 
             // لو مفيش بيانات
             if (!Array.isArray(lines) || lines.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-3">لا توجد سطور</td></tr>`;
                 return;
             }
 
@@ -3070,7 +3373,8 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
              // =========================================================
         // إضافة سطر (AJAX) — مع حماية من أخطاء الدوال غير المعرفة
         // =========================================================
-        async function addLineAjax() {
+        async function addLineAjax(options) {
+            const opts = options || {};
 
             // 1) لازم يكون عندنا رقم فاتورة محفوظ
             const invoiceIdInput = document.getElementById('InvoiceId'); // متغير: Hidden رقم الفاتورة
@@ -3079,7 +3383,7 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
             if (!invoiceId || invoiceId <= 0) {
                 alert('لا يمكن إضافة أصناف قبل حفظ الفاتورة. اضغط "حفظ الفاتورة" أولاً.');
                 document.getElementById('btnSaveInvoiceHeader')?.focus(); // متغير: زر حفظ الهيدر
-                return;
+                return false;
             }
 
             // 2) قراءة بيانات السطر
@@ -3101,14 +3405,14 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                 alert('من فضلك اختر صنفاً صحيحاً من القائمة.');
                 prodNameInput?.focus();
                 prodNameInput?.select?.();
-                return;
+                return false;
             }
 
             if (!qty || qty <= 0) {
                 alert('الكمية يجب أن تكون أكبر من صفر.');
                 prodQtyInput?.focus();
                 prodQtyInput?.select?.();
-                return;
+                return false;
             }
 
             // 4) تجهيز DTO
@@ -3125,7 +3429,15 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                 purchaseDiscountPct: purchaseDiscountPct,
 
                 batchNo: batchNo,
-                expiryText: expiryText
+                expiryText: expiryText,
+                scannedUnits: (Array.isArray(opts.scannedUnits) ? opts.scannedUnits : trackedPurchaseState.units).map(x => ({
+                    rawScan: x.rawScan,
+                    uid: x.uid,
+                    gtin: x.gtin,
+                    serialNo: x.serialNo,
+                    batchNo: x.batchNo,
+                    expiryText: x.expiryText
+                }))
             };
 
             // 5) استدعاء السيرفر
@@ -3149,7 +3461,7 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                     const errTxt = await resp.text().catch(() => '');
                     console.error('AddLineJson HTTP Error:', resp.status, errTxt);
                     alert('حدث خطأ أثناء إضافة السطر (HTTP). راجع Console لمعرفة السبب.');
-                    return;
+                    return false;
                 }
 
                 // نقرأ الرد كنص ثم JSON (أكثر أماناً)
@@ -3159,7 +3471,7 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                 if (rawTrim.startsWith('<')) {
                     console.error('AddLineJson رجّع HTML بدل JSON:', rawTrim.substring(0, 300));
                     alert('السيرفر رجّع HTML بدل JSON. راجع AddLineJson في الكنترولر.');
-                    return;
+                    return false;
                 }
 
                 let data = null; // متغير: بيانات الرد
@@ -3168,14 +3480,18 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                 } catch (e) {
                     console.error('فشل تحويل الرد إلى JSON:', e, rawTrim.substring(0, 300));
                     alert('الرد من السيرفر ليس JSON.');
-                    return;
+                    return false;
                 }
 
                 // نجاح قد يكون ok أو success حسب السيرفر
                 const isOk = !!(data && (data.ok === true || data.success === true));
                 if (!isOk) {
                     alert((data && data.message) ? data.message : 'تعذر إضافة السطر.');
-                    return;
+                    return false;
+                }
+
+                if (data && Number(data.trackedUnitsAdded || 0) > 0) {
+                    showToast(`تم تسجيل ${data.trackedUnitsAdded} عبوة تتبعية مع السطر.`, 'success', 1400);
                 }
 
                 // =========================================================
@@ -3212,18 +3528,31 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                 // =========================================================
                 // 7) تنظيف الخانات + فوكس على اسم الصنف
                 // =========================================================
-                if (prodQtyInput) prodQtyInput.value = '';
-                if (prodBatchInput) prodBatchInput.value = '';
-                if (prodExpiryInput) prodExpiryInput.value = '';
+                if (opts.autoScan) {
+                    if (prodQtyInput) prodQtyInput.value = '1';
+                    resetTrackedPurchaseState(true, false);
+                    if (prod2DScanInput) {
+                        prod2DScanInput.value = '';
+                        if (opts.keepScanFocus) prod2DScanInput.focus();
+                    }
+                } else {
+                    if (prodQtyInput) prodQtyInput.value = '';
+                    if (prodBatchInput) prodBatchInput.value = '';
+                    if (prodExpiryInput) prodExpiryInput.value = '';
+                    resetTrackedPurchaseState(true, true);
+                    if (prod2DScanInput) prod2DScanInput.value = '';
 
-                // فوكس على اسم الصنف (مش الكود)
-                document.getElementById('ProdNameInput')?.focus();
-                document.getElementById('ProdNameInput')?.select?.();
+                    // فوكس على اسم الصنف (مش الكود)
+                    document.getElementById('ProdNameInput')?.focus();
+                    document.getElementById('ProdNameInput')?.select?.();
+                }
+                return true;
 
             } catch (err) {
                 // ✅ هنا هنطلع السبب الحقيقي بدل رسالة عامة
                 console.error('AddLineAjax Exception:', err);
                 alert('حدث خطأ داخل الجافاسكربت أثناء الإضافة: ' + (err?.message || err));
+                return false;
             } finally {
                 if (btnAddLine) btnAddLine.disabled = false;
             }
@@ -3239,6 +3568,36 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
             });
         }
 
+        if (btnAddTrackedScan && !btnAddTrackedScan.dataset.boundTrackedScan) {
+            btnAddTrackedScan.dataset.boundTrackedScan = '1';
+            btnAddTrackedScan.addEventListener('click', function (e) {
+                e.preventDefault();
+                addTrackedPurchaseScan();
+            });
+        }
+
+        if (btnClearTrackedScans && !btnClearTrackedScans.dataset.boundClearTrackedScans) {
+            btnClearTrackedScans.dataset.boundClearTrackedScans = '1';
+            btnClearTrackedScans.addEventListener('click', function (e) {
+                e.preventDefault();
+                resetTrackedPurchaseState(false, true);
+                if (prod2DScanInput) {
+                    prod2DScanInput.value = '';
+                    prod2DScanInput.focus();
+                }
+            });
+        }
+
+        if (prod2DScanInput && !prod2DScanInput.dataset.boundTrackedEnter) {
+            prod2DScanInput.dataset.boundTrackedEnter = '1';
+            prod2DScanInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addTrackedPurchaseScan();
+                }
+            });
+        }
+
 
 
 
@@ -3247,11 +3606,30 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
             // =========================================================
             const btnProdMovement = document.getElementById('btnOpenProductMovement'); // متغير: زر حركة الصنف
             const btnProdEdit     = document.getElementById('btnOpenProductEdit');     // متغير: زر تعديل بيانات الصنف
+            const btnTrackingInfo = document.getElementById('btnOpenTrackingInfo');    // متغير: زر معلومات التتبع
 
             function getCurrentProdId() {
                 if (prodHiddenId && prodHiddenId.value.trim() !== '') return prodHiddenId.value.trim();
                 if (prodCodeInput && prodCodeInput.value.trim() !== '') return prodCodeInput.value.trim();
                 return '';
+            }
+
+            function getSelectedPurchaseLineNo() {
+                const row = document.querySelector('#PILinesTbody tr.pi-row-selected[data-line-no]');
+                if (!row) return 0;
+                return parseInt(row.getAttribute('data-line-no') || '0', 10) || 0;
+            }
+
+            function getCurrentPurchaseInvoiceId() {
+                return parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
+            }
+
+            function showTrackTraceAlert(message) {
+                if (typeof ERP !== 'undefined' && typeof ERP.showAlertModal === 'function') {
+                    ERP.showAlertModal({ title: 'تنبيه', message: message });
+                    return;
+                }
+                alert(message);
             }
 
             function openTabFromFrame(url, tabId, title) {
@@ -3278,6 +3656,7 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
 
             const editBaseUrl     = '@Url.Action("Edit", "Products")'; // متغير: /Products/Edit
             const movementBaseUrl = '@Url.Action("Show", "Products")'; // متغير: /Products/Show
+            const trackingInfoBaseUrl = '@Url.Action("Index", "TrackTrace")';
 
             function buildEditUrl(id) {
                 const base = editBaseUrl.replace(/\/$/, '');
@@ -3293,6 +3672,16 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                 params.set('frame', '1');
                 const sep = base.includes('?') ? '&' : '?';
                 return base + sep + params.toString();
+            }
+
+            function buildTrackingInfoUrl(piId, lineNo) {
+                const params = new URLSearchParams();
+                params.set('frame', '1');
+                params.set('sourceType', 'purchase-invoice');
+                params.set('documentId', String(piId));
+                params.set('lineNo', String(lineNo));
+                const sep = trackingInfoBaseUrl.includes('?') ? '&' : '?';
+                return trackingInfoBaseUrl + sep + params.toString();
             }
 
             if (btnProdEdit && !btnProdEdit.dataset.boundProdEdit) {
@@ -3326,6 +3715,27 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                     }
 
                     openTabFromFrame(buildMovementUrl(id), 'product-movement-tab', 'حركة الصنف');
+                });
+            }
+
+            if (btnTrackingInfo && !btnTrackingInfo.dataset.boundTrackingInfo) {
+                btnTrackingInfo.dataset.boundTrackingInfo = '1';
+                btnTrackingInfo.addEventListener('click', function (e) {
+                    e.preventDefault();
+
+                    const piId = getCurrentPurchaseInvoiceId();
+                    if (!piId) {
+                        showTrackTraceAlert('من فضلك احفظ الفاتورة أولاً قبل فتح معلومات التتبع.');
+                        return;
+                    }
+
+                    const lineNo = getSelectedPurchaseLineNo();
+                    if (!lineNo) {
+                        showTrackTraceAlert('من فضلك اختر سطرًا من سطور الفاتورة أولاً.');
+                        return;
+                    }
+
+                    openTabFromFrame(buildTrackingInfoUrl(piId, lineNo), 'track-trace-info', 'معلومات التتبع');
                 });
             }
 

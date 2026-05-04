@@ -619,15 +619,16 @@ private async Task PopulateDropDownsAsync(
     int? selectedWarehouseId = null)    // متغير: كود المخزن المختار (لو طلب قديم)
     {
         // =========================================================
-        // (1) تحميل الموردين من جدول Customers
-        // - نفس منطق فاتورة الشراء (معلومات كاملة للعرض في datalist)
+        // (1) تحميل العملاء بنفس منطق فاتورة البيع (بدون فلترة نشط فقط)
         // =========================================================
-        var customerQueryPr = _context.Customers.AsNoTracking().Where(c => c.IsActive == true);
+        var customerQueryPr = _context.Customers.AsNoTracking();
         customerQueryPr = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customerQueryPr);
+        var nowForCredit = DateTime.Now;
         var customers = await customerQueryPr
             .Include(c => c.Governorate)
             .Include(c => c.District)
             .Include(c => c.Area)
+            .Include(c => c.Policy)
             .OrderBy(c => c.CustomerName)
             .Select(c => new
             {
@@ -647,11 +648,56 @@ private async Task PopulateDropDownsAsync(
                             ? c.Area.AreaName
                             : string.Empty,
 
-                Credit = c.CreditLimit                           // متغير: حد الائتمان
+                Credit = c.CreditLimit
+                    + ((c.CreditLimitTemporaryIncrease.HasValue
+                        && c.CreditLimitTemporaryIncrease.Value > 0
+                        && c.CreditLimitTemporaryUntil.HasValue
+                        && c.CreditLimitTemporaryUntil.Value > nowForCredit)
+                        ? c.CreditLimitTemporaryIncrease.Value
+                        : 0m),
+                CurrentBalance = c.CurrentBalance,
+                PolicyId = c.PolicyId,
+                PolicyName = c.Policy != null ? c.Policy.Name : "",
+                IsActive = c.IsActive
             })
             .ToListAsync();
 
-        // متغير: إرسال قائمة الموردين للـ View لاستخدامها في datalist/combos
+        if (selectedCustomerId.HasValue && !customers.Any(c => c.Id == selectedCustomerId.Value))
+        {
+            var extra = await _context.Customers
+                .AsNoTracking()
+                .Where(c => c.CustomerId == selectedCustomerId.Value)
+                .Include(c => c.Governorate)
+                .Include(c => c.District)
+                .Include(c => c.Area)
+                .Include(c => c.Policy)
+                .Select(c => new
+                {
+                    Id = c.CustomerId,
+                    Name = c.CustomerName ?? string.Empty,
+                    Phone = c.Phone1 ?? string.Empty,
+                    Address = c.Address ?? string.Empty,
+                    Gov = c.Governorate != null ? c.Governorate.GovernorateName : string.Empty,
+                    District = c.District != null ? c.District.DistrictName : string.Empty,
+                    Area = c.Area != null ? c.Area.AreaName : string.Empty,
+                    Credit = c.CreditLimit
+                        + ((c.CreditLimitTemporaryIncrease.HasValue
+                            && c.CreditLimitTemporaryIncrease.Value > 0
+                            && c.CreditLimitTemporaryUntil.HasValue
+                            && c.CreditLimitTemporaryUntil.Value > nowForCredit)
+                            ? c.CreditLimitTemporaryIncrease.Value
+                            : 0m),
+                    CurrentBalance = c.CurrentBalance,
+                    PolicyId = c.PolicyId,
+                    PolicyName = c.Policy != null ? c.Policy.Name : "",
+                    IsActive = c.IsActive
+                })
+                .FirstOrDefaultAsync();
+            if (extra != null)
+                customers.Insert(0, extra);
+        }
+
+        // متغير: إرسال قائمة الموردين/العملاء للـ View لاستخدامها في datalist/combos
         ViewBag.Customers = customers;
 
         // =========================================================
@@ -3010,7 +3056,7 @@ private static bool IsMissingPrintHeaderSettingsTable(Exception ex)
             if (creatorNames.Count == 0)
                 return query.Where(_ => false);
 
-            return query.Where(pr => pr.CreatedBy != null && creatorNames.Contains(pr.CreatedBy.Trim()));
+            return query.Where(pr => pr.CreatedBy != null && creatorNames.Contains(pr.CreatedBy));
         }
 
 

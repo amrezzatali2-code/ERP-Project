@@ -15,6 +15,10 @@ namespace ERP.ViewModels
         public decimal Qty { get; set; }
         public decimal? UnitPrice { get; set; }
         public decimal? Total { get; set; }
+        public decimal? DiscountPercent { get; set; }
+        public decimal? DiscountValue { get; set; }
+        public TimeSpan? Time { get; set; }
+        public string? CustomerCode { get; set; }
         public string? PartyName { get; set; }
         public string? WarehouseName { get; set; }
         public string? BatchNo { get; set; }

@@ -115,12 +115,17 @@
 
         .erp-users-toolbar-row {
             max-width: 100%;
-            overflow-x: auto;
-            overflow-y: hidden;
-            flex-wrap: nowrap !important;
-            -webkit-overflow-scrolling: touch;
+            overflow: visible !important;
+            flex-wrap: wrap !important;
+            row-gap: 0.35rem;
         }
-        .erp-users-toolbar-row::-webkit-scrollbar { height: 6px; }
+        .erp-users-toolbar-row .btn-group {
+            position: relative;
+        }
+        .erp-users-toolbar-row .dropdown-menu {
+            z-index: 1085;
+            min-width: 170px;
+        }
 
         .erp-users-export-select {
             width: 86px;
@@ -212,9 +217,9 @@
                         <div class="btn-group">
                             <button type="button" class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle erp-users-toolbar-btn" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
-                                <li><button type="button" class="dropdown-item text-danger" id="btnBulkDelete">حذف المحدد</button></li>
+                                <li><button type="button" class="dropdown-item text-danger" id="btnBulkDelete">مسح المحدد</button></li>
                                 <li><hr class="dropdown-divider" /></li>
-                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الجميع</button></li>
+                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">مسح الكل</button></li>
                             </ul>
                         </div>
                         }
@@ -299,6 +304,7 @@
                     </th>
                     <th data-col="id">@filterableCol("id", "UserId", "كود المستخدم")</th>
                     <th data-col="username">@filterableCol("username", "UserName", "الاسم")</th>
+                    <th data-col="portalRole">وظيفة الموقع</th>
                     <th data-col="roles">@filterableCol("roles", "UserName", "الأدوار")</th>
                     <th data-col="active">@filterableCol("active", "IsActive", "نشط؟")</th>
                     <th data-col="created">@filterableCol("created", "CreatedAt", "تاريخ الإنشاء")</th>
@@ -336,6 +342,15 @@
 
                             <td data-col="id">@u.UserId</td>
                             <td data-col="username">@u.UserName</td>
+                            <td data-col="portalRole">
+                                @(u.PortalRole switch
+                                {
+                                    "Collector" => "موزع",
+                                    "Pharmacist" => "صيدلي",
+                                    "Employee" => "موظف",
+                                    _ => "موظف"
+                                })
+                            </td>
                             <td data-col="roles">
                                 @(!string.IsNullOrWhiteSpace(u.RolesSummary) ? u.RolesSummary : "لا يوجد دور")
                             </td>

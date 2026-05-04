@@ -189,6 +189,42 @@ namespace ERP.Controllers
             var route = await _db.SalesInvoiceRoutes.AsNoTracking().FirstOrDefaultAsync(r => r.SIId == siId);
             if (route == null)
                 return Json(new { found = false });
+
+            var fridgeLines = await _db.SalesInvoiceRouteFridgeLines
+                .AsNoTracking()
+                .Where(fl => fl.SIId == siId)
+                .Include(fl => fl.Product)
+                .OrderBy(fl => fl.Product != null ? fl.Product.ProdName : "")
+                .Select(fl => new
+                {
+                    productId = fl.ProductId,
+                    name = fl.Product != null ? (fl.Product.ProdName ?? ("صنف #" + fl.ProductId)) : ("صنف #" + fl.ProductId),
+                    qty = fl.Qty
+                })
+                .ToListAsync();
+
+            // fallback للبيانات القديمة/الناقصة: لو سطور الثلاجة غير محفوظة،
+            // نستخدم أصناف الثلاجة من سطور الفاتورة نفسها.
+            if (fridgeLines.Count == 0)
+            {
+                fridgeLines = await _db.SalesInvoiceLines
+                    .AsNoTracking()
+                    .Where(l => l.SIId == siId)
+                    .Join(_db.Products, l => l.ProdId, p => p.ProdId, (l, p) => new { l, p })
+                    .Join(_db.ProductClassifications, x => x.p.ClassificationId, c => c.Id, (x, c) => new { x.l, x.p, c })
+                    .Where(x => x.c.Name != null && x.c.Name.Contains("ثلاجة"))
+                    .GroupBy(x => new { x.p.ProdId, x.p.ProdName })
+                    .Select(g => new
+                    {
+                        productId = g.Key.ProdId,
+                        name = g.Key.ProdName ?? ("صنف #" + g.Key.ProdId),
+                        qty = g.Sum(x => x.l.Qty)
+                    })
+                    .OrderBy(x => x.name)
+                    .Take(20)
+                    .ToListAsync();
+            }
+
             return Json(new
             {
                 found = true,
@@ -198,7 +234,8 @@ namespace ERP.Controllers
                 bagsCount = route.BagsCount,
                 packetsCount = route.PacketsCount,
                 cartonsCount = route.CartonsCount,
-                notes = route.Notes ?? ""
+                notes = route.Notes ?? "",
+                fridgeLines
             });
         }
 
@@ -305,17 +342,38 @@ namespace ERP.Controllers
                 existing.Notes = dto.Notes?.Trim();
                 existing.UpdatedAt = DateTime.UtcNow;
 
-                int fridgeItemsCount = 0, fridgeBoxesCount = 0;
-                if (dto.FridgeLines != null)
-                {
-                    foreach (var line in dto.FridgeLines.Where(l => l.ProductId > 0 && l.Qty > 0))
-                    {
-                        fridgeItemsCount++;
-                        fridgeBoxesCount += line.Qty;
-                    }
-                }
+                var normalizedFridgeLines = (dto.FridgeLines ?? new List<SalesInvoiceRouteFridgeLineDto>())
+                    .Where(l => l != null && l.ProductId > 0 && l.Qty > 0)
+                    .GroupBy(l => l.ProductId)
+                    .Select(g => new { ProductId = g.Key, Qty = g.Sum(x => x.Qty) })
+                    .ToList();
+
+                int fridgeItemsCount = normalizedFridgeLines.Count;
+                int fridgeBoxesCount = normalizedFridgeLines.Sum(x => x.Qty);
                 existing.FridgeItemsCount = fridgeItemsCount;
                 existing.FridgeBoxesCount = fridgeBoxesCount;
+
+                await _db.SaveChangesAsync();
+
+                // حفظ سطور أصناف الثلاجة (الاسم يظهر في التقارير من هذا الجدول)
+                var oldLines = await _db.SalesInvoiceRouteFridgeLines
+                    .Where(x => x.SIId == dto.SIId)
+                    .ToListAsync();
+                if (oldLines.Count > 0)
+                    _db.SalesInvoiceRouteFridgeLines.RemoveRange(oldLines);
+
+                if (normalizedFridgeLines.Count > 0)
+                {
+                    foreach (var line in normalizedFridgeLines)
+                    {
+                        _db.SalesInvoiceRouteFridgeLines.Add(new SalesInvoiceRouteFridgeLine
+                        {
+                            SIId = dto.SIId,
+                            ProductId = line.ProductId,
+                            Qty = line.Qty
+                        });
+                    }
+                }
 
                 await _db.SaveChangesAsync();
 

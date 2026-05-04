@@ -1,0 +1,8 @@
+{
+  "solution": {
+    "path": "ERP.sln",
+    "projects": [
+      "ERP.csproj"
+    ]
+  }
+}

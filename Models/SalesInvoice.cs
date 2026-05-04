@@ -106,6 +106,12 @@ namespace ERP.Models
         [StringLength(50)]
         public string? PostedBy { get; set; }                   // المستخدم الذي قام بالترحيل
 
+        [Display(Name = "عدد مرات الطباعة")]
+        public int PrintCount { get; set; }                     // عدد مرات تنفيذ أمر طباعة الفاتورة
+
+        [Display(Name = "آخر وقت طباعة")]
+        public DateTime? LastPrintedAt { get; set; }            // آخر وقت تم فيه تنفيذ أمر الطباعة
+
         // ========== تتبّع ==========
         [Display(Name = "أنشأه")]
         [Required, StringLength(50)]

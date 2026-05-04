@@ -21,6 +21,7 @@ namespace ERP.Data
         public DbSet<ERP.Models.Customer> Customers { get; set; } = null!;
 
         public DbSet<ERP.Models.Product> Products { get; set; } = null!;   // جدول الأصناف
+        public DbSet<ItemUnit> ItemUnits => Set<ItemUnit>();
         public DbSet<Branch> Branches { get; set; } = null!;
         public DbSet<ERP.Models.Warehouse> Warehouses { get; set; } = null!;
         public DbSet<Category> Categories { get; set; } = null!;
@@ -38,8 +39,10 @@ namespace ERP.Data
         public DbSet<PRLine> PRLines => Set<PRLine>();
         public DbSet<PurchaseInvoice> PurchaseInvoices => Set<PurchaseInvoice>();
         public DbSet<PILine> PILines => Set<PILine>();
+        public DbSet<PurchaseInvoiceLineUnit> PurchaseInvoiceLineUnits => Set<PurchaseInvoiceLineUnit>();
         public DbSet<PurchaseReturn> PurchaseReturns => Set<PurchaseReturn>();
         public DbSet<PurchaseReturnLine> PurchaseReturnLines => Set<PurchaseReturnLine>();
+        public DbSet<PurchaseReturnLineUnit> PurchaseReturnLineUnits => Set<PurchaseReturnLineUnit>();
         public DbSet<SalesOrder> SalesOrders => Set<SalesOrder>();
         public DbSet<SOLine> SOLines => Set<SOLine>();
         public DbSet<Account> Accounts { get; set; } = null!;
@@ -51,6 +54,7 @@ namespace ERP.Data
 
         // ===== جداول المستخدمين والصلاحيات =====
         public DbSet<User> Users { get; set; } = null!;                        // جدول المستخدمين
+        public DbSet<CustomerCollector> CustomerCollectors { get; set; } = null!;
         public DbSet<Role> Roles { get; set; } = null!;                        // جدول الأدوار
         public DbSet<Permission> Permissions { get; set; } = null!;           // جدول الصلاحيات
         public DbSet<UserRole> UserRoles { get; set; } = null!;               // ربط المستخدمين بالأدوار
@@ -90,12 +94,22 @@ namespace ERP.Data
         public DbSet<StockTransferLine> StockTransferLines { get; set; } = null!; // متغير: جدول سطور الأصناف لكل تحويل
         public DbSet<ProductBonusGroup> ProductBonusGroups { get; set; } = default!;
         public DbSet<ERP.Models.StockBatch> StockBatches { get; set; } = default!;
+        public DbSet<TrackTraceIntegrationSetting> TrackTraceIntegrationSettings => Set<TrackTraceIntegrationSetting>();
+        public DbSet<TrackTraceQueue> TrackTraceQueues => Set<TrackTraceQueue>();
+        public DbSet<TrackTraceEventLog> TrackTraceEventLogs => Set<TrackTraceEventLog>();
+        public DbSet<EtaIntegrationSetting> EtaIntegrationSettings => Set<EtaIntegrationSetting>();
+        public DbSet<EtaQueue> EtaQueues => Set<EtaQueue>();
+        public DbSet<EtaSubmissionLog> EtaSubmissionLogs => Set<EtaSubmissionLog>();
 
         // ===== خط السير =====
         public DbSet<ProductClassification> ProductClassifications { get; set; } = null!;
         public DbSet<ERP.Models.Route> Routes { get; set; } = null!;
         public DbSet<SalesInvoiceRoute> SalesInvoiceRoutes { get; set; } = null!;
         public DbSet<SalesInvoiceRouteFridgeLine> SalesInvoiceRouteFridgeLines { get; set; } = null!;
+        public DbSet<SalesInvoiceLineUnit> SalesInvoiceLineUnits => Set<SalesInvoiceLineUnit>();
+        public DbSet<SalesReturnLineUnit> SalesReturnLineUnits => Set<SalesReturnLineUnit>();
+        public DbSet<StockTransferLineUnit> StockTransferLineUnits => Set<StockTransferLineUnit>();
+        public DbSet<StockAdjustmentLineUnit> StockAdjustmentLineUnits => Set<StockAdjustmentLineUnit>();
 
         // ===== الموظفون =====
         public DbSet<Department> Departments { get; set; } = null!;
@@ -150,6 +164,279 @@ namespace ERP.Data
                 entity.Property(x => x.CompanyName).HasMaxLength(200).IsRequired();
                 entity.Property(x => x.LogoPath).HasMaxLength(500);
                 entity.Property(x => x.UpdatedAt).HasColumnType("datetime2");
+            });
+
+            // ===== Product Track & Trace flags =====
+            mb.Entity<Product>(entity =>
+            {
+                entity.Property(x => x.IsTrackTraceEnabled)
+                      .HasDefaultValue(false);
+
+                entity.Property(x => x.TrackingCodeType)
+                      .HasMaxLength(30);
+            });
+
+            mb.Entity<User>(entity =>
+            {
+                entity.Property(x => x.PortalRole)
+                      .HasMaxLength(30);
+            });
+
+            mb.Entity<CustomerCollector>(entity =>
+            {
+                entity.ToTable("CustomerCollectors");
+                entity.HasKey(x => x.Id);
+
+                entity.HasOne(x => x.Customer)
+                      .WithMany(x => x.CustomerCollectors)
+                      .HasForeignKey(x => x.CustomerId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.User)
+                      .WithMany(x => x.CustomerCollectors)
+                      .HasForeignKey(x => x.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ===== ItemUnits =====
+            mb.Entity<ItemUnit>(entity =>
+            {
+                entity.ToTable("ItemUnits");
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.Uid).HasMaxLength(100).IsRequired();
+                entity.Property(x => x.Gtin).HasMaxLength(30);
+                entity.Property(x => x.SerialNo).HasMaxLength(100);
+                entity.Property(x => x.BatchNo).HasMaxLength(50);
+                entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+                entity.Property(x => x.CurrentSourceType).HasMaxLength(50);
+                entity.Property(x => x.CreatedAt).HasColumnType("datetime2");
+                entity.Property(x => x.UpdatedAt).HasColumnType("datetime2");
+
+                entity.HasIndex(x => x.Uid).IsUnique();
+                entity.HasIndex(x => new { x.ProdId, x.WarehouseId, x.Status });
+                entity.HasIndex(x => new { x.BatchId, x.Status });
+                entity.HasIndex(x => new { x.Gtin, x.SerialNo }).IsUnique().HasFilter("[Gtin] IS NOT NULL AND [SerialNo] IS NOT NULL");
+
+                entity.HasOne(x => x.Product)
+                      .WithMany()
+                      .HasForeignKey(x => x.ProdId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(x => x.Batch)
+                      .WithMany()
+                      .HasForeignKey(x => x.BatchId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(x => x.Warehouse)
+                      .WithMany()
+                      .HasForeignKey(x => x.WarehouseId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== PurchaseInvoiceLineUnits =====
+            mb.Entity<PurchaseInvoiceLineUnit>(entity =>
+            {
+                entity.ToTable("PurchaseInvoiceLineUnits");
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.PIId, x.LineNo, x.ItemUnitId }).IsUnique();
+                entity.HasIndex(x => x.ItemUnitId).IsUnique();
+
+                entity.HasOne(x => x.PurchaseInvoiceLine)
+                      .WithMany()
+                      .HasForeignKey(x => new { x.PIId, x.LineNo })
+                      .HasPrincipalKey(x => new { x.PIId, x.LineNo })
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.ItemUnit)
+                      .WithMany()
+                      .HasForeignKey(x => x.ItemUnitId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== SalesInvoiceLineUnits =====
+            mb.Entity<SalesInvoiceLineUnit>(entity =>
+            {
+                entity.ToTable("SalesInvoiceLineUnits");
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.SIId, x.LineNo, x.ItemUnitId }).IsUnique();
+                entity.HasIndex(x => x.ItemUnitId).IsUnique();
+
+                entity.HasOne(x => x.SalesInvoiceLine)
+                      .WithMany()
+                      .HasForeignKey(x => new { x.SIId, x.LineNo })
+                      .HasPrincipalKey(x => new { x.SIId, x.LineNo })
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.ItemUnit)
+                      .WithMany()
+                      .HasForeignKey(x => x.ItemUnitId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== PurchaseReturnLineUnits =====
+            mb.Entity<PurchaseReturnLineUnit>(entity =>
+            {
+                entity.ToTable("PurchaseReturnLineUnits");
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.PRetId, x.LineNo, x.ItemUnitId }).IsUnique();
+                entity.HasIndex(x => x.ItemUnitId);
+
+                entity.HasOne(x => x.PurchaseReturnLine)
+                      .WithMany()
+                      .HasForeignKey(x => new { x.PRetId, x.LineNo })
+                      .HasPrincipalKey(x => new { x.PRetId, x.LineNo })
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.ItemUnit)
+                      .WithMany()
+                      .HasForeignKey(x => x.ItemUnitId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== SalesReturnLineUnits =====
+            mb.Entity<SalesReturnLineUnit>(entity =>
+            {
+                entity.ToTable("SalesReturnLineUnits");
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.SRId, x.LineNo, x.ItemUnitId }).IsUnique();
+                entity.HasIndex(x => x.ItemUnitId);
+
+                entity.HasOne(x => x.SalesReturnLine)
+                      .WithMany()
+                      .HasForeignKey(x => new { x.SRId, x.LineNo })
+                      .HasPrincipalKey(x => new { x.SRId, x.LineNo })
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.ItemUnit)
+                      .WithMany()
+                      .HasForeignKey(x => x.ItemUnitId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== StockTransferLineUnits =====
+            mb.Entity<StockTransferLineUnit>(entity =>
+            {
+                entity.ToTable("StockTransferLineUnits");
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.StockTransferLineId, x.ItemUnitId }).IsUnique();
+                entity.HasIndex(x => x.ItemUnitId);
+
+                entity.HasOne(x => x.StockTransferLine)
+                      .WithMany()
+                      .HasForeignKey(x => x.StockTransferLineId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.ItemUnit)
+                      .WithMany()
+                      .HasForeignKey(x => x.ItemUnitId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== StockAdjustmentLineUnits =====
+            mb.Entity<StockAdjustmentLineUnit>(entity =>
+            {
+                entity.ToTable("StockAdjustmentLineUnits");
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.StockAdjustmentLineId, x.ItemUnitId }).IsUnique();
+                entity.HasIndex(x => x.ItemUnitId);
+
+                entity.HasOne(x => x.StockAdjustmentLine)
+                      .WithMany()
+                      .HasForeignKey(x => x.StockAdjustmentLineId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.ItemUnit)
+                      .WithMany()
+                      .HasForeignKey(x => x.ItemUnitId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== TrackTraceIntegrationSettings =====
+            mb.Entity<TrackTraceIntegrationSetting>(entity =>
+            {
+                entity.ToTable("TrackTraceIntegrationSettings");
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.BaseUrl).HasMaxLength(500);
+                entity.Property(x => x.UserName).HasMaxLength(200);
+                entity.Property(x => x.PasswordOrToken).HasMaxLength(500);
+                entity.Property(x => x.ClientId).HasMaxLength(200);
+                entity.Property(x => x.ClientSecret).HasMaxLength(500);
+                entity.Property(x => x.CallbackBaseUrl).HasMaxLength(500);
+            });
+
+            // ===== TrackTraceQueue =====
+            mb.Entity<TrackTraceQueue>(entity =>
+            {
+                entity.ToTable("TrackTraceQueue");
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.EventType).HasMaxLength(50).IsRequired();
+                entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+                entity.Property(x => x.LastError).HasMaxLength(1000);
+                entity.HasIndex(x => new { x.Status, x.NextRetryAt });
+                entity.HasIndex(x => new { x.ItemUnitId, x.EventType, x.Status });
+
+                entity.HasOne(x => x.ItemUnit)
+                      .WithMany()
+                      .HasForeignKey(x => x.ItemUnitId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== TrackTraceEventLogs =====
+            mb.Entity<TrackTraceEventLog>(entity =>
+            {
+                entity.ToTable("TrackTraceEventLogs");
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.EventType).HasMaxLength(50);
+                entity.Property(x => x.Status).HasMaxLength(30);
+                entity.Property(x => x.ErrorMessage).HasMaxLength(1000);
+                entity.HasIndex(x => new { x.ItemUnitId, x.CreatedAt });
+
+                entity.HasOne(x => x.ItemUnit)
+                      .WithMany()
+                      .HasForeignKey(x => x.ItemUnitId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== EtaIntegrationSettings =====
+            mb.Entity<EtaIntegrationSetting>(entity =>
+            {
+                entity.ToTable("EtaIntegrationSettings");
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.IdentityBaseUrl).HasMaxLength(500);
+                entity.Property(x => x.ApiBaseUrl).HasMaxLength(500);
+                entity.Property(x => x.ClientId).HasMaxLength(200);
+                entity.Property(x => x.ClientSecret).HasMaxLength(500);
+                entity.Property(x => x.TaxpayerRin).HasMaxLength(200);
+                entity.Property(x => x.CallbackBaseUrl).HasMaxLength(500);
+                entity.Property(x => x.CertificateThumbprint).HasMaxLength(500);
+            });
+
+            // ===== EtaQueue =====
+            mb.Entity<EtaQueue>(entity =>
+            {
+                entity.ToTable("EtaQueue");
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.DocumentType).HasMaxLength(50).IsRequired();
+                entity.Property(x => x.SourceType).HasMaxLength(50).IsRequired();
+                entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+                entity.Property(x => x.LastError).HasMaxLength(1000);
+                entity.HasIndex(x => new { x.Status, x.NextRetryAt });
+                entity.HasIndex(x => new { x.SourceType, x.SourceId, x.DocumentType });
+            });
+
+            // ===== EtaSubmissionLogs =====
+            mb.Entity<EtaSubmissionLog>(entity =>
+            {
+                entity.ToTable("EtaSubmissionLogs");
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.SourceType).HasMaxLength(50);
+                entity.Property(x => x.DocumentType).HasMaxLength(50);
+                entity.Property(x => x.SubmissionUuid).HasMaxLength(100);
+                entity.Property(x => x.DocumentUuid).HasMaxLength(100);
+                entity.Property(x => x.Status).HasMaxLength(30);
+                entity.Property(x => x.ErrorMessage).HasMaxLength(1000);
+                entity.HasIndex(x => new { x.SourceType, x.SourceId, x.CreatedAt });
             });
 
 

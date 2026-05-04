@@ -1,69 +1,169 @@
-@model ERP.Models.CreditNote
+﻿@model ERP.Models.CreditNote
 
 @{
-    ViewData["Title"] = "إشعار إضافة";
+    ViewData["Title"] = "إيصال إشعار إضافة";
 }
 
+<style>
+    .cn-print-page {
+        max-width: 980px;
+        margin: 1rem auto;
+        border: 2px solid #5b8def;
+        border-radius: 14px;
+        box-shadow: 0 10px 26px rgba(37, 99, 235, .12);
+        background: #fff;
+        overflow: hidden;
+    }
+    .cn-print-head {
+        background: linear-gradient(135deg, #f8fbff 0%, #edf5ff 100%);
+        border-bottom: 1px solid #dbe3ef;
+        padding: 1rem 1.25rem;
+    }
+    .cn-print-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 0;
+    }
+    .cn-print-sub {
+        font-size: .88rem;
+        color: #475569;
+        margin-top: .25rem;
+    }
+    .cn-print-body { padding: 1.2rem 1.4rem; }
+    .cn-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .7rem .9rem;
+    }
+    .cn-box {
+        border: 1.5px solid #c7d8f7;
+        border-radius: 10px;
+        padding: .7rem .85rem;
+        background: #f8fafc;
+    }
+    .cn-label {
+        color: #64748b;
+        font-size: .8rem;
+        margin-bottom: .15rem;
+        display: block;
+    }
+    .cn-value {
+        color: #0f172a;
+        font-weight: 600;
+        font-size: 1.05rem;
+    }
+    .cn-signs {
+        margin-top: 1rem;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+    }
+    .cn-sign {
+        border-top: 1px dashed #94a3b8;
+        text-align: center;
+        padding-top: .35rem;
+        color: #334155;
+        min-height: 48px;
+    }
+
+    @@media print {
+        body * { visibility: hidden !important; }
+        #creditPrintArea, #creditPrintArea * { visibility: visible !important; }
+        #creditPrintArea {
+            position: fixed;
+            inset: 0;
+            margin: 0 !important;
+            max-width: none !important;
+            border: 2px solid #5b8def !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            padding: 8mm 10mm;
+            background: #fff !important;
+        }
+        .cn-no-print { display: none !important; }
+    }
+</style>
+
 <div class="container mt-3" dir="rtl">
-    <div class="card" style="max-width: 700px; margin:auto;">
-        <div class="card-header text-center">
-            <h4 class="mb-0">إشعار إضافة — @Model.CreditNoteId</h4>
-        </div>
-        <div class="card-body">
-            <div class="d-flex justify-content-between mb-3">
+    <div id="creditPrintArea" class="cn-print-page erp-print-area">
+        <div class="cn-print-head">
+            <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <strong>رقم الإشعار:</strong> @Model.CreditNoteId<br />
-                    <strong>التاريخ:</strong> @Model.NoteDate.ToString("yyyy-MM-dd")
+                    <h4 class="cn-print-title">إيصال إشعار إضافة</h4>
+                    <div class="cn-print-sub">ERP - إشعار إضافة</div>
                 </div>
-                <div class="text-end">
-                    <strong>الطرف:</strong> @Model.Customer?.CustomerName<br />
-                    <strong>المبلغ:</strong> @Model.Amount.ToString("N2")
-                </div>
-            </div>
-
-            <hr />
-
-            <p><strong>إشعار إضافة بقيمة:</strong> @Model.Amount.ToString("N2")</p>
-            <p><strong>على الطرف:</strong> @Model.Customer?.CustomerName</p>
-            <p><strong>حساب الطرف:</strong> @(Model.Account != null ? $"{Model.Account.AccountCode} - {Model.Account.AccountName}" : "-")</p>
-            @if (Model.OffsetAccount != null)
-            {
-                <p><strong>الحساب المقابل:</strong> @($"{Model.OffsetAccount.AccountCode} - {Model.OffsetAccount.AccountName}")</p>
-            }
-            @if (!string.IsNullOrEmpty(Model.Reason))
-            {
-                <p><strong>السبب:</strong> @Model.Reason</p>
-            }
-            @if (!string.IsNullOrEmpty(Model.Description))
-            {
-                <p><strong>البيان:</strong> @Model.Description</p>
-            }
-
-            <p class="mt-2">
-                <span class="badge @(Model.IsPosted ? "bg-success" : "bg-secondary")">
-                    @(Model.IsPosted ? "مرحلة 1" : "غير مرحلة")
-                </span>
-            </p>
-
-            <hr />
-
-            <div class="row mt-4">
-                <div class="col text-center">
-                    <strong>المستلم</strong>
-                    <div style="height:60px;border-bottom:1px dashed #999;"></div>
-                </div>
-                <div class="col text-center">
-                    <strong>المراجع</strong>
-                    <div style="height:60px;border-bottom:1px dashed #999;"></div>
-                </div>
+                <div class="text-end small text-muted">@DateTime.Now.ToString("yyyy/MM/dd HH:mm")</div>
             </div>
         </div>
-        <div class="card-footer d-flex justify-content-between">
-            <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
-            <div>
-                <a asp-action="Edit" asp-route-id="@Model.CreditNoteId" class="btn btn-primary btn-sm">تعديل</a>
-                <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">طباعة</button>
+
+        <div class="cn-print-body">
+            <div class="cn-grid">
+                <div class="cn-box"><span class="cn-label">رقم الإشعار</span><span class="cn-value">@Model.CreditNoteId</span></div>
+                <div class="cn-box"><span class="cn-label">التاريخ</span><span class="cn-value">@Model.NoteDate.ToString("yyyy-MM-dd")</span></div>
+                <div class="cn-box"><span class="cn-label">العميل</span><span class="cn-value">@Model.Customer?.CustomerName</span></div>
+                <div class="cn-box"><span class="cn-label">المبلغ</span><span class="cn-value">@Model.Amount.ToString("N2")</span></div>
+            </div>
+
+            <div class="cn-box mt-3">
+                <span class="cn-label">سبب الإشعار</span>
+                <span class="cn-value">@(string.IsNullOrWhiteSpace(Model.Reason) ? "-" : Model.Reason)</span>
+            </div>
+
+            <div class="cn-signs">
+                <div class="cn-sign">المستلم</div>
+                <div class="cn-sign">المراجع</div>
             </div>
         </div>
     </div>
+
+    <div class="mt-2 d-flex justify-content-between cn-no-print">
+        <a class="btn btn-secondary btn-sm open-same-tab"
+           href="@Url.Action("Index", "CreditNotes", new { frame = 1 })"
+           data-tab-id="credit-notes"
+           data-tab-title="قائمة إشعارات الإضافة"
+           data-url="@Url.Action("Index", "CreditNotes", new { frame = 1 })">عودة للقائمة</a>
+        <div class="d-flex gap-2">
+            <a class="btn btn-primary btn-sm open-same-tab"
+               href="@Url.Action("Edit", "CreditNotes", new { id = Model.CreditNoteId, frame = 1 })"
+               data-tab-id="list-edit-@Model.CreditNoteId"
+               data-tab-title="إشعار إضافة"
+               data-url="@Url.Action("Edit", "CreditNotes", new { id = Model.CreditNoteId, frame = 1 })">تعديل</a>
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">طباعة</button>
+        </div>
+    </div>
 </div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const autoPrint = new URLSearchParams(window.location.search).get('autoPrint') === '1';
+            if (!autoPrint) return;
+
+            const returnUrl = new URLSearchParams(window.location.search).get('returnUrl') || document.referrer || '/CreditNotes';
+            let printed = false;
+
+            const finishAutoPrint = function () {
+                setTimeout(function () {
+                    try { window.close(); } catch (_) { }
+                    if (!window.closed) {
+                        window.location.replace(returnUrl);
+                    }
+                }, 120);
+            };
+
+            window.addEventListener('load', function () {
+                setTimeout(function () { window.print(); }, 240);
+            });
+
+            window.addEventListener('afterprint', function () {
+                printed = true;
+                finishAutoPrint();
+            }, { once: true });
+
+            window.addEventListener('focus', function () {
+                if (printed) finishAutoPrint();
+            });
+        })();
+    </script>
+}

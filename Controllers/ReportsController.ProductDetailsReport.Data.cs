@@ -13,12 +13,13 @@ namespace ERP.Controllers
     {
         private static readonly string[] ProductDetailsReportPrintColumnOrder =
         {
-            "date", "docno", "author", "region", "docnamear", "productcode", "productname",
-            "qty", "unitprice", "linetotal", "party", "warehouse", "batch", "expiry", "notes"
+            "date", "time", "docno", "author", "region", "docnamear", "productcode", "productname",
+            "qty", "unitprice", "discount", "linetotal", "customercode", "party", "warehouse", "batch", "expiry", "notes"
         };
 
         private static string GetPdrReportTypeDisplayName(string? reportType) => reportType switch
         {
+            "All" => "كل التفاصيل (تجميعة كاملة)",
             "Sales" => "مبيعات الصنف بالتفصيل",
             "Purchases" => "مشتريات الصنف",
             "SalesReturns" => "مرتجعات البيع",
@@ -29,6 +30,32 @@ namespace ERP.Controllers
             "SalesOrders" => "أوامر بيع",
             _ => reportType ?? ""
         };
+
+        private static IOrderedEnumerable<ProductDetailsReportRow> ApplyPdrInMemorySort(IEnumerable<ProductDetailsReportRow> rows, string? sort, string? dir)
+        {
+            var sortKey = (sort ?? "Date").Trim().ToLowerInvariant();
+            var asc = string.Equals(dir, "asc", StringComparison.OrdinalIgnoreCase);
+
+            return sortKey switch
+            {
+                "docno" => asc ? rows.OrderBy(r => r.DocNo) : rows.OrderByDescending(r => r.DocNo),
+                "author" => asc ? rows.OrderBy(r => r.Author ?? "") : rows.OrderByDescending(r => r.Author ?? ""),
+                "region" => asc ? rows.OrderBy(r => r.Region ?? "") : rows.OrderByDescending(r => r.Region ?? ""),
+                "documentnamear" => asc ? rows.OrderBy(r => r.DocumentNameAr ?? "") : rows.OrderByDescending(r => r.DocumentNameAr ?? ""),
+                "productcode" => asc ? rows.OrderBy(r => r.ProductCode) : rows.OrderByDescending(r => r.ProductCode),
+                "productname" => asc ? rows.OrderBy(r => r.ProductName) : rows.OrderByDescending(r => r.ProductName),
+                "partyname" => asc ? rows.OrderBy(r => r.PartyName ?? "") : rows.OrderByDescending(r => r.PartyName ?? ""),
+                "warehousename" => asc ? rows.OrderBy(r => r.WarehouseName ?? "") : rows.OrderByDescending(r => r.WarehouseName ?? ""),
+                "qty" => asc ? rows.OrderBy(r => r.Qty) : rows.OrderByDescending(r => r.Qty),
+                "unitprice" => asc ? rows.OrderBy(r => r.UnitPrice ?? 0m) : rows.OrderByDescending(r => r.UnitPrice ?? 0m),
+                "linetotal" => asc ? rows.OrderBy(r => r.Total ?? 0m) : rows.OrderByDescending(r => r.Total ?? 0m),
+                "batchno" => asc ? rows.OrderBy(r => r.BatchNo ?? "") : rows.OrderByDescending(r => r.BatchNo ?? ""),
+                "expiry" => asc ? rows.OrderBy(r => r.Expiry ?? DateTime.MinValue) : rows.OrderByDescending(r => r.Expiry ?? DateTime.MinValue),
+                _ => asc
+                    ? rows.OrderBy(r => r.Date).ThenBy(r => r.Time ?? TimeSpan.Zero).ThenBy(r => r.DocNo)
+                    : rows.OrderByDescending(r => r.Date).ThenByDescending(r => r.Time ?? TimeSpan.Zero).ThenByDescending(r => r.DocNo)
+            };
+        }
 
         private async Task<(List<ProductDetailsReportRow> list, int totalCount, decimal totalQtyFiltered, decimal totalAmountFiltered, int page)> LoadProductDetailsReportDataAsync(
             string reportType,
@@ -61,6 +88,49 @@ namespace ERP.Controllers
             decimal totalAmountFiltered = 0m;
             switch (reportType)
             {
+                case "All":
+                    var allTypes = new[]
+                    {
+                        "Sales", "Purchases", "SalesReturns", "PurchaseReturns",
+                        "Adjustments", "Transfers", "PurchaseRequests", "SalesOrders"
+                    };
+
+                    var allRows = new List<ProductDetailsReportRow>();
+                    foreach (var type in allTypes)
+                    {
+                        var (rows, _, _, _, _) = await LoadProductDetailsReportDataAsync(
+                            type, fromDt, toDt, searchTrim,
+                            filterCol_date, filterCol_docNo, filterCol_productCode, filterCol_productName,
+                            filterCol_party, filterCol_warehouse, filterCol_author, filterCol_region, filterCol_docNameAr,
+                            filterCol_qtyExpr, filterCol_unitpriceExpr, filterCol_linetotalExpr,
+                            filterCol_batch, filterCol_expiry, filterCol_notes,
+                            sort ?? "Date", dir ?? "desc", 1, 0);
+
+                        if (rows.Count > 0)
+                            allRows.AddRange(rows);
+                    }
+
+                    var docNameVals = ParseProductDetailsFilterStrings(filterCol_docNameAr);
+                    if (docNameVals.Count > 0)
+                        allRows = allRows.Where(r => r.DocumentNameAr != null && docNameVals.Contains(r.DocumentNameAr)).ToList();
+
+                    totalCount = allRows.Count;
+                    totalQtyFiltered = allRows.Sum(r => r.Qty);
+                    totalAmountFiltered = allRows.Sum(r => r.Total ?? 0m);
+
+                    var sortedAll = ApplyPdrInMemorySort(allRows, sort, dir);
+                    if (pageSize == 0)
+                    {
+                        page = 1;
+                        list = sortedAll.Take(100_000).ToList();
+                    }
+                    else
+                    {
+                        var skipAll = Math.Max(0, (page - 1) * pageSize);
+                        list = sortedAll.Skip(skipAll).Take(pageSize).ToList();
+                    }
+                    break;
+
                 case "Sales":
                     var salesQuery = _context.SalesInvoiceLines
                         .AsNoTracking()
@@ -123,6 +193,10 @@ namespace ERP.Controllers
                             Qty = l.Qty,
                             UnitPrice = l.PriceRetail,
                             Total = l.LineNetTotal,
+                            DiscountPercent = l.Disc1Percent + l.Disc2Percent + l.Disc3Percent,
+                            DiscountValue = l.DiscountValue,
+                            Time = l.SalesInvoice!.SITime,
+                            CustomerCode = l.SalesInvoice!.CustomerId.ToString(),
                             PartyName = l.SalesInvoice!.Customer != null ? l.SalesInvoice.Customer.CustomerName : null,
                             WarehouseName = l.SalesInvoice!.Warehouse != null ? l.SalesInvoice.Warehouse.WarehouseName : null,
                             BatchNo = l.BatchNo,
@@ -196,6 +270,10 @@ namespace ERP.Controllers
                             Qty = l.Qty,
                             UnitPrice = l.UnitCost,
                             Total = l.Qty * l.UnitCost,
+                            DiscountPercent = l.PurchaseDiscountPct,
+                            DiscountValue = null,
+                            Time = null,
+                            CustomerCode = l.PurchaseInvoice!.CustomerId.ToString(),
                             PartyName = l.PurchaseInvoice!.Customer != null ? l.PurchaseInvoice.Customer.CustomerName : null,
                             WarehouseName = l.PurchaseInvoice!.Warehouse != null ? l.PurchaseInvoice.Warehouse.WarehouseName : null,
                             BatchNo = l.BatchNo,
@@ -212,6 +290,7 @@ namespace ERP.Controllers
                 case "SalesReturns":
                     var srQuery = _context.SalesReturnLines.AsNoTracking()
                         .Include(l => l.SalesReturn).ThenInclude(s => s!.Customer)
+                        .Include(l => l.SalesReturn).ThenInclude(s => s!.Warehouse).ThenInclude(w => w!.Branch)
                         .Include(l => l.Product)
                         .Where(l => l.SalesReturn != null);
                     if (fromDt.HasValue) srQuery = srQuery.Where(l => l.SalesReturn!.SRDate >= fromDt.Value);
@@ -281,13 +360,17 @@ namespace ERP.Controllers
                             Qty = l.Qty,
                             UnitPrice = l.UnitSalePrice,
                             Total = l.LineNetTotal,
+                            DiscountPercent = l.Disc1Percent + l.Disc2Percent + l.Disc3Percent,
+                            DiscountValue = l.DiscountValue,
+                            Time = l.SalesReturn!.SRTime,
+                            CustomerCode = l.SalesReturn!.CustomerId.ToString(),
                             PartyName = l.SalesReturn!.Customer!.CustomerName,
-                            WarehouseName = null,
+                            WarehouseName = l.SalesReturn!.Warehouse != null ? l.SalesReturn.Warehouse.WarehouseName : null,
                             BatchNo = l.BatchNo,
                             Expiry = l.Expiry,
                             Notes = null,
                             Author = l.SalesReturn!.CreatedBy,
-                            Region = null,
+                            Region = l.SalesReturn!.Warehouse != null && l.SalesReturn.Warehouse.Branch != null ? l.SalesReturn.Warehouse.Branch.BranchName : null,
                             DocumentNameAr = "مرتجع بيع"
                         })
                         .ToListAsync();
@@ -298,6 +381,7 @@ namespace ERP.Controllers
                     var prQuery = _context.PurchaseReturnLines
                         .AsNoTracking()
                         .Include(l => l.PurchaseReturn).ThenInclude(h => h!.Customer)
+                        .Include(l => l.PurchaseReturn).ThenInclude(h => h!.Warehouse).ThenInclude(w => w!.Branch)
                         .Include(l => l.Product)
                         .Where(l => l.PurchaseReturn != null);
                     if (fromDt.HasValue) prQuery = prQuery.Where(l => l.PurchaseReturn!.PRetDate >= fromDt.Value);
@@ -349,13 +433,17 @@ namespace ERP.Controllers
                             Qty = l.Qty,
                             UnitPrice = l.UnitCost,
                             Total = l.Qty * l.UnitCost,
+                            DiscountPercent = l.PurchaseDiscountPct,
+                            DiscountValue = null,
+                            Time = null,
+                            CustomerCode = l.PurchaseReturn!.CustomerId.ToString(),
                             PartyName = l.PurchaseReturn!.Customer != null ? l.PurchaseReturn.Customer.CustomerName : null,
-                            WarehouseName = null,
+                            WarehouseName = l.PurchaseReturn!.Warehouse != null ? l.PurchaseReturn.Warehouse.WarehouseName : null,
                             BatchNo = l.BatchNo,
                             Expiry = l.Expiry,
                             Notes = null,
                             Author = l.PurchaseReturn!.CreatedBy,
-                            Region = null,
+                            Region = l.PurchaseReturn!.Warehouse != null && l.PurchaseReturn.Warehouse.Branch != null ? l.PurchaseReturn.Warehouse.Branch.BranchName : null,
                             DocumentNameAr = "مرتجع شراء"
                         })
                         .ToListAsync();
@@ -417,6 +505,10 @@ namespace ERP.Controllers
                             Qty = l.QtyDiff,
                             UnitPrice = l.CostPerUnit,
                             Total = l.CostDiff,
+                            DiscountPercent = null,
+                            DiscountValue = null,
+                            Time = null,
+                            CustomerCode = null,
                             PartyName = null,
                             WarehouseName = l.StockAdjustment!.Warehouse != null ? l.StockAdjustment.Warehouse.WarehouseName : null,
                             BatchNo = null,
@@ -434,6 +526,7 @@ namespace ERP.Controllers
                     var stQuery = _context.StockTransferLines
                         .AsNoTracking()
                         .Include(l => l.StockTransfer).ThenInclude(st => st!.FromWarehouse).ThenInclude(w => w!.Branch)
+                        .Include(l => l.StockTransfer).ThenInclude(st => st!.ToWarehouse)
                         .Include(l => l.Product)
                         .Where(l => l.StockTransfer != null && l.Product != null);
                     if (fromDt.HasValue) stQuery = stQuery.Where(l => l.StockTransfer!.TransferDate >= fromDt.Value);
@@ -481,8 +574,15 @@ namespace ERP.Controllers
                             Qty = l.Qty,
                             UnitPrice = l.UnitCost,
                             Total = l.Qty * l.UnitCost,
+                            DiscountPercent = null,
+                            DiscountValue = null,
+                            Time = null,
+                            CustomerCode = null,
                             PartyName = null,
-                            WarehouseName = null,
+                            WarehouseName =
+                                (l.StockTransfer!.FromWarehouse != null ? l.StockTransfer.FromWarehouse.WarehouseName : "—")
+                                + " → " +
+                                (l.StockTransfer!.ToWarehouse != null ? l.StockTransfer.ToWarehouse.WarehouseName : "—"),
                             BatchNo = null,
                             Expiry = null,
                             Notes = l.Note,
@@ -554,6 +654,10 @@ namespace ERP.Controllers
                             Qty = l.QtyRequested,
                             UnitPrice = l.ExpectedCost,
                             Total = l.QtyRequested * l.ExpectedCost,
+                            DiscountPercent = l.PurchaseDiscountPct,
+                            DiscountValue = null,
+                            Time = null,
+                            CustomerCode = l.PurchaseRequest!.CustomerId.ToString(),
                             PartyName = l.PurchaseRequest!.Customer != null ? l.PurchaseRequest.Customer.CustomerName : null,
                             WarehouseName = l.PurchaseRequest!.Warehouse != null ? l.PurchaseRequest.Warehouse.WarehouseName : null,
                             BatchNo = l.PreferredBatchNo,
@@ -571,6 +675,7 @@ namespace ERP.Controllers
                     var soQuery = _context.SOLines
                         .AsNoTracking()
                         .Include(l => l.SalesOrder).ThenInclude(h => h!.Customer)
+                        .Include(l => l.SalesOrder).ThenInclude(h => h!.Warehouse).ThenInclude(w => w!.Branch)
                         .Include(l => l.Product)
                         .Where(l => l.SalesOrder != null);
                     if (fromDt.HasValue) soQuery = soQuery.Where(l => l.SalesOrder!.SODate >= fromDt.Value);
@@ -622,13 +727,17 @@ namespace ERP.Controllers
                             Qty = l.QtyRequested,
                             UnitPrice = l.RequestedRetailPrice,
                             Total = l.QtyRequested * l.RequestedRetailPrice * (1 - l.SalesDiscountPct / 100m),
+                            DiscountPercent = l.SalesDiscountPct,
+                            DiscountValue = null,
+                            Time = null,
+                            CustomerCode = l.SalesOrder!.CustomerId.ToString(),
                             PartyName = l.SalesOrder!.Customer != null ? l.SalesOrder.Customer.CustomerName : null,
-                            WarehouseName = null,
+                            WarehouseName = l.SalesOrder!.Warehouse != null ? l.SalesOrder.Warehouse.WarehouseName : null,
                             BatchNo = l.PreferredBatchNo,
                             Expiry = l.PreferredExpiry,
                             Notes = null,
                             Author = l.SalesOrder!.CreatedBy,
-                            Region = null,
+                            Region = l.SalesOrder!.Warehouse != null && l.SalesOrder.Warehouse.Branch != null ? l.SalesOrder.Warehouse.Branch.BranchName : null,
                             DocumentNameAr = "أمر بيع"
                         })
                         .ToListAsync();
@@ -680,7 +789,8 @@ namespace ERP.Controllers
             var toDt = toDate.HasValue ? DateTime.SpecifyKind(toDate.Value, DateTimeKind.Local) : (DateTime?)null;
             var searchTrim = search?.Trim() ?? "";
 
-            if (!PdrDocNameArPasses(reportType!, filterCol_docNameAr))
+            if (!string.Equals(reportType, "All", StringComparison.OrdinalIgnoreCase)
+                && !PdrDocNameArPasses(reportType!, filterCol_docNameAr))
             {
                 ViewBag.TotalMatching = 0;
                 ViewBag.PrintedCount = 0;

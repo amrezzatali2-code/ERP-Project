@@ -71,7 +71,7 @@ namespace ERP.Controllers
             if (creatorNames.Count == 0)
                 return query.Where(_ => false);
 
-            return query.Where(o => o.CreatedBy != null && creatorNames.Contains(o.CreatedBy.Trim()));
+            return query.Where(o => o.CreatedBy != null && creatorNames.Contains(o.CreatedBy));
         }
 
         #region خرائط الحقول للبحث والترتيب (مستخدمة في Index و Export)

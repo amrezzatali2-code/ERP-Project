@@ -149,12 +149,12 @@
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في إشعارات الإضافة</label>
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100 flex-wrap">
-                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
                         <select name="searchMode" class="form-select form-select-arrow erp-filter-input" style="max-width:130px;min-width:90px" title="نمط مطابقة النص">
                             <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
                             <option value="contains"@Html.Raw(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? " selected" : "")>يحتوي</option>
                             <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
                         </select>
+                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px;min-width:100px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>رقم الإشعار</option>
@@ -208,22 +208,26 @@
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
-                        <a asp-action="Create" asp-controller="CreditNotes" class="btn btn-erp btn-erp-success btn-erp-sm">إشعار جديد</a>
+                        <a asp-action="Create"
+                           asp-controller="CreditNotes"
+                           asp-route-frame="1"
+                           class="btn btn-erp btn-erp-success btn-erp-sm open-tab"
+                           data-tab-id="credit-note-create"
+                           data-tab-title="إشعار إضافة">إشعار جديد</a>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModalCreditNotes">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalCreditNotes">اختيار الأعمدة</button>
                         <button type="button" id="btnPrintCreditNotes" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
                         <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات السجل المحدد">
                             <button type="button" id="btnShowCn" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض">عرض</button>
-                            <button type="button" id="btnEditCn" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="تعديل">تعديل</button>
-                            <button type="button" id="btnDeleteCn" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حذف (تأكيد)">حذف</button>
                         </span>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
+                        <button type="button" id="btnCustomerVolumeCn" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حجم تعامل العميل">حجم التعامل</button>
                         <div class="btn-group">
                             <button type="button" class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><button type="button" id="btnBulkDelete" class="dropdown-item">حذف المحدد</button></li>
-                                <li><button type="button" id="btnDeleteAll" class="dropdown-item text-danger">حذف الكل</button></li>
+                                <li><button type="button" id="btnDeleteAll" class="dropdown-item text-danger">حذف الجميع</button></li>
                             </ul>
                         </div>
                         <form method="get" asp-action="Export" asp-controller="CreditNotes" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
@@ -296,6 +300,8 @@
                     <th data-col="number">@filterableCol("number", "CreditNoteId", "رقم المستند")</th>
                     <th data-col="date">@filterableCol("date", "NoteDate", "تاريخ الإشعار")</th>
                     <th data-col="customer">@filterableCol("customer", "CustomerName", "الطرف")</th>
+                    <th data-col="writer">الكاتب</th>
+                    <th data-col="area">المنطقة</th>
                     <th data-col="account">@filterableCol("account", "AccountName", "حساب الطرف")</th>
                     <th data-col="offset">@filterableCol("offset", "OffsetAccountName", "الحساب المقابل")</th>
                     <th data-col="amount">@filterableCol("amount", "Amount", "المبلغ")</th>
@@ -310,7 +316,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="13" class="text-center text-muted py-4">لا توجد بيانات.</td>
+                        <td colspan="15" class="text-center text-muted py-4">لا توجد بيانات.</td>
                     </tr>
                 }
                 else
@@ -320,15 +326,20 @@
                         var reason = c.Reason ?? "";
                         var desc = c.Description ?? "";
                         var descShort = desc.Length > 80 ? desc.Substring(0, 80) + "…" : desc;
-                        var showU = Url.Action("Show", "CreditNotes", new { id = c.CreditNoteId }) + "?frame=1";
+                        var showU = Url.Action("Edit", "CreditNotes", new { id = c.CreditNoteId, frame = 1 });
                         var editU = Url.Action("Edit", "CreditNotes", new { id = c.CreditNoteId }) + "?frame=1";
                         var delU = Url.Action("Delete", "CreditNotes", new { id = c.CreditNoteId });
-                        <tr class="erp-list-selectable-row" data-row-id="@c.CreditNoteId" data-show-url="@showU" data-edit-url="@editU" data-delete-url="@delU" data-tab-title="إشعار إضافة @c.CreditNoteId">
+                        var volUrl = c.CustomerId.HasValue && c.CustomerId.Value > 0
+                            ? Url.Action("Show", "Customers", new { id = c.CustomerId.Value, frame = 1 })
+                            : "";
+                        <tr class="erp-list-selectable-row" data-row-id="@c.CreditNoteId" data-show-url="@showU" data-edit-url="@editU" data-delete-url="@delU" data-customer-volume-url="@volUrl" data-tab-title="إشعار إضافة @c.CreditNoteId">
                             <td class="no-print text-center" data-col="select"><input type="checkbox" class="form-check-input row-select" value="@c.CreditNoteId" aria-label="تحديد" /></td>
                             <td data-col="id">@c.CreditNoteId</td>
                             <td data-col="number">@c.CreditNoteId</td>
                             <td data-col="date">@c.NoteDate.ToString("yyyy-MM-dd")</td>
                             <td data-col="customer">@c.Customer?.CustomerName</td>
+                            <td data-col="writer">@(string.IsNullOrWhiteSpace(c.CreatedBy) ? "-" : c.CreatedBy)</td>
+                            <td data-col="area">@(c.Customer?.Area?.AreaName ?? "-")</td>
                             <td data-col="account">@c.Account?.AccountName</td>
                             <td data-col="offset">@c.OffsetAccount?.AccountName</td>
                             <td data-col="amount">@c.Amount.ToString("N2")</td>
@@ -526,19 +537,14 @@
     ERP.initListSelection({
         rowSelector: '.erp-list-selectable-row',
         showButtonId: 'btnShowCn',
-        editButtonId: 'btnEditCn',
+        movementButtonId: 'btnCustomerVolumeCn',
+        movementUrlAttribute: 'data-customer-volume-url',
+        movementTabTitle: 'حجم تعامل عميل',
+        movementTabId: 'customer-engagement',
         idAttribute: 'data-row-id',
         showUrlAttribute: 'data-show-url',
-        editUrlAttribute: 'data-edit-url',
         tabTitleAttribute: 'data-tab-title',
         multiSelectCheckboxes: true
-    });
-
-    document.getElementById('btnDeleteCn')?.addEventListener('click', function () {
-        var row = document.querySelector('.erp-list-selectable-row.selected');
-        if (!row) return;
-        var url = row.getAttribute('data-delete-url');
-        if (url) window.location.href = url;
     });
 
     (function () {
@@ -621,13 +627,5 @@
         btnClear?.addEventListener("click", function () { fromInp.value = ""; toInp.value = ""; window.location.href = buildUrl("", ""); });
     })();
 
-    (function () {
-        function syncDeleteBtn() {
-            var row = document.querySelector('.erp-list-selectable-row.selected');
-            var btn = document.getElementById('btnDeleteCn');
-            if (btn) btn.disabled = !row;
-        }
-        document.getElementById('creditNotesTable')?.addEventListener('click', function () { setTimeout(syncDeleteBtn, 0); });
-    })();
 </script>
 }

@@ -11,6 +11,8 @@
     <!-- منع تكرار سمات الـ Assembly مع الملفات المُنشأة في obj -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <!-- استبعاد مجلدات التحقق المؤقتة حتى لا تُعرض داخل المشروع ولا تدخل في نسخ البناء -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin_verify*/**;bin_verify_*/**;ERP_BACKUP_*;*.bak;*.md;*.docx</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- سكربتات SQL تظهر في المشروع (لا تُضمّن في البناء) -->
@@ -24,6 +26,15 @@
     <Content Remove="Purchasing1.Web\**" />
     <EmbeddedResource Remove="Purchasing1.Web\**" />
     <None Remove="Purchasing1.Web\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Logs\**" />
+    <None Remove="bin_verify*\**" />
+    <None Remove="bin_verify_*\**" />
+    <None Remove="ERP_BACKUP_*" />
+    <None Remove="*.md" />
+    <None Remove="*.docx" />
   </ItemGroup>
 
   <ItemGroup>

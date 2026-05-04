@@ -176,6 +176,27 @@
 }
 
 <div dir="rtl" class="container-fluid">
+    <style>
+        .erp-print-state-box {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            border: 2px solid #dc2626;
+            color: transparent;
+            background: #fff5f5;
+        }
+
+        .erp-print-state-box.printed {
+            border-color: #16a34a;
+            background: #16a34a;
+            color: #fff;
+        }
+    </style>
 
     @* العنوان — خارج إطار الجدول، حجم أصغر *@
     <div class="d-flex justify-content-between align-items-center mb-2">
@@ -188,7 +209,7 @@
 
             @* --- القسم الأول: البحث --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
-                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                <form method="get" action="@Url.Action(action, controller)" id="salesInvoicesSearchForm" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في الفواتير</label>
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
                         <select name="searchMode" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
@@ -196,7 +217,7 @@
                             <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
                             <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
                         </select>
-                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
+                        <input type="text" id="salesInvoicesSearchText" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>رقم الفاتورة</option>
@@ -207,6 +228,7 @@
                         <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">عرض</button>
                         <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
+                    <input type="hidden" name="search" id="salesInvoicesSearchApplied" value="@search" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -363,6 +385,8 @@
                     <th data-col="createdby">@filterableCol("createdby", "createdby", "الكاتب")</th>
                     <th data-col="status">@filterableCol("status", "status", "الحالة")</th>
                     <th data-col="posted">@filterableCol("posted", "posted", "مرحل؟")</th>
+                    <th data-col="printed">الطباعة</th>
+                    <th data-col="printCount">عدد مرات الطباعة</th>
                     <th class="text-center no-print" data-col="post" data-col-fixed="true" style="width:80px;">ترحيل</th>
                 </tr>
             </thead>
@@ -370,7 +394,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="14" class="text-center text-muted py-4">
+                        <td colspan="16" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -407,6 +431,14 @@
                             <td data-col="createdby">@(si.CreatedBy ?? "")</td>
                             <td data-col="status">@si.Status</td>
                             <td data-col="posted">@(si.IsPosted ? "نعم" : "لا")</td>
+                            <td data-col="printed" class="text-center">
+                                <span class="erp-print-state-box @(si.PrintCount > 0 ? "printed" : "")"
+                                      title="@(si.PrintCount > 0 ? "تمت طباعة الفاتورة" : "لم تتم طباعة الفاتورة بعد")"
+                                      aria-label="@(si.PrintCount > 0 ? "مطبوعة" : "غير مطبوعة")">
+                                    @(si.PrintCount > 0 ? "✓" : "")
+                                </span>
+                            </td>
+                            <td data-col="printCount">@si.PrintCount</td>
                             <td class="text-center no-print" data-col="post">
                                 @if (!si.IsPosted)
                                 {
@@ -434,6 +466,8 @@
                     <td data-col="createdby"></td>
                     <td data-col="status"></td>
                     <td data-col="posted"></td>
+                    <td data-col="printed"></td>
+                    <td data-col="printCount"></td>
                     <td class="text-center no-print" data-col="post"></td>
                 </tr>
             </tfoot>
@@ -689,6 +723,20 @@
     <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
     <script>
+        (function () {
+            const searchForm = document.getElementById("salesInvoicesSearchForm");
+            const searchText = document.getElementById("salesInvoicesSearchText");
+            const appliedSearch = document.getElementById("salesInvoicesSearchApplied");
+            if (!searchForm || !searchText || !appliedSearch) return;
+
+            searchForm.addEventListener("submit", function () {
+                const typedValue = (searchText.value || "").trim();
+                if (typedValue) {
+                    appliedSearch.value = typedValue;
+                }
+            });
+        })();
+
         // =========================
         // تمرير الجدول أفقياً بحيث يبدأ من اليمين (RTL)
         // =========================

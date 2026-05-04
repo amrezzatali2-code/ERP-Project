@@ -1,0 +1,84 @@
+@model IReadOnlyList<ERP.Models.CustomerCollector>
+
+@{
+    ViewData["Title"] = "ربط العملاء بالموزعين";
+}
+
+<div class="container-fluid" dir="rtl">
+    <div class="card shadow-sm mt-3">
+        <div class="card-body">
+            <h3 class="mb-3">ربط العملاء بالموزعين</h3>
+
+            @if (TempData["Success"] is string success && !string.IsNullOrWhiteSpace(success))
+            {
+                <div class="alert alert-success">@success</div>
+            }
+            @if (TempData["Error"] is string error && !string.IsNullOrWhiteSpace(error))
+            {
+                <div class="alert alert-danger">@error</div>
+            }
+
+            <form asp-action="Create" method="post" class="row g-3 align-items-end mb-4">
+                @Html.AntiForgeryToken()
+                <div class="col-12 col-lg-5">
+                    <label class="form-label">العميل</label>
+                    <select name="customerId" class="form-select form-select-arrow" asp-items="ViewBag.Customers">
+                        <option value="">اختر العميل</option>
+                    </select>
+                </div>
+                <div class="col-12 col-lg-5">
+                    <label class="form-label">الموزع</label>
+                    <select name="userId" class="form-select form-select-arrow" asp-items="ViewBag.Collectors">
+                        <option value="">اختر الموزع</option>
+                    </select>
+                </div>
+                <div class="col-12 col-lg-2">
+                    <button type="submit" class="btn btn-erp btn-erp-primary w-100">ربط</button>
+                </div>
+            </form>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>العميل</th>
+                            <th>كود العميل</th>
+                            <th>الموزع</th>
+                            <th>اسم الدخول</th>
+                            <th>تاريخ الربط</th>
+                            <th class="text-center">إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">لا توجد روابط حتى الآن.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var row in Model)
+                            {
+                                <tr>
+                                    <td>@(row.Customer?.CustomerName ?? "-")</td>
+                                    <td>@(row.Customer?.ExternalCode ?? row.CustomerId.ToString())</td>
+                                    <td>@(row.User?.DisplayName ?? row.User?.UserName ?? "-")</td>
+                                    <td>@(row.User?.UserName ?? "-")</td>
+                                    <td>@row.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td class="text-center">
+                                        <form asp-action="Delete" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@row.Id" />
+                                            <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">فك الربط</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

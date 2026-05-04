@@ -104,11 +104,14 @@ namespace ERP
             builder.Services.AddScoped<ILedgerPostingService, LedgerPostingService>();
             builder.Services.AddScoped<ERP.Services.StockAnalysisService>();
             builder.Services.AddScoped<ERP.Services.SalesFifoCostRepairService>();
+            builder.Services.AddScoped<ERP.Services.SalesInvoiceMissingStockRepairService>();
             builder.Services.AddScoped<IFullReturnService, FullReturnService>();
             builder.Services.AddScoped<ERP.Services.IPermissionService, ERP.Services.PermissionService>();
             builder.Services.AddScoped<ERP.Services.ILoginRedirectService, ERP.Services.LoginRedirectService>();
             builder.Services.AddScoped<ERP.Services.IListVisibilityService, ERP.Services.ListVisibilityService>();
             builder.Services.AddScoped<ERP.Services.IUserAccountVisibilityService, ERP.Services.UserAccountVisibilityService>();
+            builder.Services.AddScoped<IGs1DataMatrixParser, Gs1DataMatrixParser>();
+            builder.Services.AddSingleton<ERP.Services.MobileAppProgramCodeService>();
 
             // متغير: نظام الصلاحيات (PermissionService للتحقق من الصلاحيات)
             builder.Services.AddAuthorization();
@@ -143,10 +146,11 @@ namespace ERP
 
                 var runMigrations = configuration.GetValue("RunMigrationsOnStartup", false);
                 var runSeed = configuration.GetValue("RunSeedOnStartup", false);
+                var runStartupDataBackfill = configuration.GetValue("RunStartupDataBackfill", false);
 
                 logger.LogInformation(
-                    "Startup database options: RunMigrationsOnStartup={RunMigrations}, RunSeedOnStartup={RunSeed}",
-                    runMigrations, runSeed);
+                    "Startup database options: RunMigrationsOnStartup={RunMigrations}, RunSeedOnStartup={RunSeed}, RunStartupDataBackfill={RunStartupDataBackfill}",
+                    runMigrations, runSeed, runStartupDataBackfill);
 
                 if (runMigrations)
                 {
@@ -166,71 +170,78 @@ namespace ERP
                     logger.LogInformation("Database Migrate skipped (RunMigrationsOnStartup=false).");
                 }
 
-                // توحيد التشغيلة/الصلاحية الافتراضية للسجلات القديمة إن كانت فارغة
-                try
+                // توحيد التشغيلة/الصلاحية الافتراضية للسجلات القديمة:
+                // هذا التصحيح مكلف نسبيًا ويجب ألا يعمل في كل إقلاع افتراضيًا.
+                if (runStartupDataBackfill)
                 {
-                    await db.Database.ExecuteSqlRawAsync(@"
+                    try
+                    {
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [SalesInvoiceLines] SET [BatchNo] = N'55555'
 WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [SalesInvoiceLines] SET [Expiry] = '20280101'
 WHERE [Expiry] IS NULL;");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [SalesReturnLines] SET [BatchNo] = N'55555'
 WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [SalesReturnLines] SET [Expiry] = '20280101'
 WHERE [Expiry] IS NULL;");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [PILines] SET [BatchNo] = N'55555'
 WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [PILines] SET [Expiry] = '20280101'
 WHERE [Expiry] IS NULL;");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [PurchaseReturnLines] SET [BatchNo] = N'55555'
 WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [PurchaseReturnLines] SET [Expiry] = '20280101'
 WHERE [Expiry] IS NULL;");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [StockLedger] SET [BatchNo] = N'55555'
 WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [StockLedger] SET [Expiry] = '20280101'
 WHERE [Expiry] IS NULL;");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [Stock_Batches] SET [BatchNo] = N'55555'
 WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [Stock_Batches] SET [Expiry] = '20280101'
 WHERE [Expiry] IS NULL;");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [Batches] SET [BatchNo] = N'55555'
 WHERE [BatchNo] IS NULL OR LTRIM(RTRIM([BatchNo])) = N'';");
 
-                    await db.Database.ExecuteSqlRawAsync(@"
+                        await db.Database.ExecuteSqlRawAsync(@"
 UPDATE [Batches] SET [Expiry] = '20280101'
 WHERE [Expiry] < '19000101';");
 
-                    logger.LogInformation("Default batch/expiry backfill completed (BatchNo=55555, Expiry=2028-01-01).");
+                        logger.LogInformation("Default batch/expiry backfill completed on startup (BatchNo=55555, Expiry=2028-01-01).");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Default batch/expiry backfill failed on startup.");
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    logger.LogError(ex, "Default batch/expiry backfill failed on startup.");
-                    throw;
+                    logger.LogInformation("Startup data backfill skipped (RunStartupDataBackfill=false).");
                 }
 
                 if (runSeed)

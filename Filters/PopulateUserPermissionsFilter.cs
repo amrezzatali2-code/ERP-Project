@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc.Filters;
 using ERP.Security;
 using ERP.Services;
+using System;
 using System.Security.Claims;
+using System.Linq;
 
 namespace ERP.Filters
 {
@@ -25,7 +27,17 @@ namespace ERP.Filters
             {
                 var codes = await _permissionService.GetUserPermissionCodesAsync(userId);
                 context.HttpContext.Items["UserPermissionCodes"] = codes;
-                context.HttpContext.Items["ShowListSummaries"] = await _permissionService.HasPermissionAsync(GlobalPermissionGates.ShowSummaries);
+
+                // نحسم إظهار الملخصات من نفس بيانات الكاش بدل استدعاء صلاحية إضافي في كل طلب.
+                var user = context.HttpContext.User;
+                var isAdmin =
+                    string.Equals(user?.FindFirst("IsAdmin")?.Value, "true", StringComparison.OrdinalIgnoreCase) ||
+                    (user?.FindAll(ClaimTypes.Role).Any(r =>
+                        string.Equals(r.Value, "مسؤول النظام", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(r.Value, "مالك النظام", StringComparison.OrdinalIgnoreCase)) ?? false);
+
+                context.HttpContext.Items["ShowListSummaries"] =
+                    isAdmin || codes.Contains(GlobalPermissionGates.ShowSummaries);
             }
             else
             {

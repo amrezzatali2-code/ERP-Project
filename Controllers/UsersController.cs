@@ -628,8 +628,14 @@ namespace ERP.Controllers
             model.CreatedAt = DateTime.Now;   // متغير: تاريخ إنشاء المستخدم
             model.UpdatedAt = null;          // متغير: لا يوجد تعديل بعد
 
-            // ملاحظة: حالياً نخزن PasswordHash كما هو.
-            // لاحقاً نضيف دالة Hash لتشفير الباسورد قبل التخزين.
+            // عند الإنشاء: نحفظ كلمة السر بشكل مشفّر دائماً.
+            if (string.IsNullOrWhiteSpace(model.PasswordHash))
+            {
+                ModelState.AddModelError("PasswordHash", "كلمة السر مطلوبة.");
+                return View(model);
+            }
+
+            model.PasswordHash = PasswordHasher.HashPassword(model.PasswordHash.Trim());
 
             // ======================================================
             // 4) حفظ المستخدم في قاعدة البيانات
@@ -757,6 +763,7 @@ namespace ERP.Controllers
             var oldValues = System.Text.Json.JsonSerializer.Serialize(new
             {
                 dbUser.UserName,
+                dbUser.PortalRole,
                 dbUser.IsAdmin,
                 dbUser.IsActive
             });
@@ -767,14 +774,13 @@ namespace ERP.Controllers
             dbUser.UserName = model.UserName;      // متغير: اسم الدخول
             dbUser.DisplayName = model.DisplayName;   // متغير: نحتفظ به مساويًا لاسم الدخول (للتقارير)
             dbUser.Email = model.Email;               // متغير: البريد الإلكتروني (اختياري)
+            dbUser.PortalRole = model.PortalRole;
             dbUser.IsActive = model.IsActive;      // متغير: حالة التفعيل
 
-            // لو عندك TextBox في الفورم لكتابة "كلمة مرور جديدة"
-            // والموديل يستخدم نفس الخاصية PasswordHash مؤقتًا:
+            // لو تم إدخال كلمة مرور جديدة نحفظها مشفّرة.
             if (!string.IsNullOrWhiteSpace(model.PasswordHash))
             {
-                // حاليًا نخزنها كما هي، لاحقًا نضيف تشفير
-                dbUser.PasswordHash = model.PasswordHash;    // متغير: كلمة المرور الجديدة
+                dbUser.PasswordHash = PasswordHasher.HashPassword(model.PasswordHash.Trim());    // متغير: كلمة المرور الجديدة
             }
 
             dbUser.UpdatedAt = DateTime.Now;         // متغير: وقت آخر تعديل
@@ -787,6 +793,7 @@ namespace ERP.Controllers
             var newValues = System.Text.Json.JsonSerializer.Serialize(new
             {
                 dbUser.UserName,
+                dbUser.PortalRole,
                 dbUser.IsAdmin,
                 dbUser.IsActive
             });

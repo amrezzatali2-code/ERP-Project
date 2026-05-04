@@ -4,13 +4,174 @@
 @{
     ViewData["Title"] = "إضافة إذن استلام نقدية";
     bool lockCustomer = ViewBag.LockCustomer is bool b && b;
-    bool isPosted = Model.CashReceiptId > 0 && (Model.IsPosted || (Model.Status != null && Model.Status.Contains("مرحلة")));
+    bool isPosted = Model.CashReceiptId > 0 && Model.IsPosted;
+    string rawStatus = (Model.Status ?? "").Trim();
+    bool isOpenForEdit = !isPosted && (rawStatus.Contains("مفتوح") || rawStatus.Contains("مفتوحة"));
+    string statusText = isPosted ? "مرحل" : (isOpenForEdit ? "مفتوح للتعديل" : "غير مرحل");
     var cashAccountSelectList = ViewData["CashAccountId"] as SelectList;
     bool treasuryCashBoxesEmpty = ViewData["TreasuryCashBoxesEmpty"] as bool? ?? false;
+    int? groupAreaId = ViewBag.GroupAreaId as int?;
+    int? groupDistributorUserId = ViewBag.GroupDistributorUserId as int?;
+    DateTime? groupDate = ViewBag.GroupDate as DateTime?;
+    bool groupMode = ViewBag.GroupMode is bool gm && gm;
+    string groupAreaName = ViewBag.GroupAreaName as string ?? "";
+    string groupDistributorName = ViewBag.GroupDistributorName as string ?? "";
+    int? navCurrentId = ViewBag.NavCurrentId as int?;
+    int? navFirstId = ViewBag.NavFirstId as int?;
+    int? navLastId = ViewBag.NavLastId as int?;
+    int? navPrevId = ViewBag.NavPrevId as int?;
+    int? navNextId = ViewBag.NavNextId as int?;
 }
 
+<style>
+    .cr-form-wrap .card {
+        border: 1px solid #7dd3fc;
+        border-radius: 14px;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, .06);
+        overflow: hidden;
+    }
+    .cr-form-wrap .card-body {
+        background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%);
+    }
+    .cr-form-wrap h2 {
+        color: #0f766e;
+    }
+    .cr-form-wrap .form-label {
+        color: #334155;
+        font-weight: 600;
+        font-size: .88rem;
+        margin-bottom: .35rem;
+    }
+    .cr-form-wrap .form-control,
+    .cr-form-wrap .form-select {
+        border: 2px solid #9cb5de;
+        border-radius: .6rem;
+        min-height: 2.7rem;
+        font-size: 1.02rem;
+        color: #0f172a;
+        background-color: #fff;
+    }
+    .cr-form-wrap .form-control:focus,
+    .cr-form-wrap .form-select:focus {
+        border-color: #0ea5e9;
+        box-shadow: 0 0 0 .22rem rgba(14,165,233,.18);
+    }
+    .cr-form-wrap .card-footer {
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+    }
+    .cr-form-wrap .btn-primary {
+        background-color: #0f766e;
+        border-color: #0f766e;
+    }
+    .cr-form-wrap .btn-primary:hover {
+        background-color: #0d6b64;
+        border-color: #0d6b64;
+    }
+    .cr-nav .nav-label {
+        color: #0f766e;
+        font-weight: 700;
+    }
+    .cr-nav .nav-arrow {
+        min-width: 42px;
+        font-weight: 700;
+    }
+    .cr-nav .nav-help {
+        font-size: .78rem;
+        color: #0f766e;
+    }
+    .cr-nav .nav-search-input { max-width: 120px; min-width: 108px; }
+    .cr-nav .nav-top {
+        gap: .35rem;
+    }
+    .cr-nav .new-voucher-btn {
+        min-width: 132px;
+        min-height: 48px;
+        font-weight: 700;
+        font-size: 1.02rem;
+    }
+</style>
+
 <div class="container" dir="rtl">
+<div class="cr-form-wrap">
     <h2 class="mb-3">إضافة إذن استلام نقدية</h2>
+
+    <div class="card cr-nav mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-lg-3 d-flex justify-content-lg-end justify-content-center align-items-center">
+                    <a class="btn btn-success open-same-tab new-voucher-btn"
+                       href="@Url.Action("Create", "CashReceipts", new { frame = 1, groupAreaId, groupDistributorUserId, groupDate = groupDate?.ToString("yyyy-MM-dd") })"
+                       data-tab-id="cash-receipt-create"
+                       data-tab-title="إذن استلام نقدية"
+                       data-url="@Url.Action("Create", "CashReceipts", new { frame = 1, groupAreaId, groupDistributorUserId, groupDate = groupDate?.ToString("yyyy-MM-dd") })">إذن جديد</a>
+                </div>
+                <div class="col-lg-9">
+                    <div class="d-flex flex-wrap nav-top align-items-center justify-content-end">
+                        @if (navFirstId.HasValue)
+                        {
+                            <a class="btn btn-outline-primary btn-sm nav-arrow open-same-tab"
+                               title="الأول"
+                               href="@Url.Action("Create", "CashReceipts", new { frame = 1, id = navFirstId, groupAreaId, groupDistributorUserId, groupDate = groupDate?.ToString("yyyy-MM-dd") })"
+                               data-tab-id="cash-receipt-create"
+                               data-tab-title="إذن استلام نقدية"
+                               data-url="@Url.Action("Create", "CashReceipts", new { frame = 1, id = navFirstId, groupAreaId, groupDistributorUserId, groupDate = groupDate?.ToString("yyyy-MM-dd") })">⏮</a>
+                        }
+                        else { <button type="button" class="btn btn-outline-primary btn-sm nav-arrow" disabled title="الأول">⏮</button> }
+
+                        @if (navPrevId.HasValue)
+                        {
+                            <a class="btn btn-outline-primary btn-sm nav-arrow open-same-tab"
+                               title="السابق"
+                               href="@Url.Action("Create", "CashReceipts", new { frame = 1, id = navPrevId, groupAreaId, groupDistributorUserId, groupDate = groupDate?.ToString("yyyy-MM-dd") })"
+                               data-tab-id="cash-receipt-create"
+                               data-tab-title="إذن استلام نقدية"
+                               data-url="@Url.Action("Create", "CashReceipts", new { frame = 1, id = navPrevId, groupAreaId, groupDistributorUserId, groupDate = groupDate?.ToString("yyyy-MM-dd") })">◀</a>
+                        }
+                        else { <button type="button" class="btn btn-outline-primary btn-sm nav-arrow" disabled title="السابق">◀</button> }
+
+                        @if (navNextId.HasValue)
+                        {
+                            <a class="btn btn-outline-primary btn-sm nav-arrow open-same-tab"
+                               title="التالي"
+                               href="@Url.Action("Create", "CashReceipts", new { frame = 1, id = navNextId, groupAreaId, groupDistributorUserId, groupDate = groupDate?.ToString("yyyy-MM-dd") })"
+                               data-tab-id="cash-receipt-create"
+                               data-tab-title="إذن استلام نقدية"
+                               data-url="@Url.Action("Create", "CashReceipts", new { frame = 1, id = navNextId, groupAreaId, groupDistributorUserId, groupDate = groupDate?.ToString("yyyy-MM-dd") })">▶</a>
+                        }
+                        else { <button type="button" class="btn btn-outline-primary btn-sm nav-arrow" disabled title="التالي">▶</button> }
+
+                        @if (navLastId.HasValue)
+                        {
+                            <a class="btn btn-outline-primary btn-sm nav-arrow open-same-tab"
+                               title="الأخير"
+                               href="@Url.Action("Create", "CashReceipts", new { frame = 1, id = navLastId, groupAreaId, groupDistributorUserId, groupDate = groupDate?.ToString("yyyy-MM-dd") })"
+                               data-tab-id="cash-receipt-create"
+                               data-tab-title="إذن استلام نقدية"
+                               data-url="@Url.Action("Create", "CashReceipts", new { frame = 1, id = navLastId, groupAreaId, groupDistributorUserId, groupDate = groupDate?.ToString("yyyy-MM-dd") })">⏭</a>
+                        }
+                        else { <button type="button" class="btn btn-outline-primary btn-sm nav-arrow" disabled title="الأخير">⏭</button> }
+                    </div>
+                    <div class="d-flex gap-2 align-items-center justify-content-end mt-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="receiptSearchBtn">بحث</button>
+                        <input type="text" class="form-control form-control-sm text-center nav-search-input" id="receiptSearchId" value="@(navCurrentId?.ToString() ?? "")" inputmode="numeric" placeholder="رقم الإذن" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (groupMode)
+    {
+        <div class="alert alert-info py-2">
+            <strong>وضع الاستلام المجمّع:</strong>
+            المنطقة: @groupAreaName
+            |
+            الموزع: @groupDistributorName
+            |
+            التاريخ: @(groupDate.HasValue ? groupDate.Value.ToString("yyyy-MM-dd") : Model.ReceiptDate.ToString("yyyy-MM-dd"))
+        </div>
+    }
 
     @* عرض رسائل النجاح/الخطأ *@
     @if (TempData["CashReceiptSuccess"] != null)
@@ -44,6 +205,9 @@
     }
 
     <form asp-action="Create" method="post" id="receiptForm">
+        @if (groupAreaId.HasValue) { <input type="hidden" name="groupAreaId" value="@groupAreaId.Value" /> }
+        @if (groupDistributorUserId.HasValue) { <input type="hidden" name="groupDistributorUserId" value="@groupDistributorUserId.Value" /> }
+        @if (groupDate.HasValue) { <input type="hidden" name="groupDate" value="@groupDate.Value.ToString("yyyy-MM-dd")" /> }
         @if (Model.CashReceiptId > 0)
         {
             <input type="hidden" asp-for="CashReceiptId" />
@@ -52,20 +216,20 @@
             <div class="card-body">
                 <div class="row g-3">
                     <!-- رقم الإذن (CashReceiptId - تلقائي - ReadOnly) -->
-                    <div class="col-md-4">
+                    <div class="col-md-2 col-sm-4">
                         <label class="form-label">رقم الإذن</label>
                         @if (Model.CashReceiptId > 0)
                         {
-                            <input type="text" class="form-control" value="@Model.CashReceiptId" readonly />
+                            <input type="text" class="form-control form-control-sm text-center" style="max-width:120px;" value="@Model.CashReceiptId" readonly />
                         }
                         else
                         {
-                            <input type="text" class="form-control" value="" readonly />
+                            <input type="text" class="form-control form-control-sm text-center" style="max-width:120px;" value="" readonly />
                         }
                     </div>
 
                     <!-- التاريخ -->
-                    <div class="col-md-4">
+                    <div class="col-md-5 col-sm-4">
                         <label asp-for="ReceiptDate" class="form-label"></label>
                         @if (isPosted)
                         {
@@ -79,14 +243,14 @@
                     </div>
 
                     <!-- حالة الترحيل -->
-                    <div class="col-md-4">
+                    <div class="col-md-5 col-sm-4">
                         <label class="form-label">الحالة</label>
-                        <input type="text" class="form-control" value="@(Model.Status ?? "غير مرحلة")" readonly />
+                        <input type="text" class="form-control" value="@statusText" readonly />
                     </div>
 
-                    <!-- الطرف (عميل) -->
+                    <!-- العميل -->
                     <div class="col-md-4">
-                        <label asp-for="CustomerId" class="form-label"></label>
+                        <label asp-for="CustomerId" class="form-label">العميل</label>
                         @if (lockCustomer)
                         {
                             <select asp-for="CustomerId" 
@@ -137,9 +301,9 @@
                         <span asp-validation-for="CashAccountId" class="text-danger"></span>
                     </div>
 
-                    <!-- حساب الطرف (يتم تعبئته تلقائياً عند اختيار العميل) -->
+                    <!-- حساب العميل (يتم تعبئته تلقائياً عند اختيار العميل) -->
                     <div class="col-md-4">
-                        <label asp-for="CounterAccountId" class="form-label"></label>
+                        <label asp-for="CounterAccountId" class="form-label">حساب العميل</label>
                         @if (lockCustomer)
                         {
                             @* ✅ العميل مقفل - نستخدم select disabled مع hidden input *@
@@ -196,11 +360,31 @@
             </div>
 
             <div class="card-footer d-flex justify-content-between">
-                <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
+                @if (groupMode)
+                {
+                    <a class="btn btn-secondary btn-sm open-same-tab"
+                       href="@Url.Action("BatchCreate", "CashReceipts", new { frame = 1, areaId = groupAreaId, distributorUserId = groupDistributorUserId, batchDate = (groupDate ?? Model.ReceiptDate).ToString("yyyy-MM-dd") })"
+                       data-tab-id="cash-receipts-batch"
+                       data-tab-title="استلام مجمّع"
+                       data-url="@Url.Action("BatchCreate", "CashReceipts", new { frame = 1, areaId = groupAreaId, distributorUserId = groupDistributorUserId, batchDate = (groupDate ?? Model.ReceiptDate).ToString("yyyy-MM-dd") })">عودة للدورة المجمعة</a>
+                }
+                else
+                {
+                    <a class="btn btn-secondary btn-sm open-same-tab"
+                       href="@Url.Action("Index", "CashReceipts", new { frame = 1 })"
+                       data-tab-id="cash-receipts"
+                       data-tab-title="قائمة أذون استلام نقدية"
+                       data-url="@Url.Action("Index", "CashReceipts", new { frame = 1 })">عودة للقائمة</a>
+                }
                 <div class="d-flex gap-2 align-items-center">
                     @if (Model.CashReceiptId > 0)
                     {
-                        <a asp-action="Show" asp-route-id="@Model.CashReceiptId" target="_blank" class="btn btn-outline-primary btn-sm">
+                        <a asp-action="Show"
+                           asp-route-id="@Model.CashReceiptId"
+                           asp-route-autoPrint="1"
+                           asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)"
+                           target="_blank"
+                           class="btn btn-outline-primary btn-sm">
                             🖨️ طباعة الإذن
                         </a>
                     }
@@ -216,6 +400,7 @@
             </div>
         </div>
     </form>
+</div>
 </div>
 
 @section Scripts {
@@ -238,6 +423,85 @@
             if ($amount.length && ($amount.val() === '0' || $amount.val() === '0.00')) {
                 $amount.val('');
             }
+
+            var $customer = $('#customerSelect');
+            var focusAmount = function () {
+                if ($amount.length && !$amount.prop('readonly') && !$amount.prop('disabled')) {
+                    $amount.trigger('focus');
+                    $amount.trigger('select');
+                }
+            };
+
+            setTimeout(function () {
+                if ($customer.length && !$customer.prop('disabled')) {
+                    $customer.trigger('focus');
+                } else {
+                    focusAmount();
+                }
+            }, 120);
+
+            $customer.on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    focusAmount();
+                }
+            });
+
+            $amount.on('focus', function () {
+                if (!$(this).prop('readonly')) $(this).trigger('select');
+            });
+
+            $amount.on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var form = $('#receiptForm');
+                    if (form.length) {
+                        form.trigger('submit');
+                    }
+                }
+            });
+
+            var normalizeDigits = function (v) {
+                if (!v) return '';
+                return v.toString()
+                    .replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); })
+                    .replace(/[^\d]/g, '');
+            };
+
+            var goToReceiptById = function () {
+                var raw = $('#receiptSearchId').val();
+                var normalized = normalizeDigits(raw);
+                var id = parseInt(normalized, 10);
+                if (!id || id <= 0) {
+                    return;
+                }
+                var url = '@Url.Action("Create", "CashReceipts")' + '?frame=1&id=' + id;
+                @if (groupAreaId.HasValue)
+                {
+                    <text>url += '&groupAreaId=@groupAreaId.Value';</text>
+                }
+                @if (groupDistributorUserId.HasValue)
+                {
+                    <text>url += '&groupDistributorUserId=@groupDistributorUserId.Value';</text>
+                }
+                @if (groupDate.HasValue)
+                {
+                    <text>url += '&groupDate=@groupDate.Value.ToString("yyyy-MM-dd")';</text>
+                }
+                window.location.href = url;
+            };
+
+            $('#receiptSearchBtn').on('click', function () {
+                goToReceiptById();
+            });
+
+            $('#receiptSearchId').on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    goToReceiptById();
+                }
+            });
+
             // ✅ التأكد من تحديد القيم المحددة مسبقاً عند تحميل الصفحة
             @if (Model.CashAccountId > 0)
             {
@@ -286,6 +550,7 @@
                     }
                 });
             });
+
         });
     </script>
 }

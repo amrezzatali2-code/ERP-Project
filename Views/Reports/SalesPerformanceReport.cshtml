@@ -4,6 +4,54 @@
     var fromStr = Model.FromDate?.ToString("yyyy-MM-dd") ?? "";
     var toStr = Model.ToDate?.ToString("yyyy-MM-dd") ?? "";
 }
+
+@section Styles {
+    <style>
+        .erp-performance-report-block .erp-filter-input,
+        .erp-performance-report-block .form-control.erp-filter-input,
+        .erp-performance-report-block .form-select.erp-filter-input {
+            border-color: #94a3b8 !important;
+            color: #1f2937;
+            box-shadow: none;
+        }
+
+        .erp-performance-report-block .erp-filter-input:focus,
+        .erp-performance-report-block .form-control.erp-filter-input:focus,
+        .erp-performance-report-block .form-select.erp-filter-input:focus {
+            border-color: #64748b !important;
+            box-shadow: 0 0 0 0.18rem rgba(100, 116, 139, 0.16);
+        }
+
+        .erp-performance-report-block .card.erp-kpi-card-outline {
+            border-radius: 10px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            box-shadow: 0 2px 7px rgba(15, 23, 42, 0.08) !important;
+            transition: transform .15s ease, box-shadow .15s ease;
+        }
+
+        .erp-performance-report-block .card.erp-kpi-card-outline:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 14px rgba(15, 23, 42, 0.12) !important;
+        }
+
+        .erp-performance-report-block .card.border-primary { border-color: #7aa2e3 !important; }
+        .erp-performance-report-block .card.border-info { border-color: #6ea8b8 !important; }
+        .erp-performance-report-block .card.border-danger { border-color: #d98a96 !important; }
+        .erp-performance-report-block .card.border-success { border-color: #7dbf90 !important; }
+        .erp-performance-report-block .card.border-secondary { border-color: #98a4b3 !important; }
+        .erp-performance-report-block .card.border-dark { border-color: #7a8595 !important; }
+        .erp-performance-report-block .card.border-warning { border-color: #d7ad72 !important; }
+
+        .erp-performance-report-block .text-primary { color: #2d6fcf !important; }
+        .erp-performance-report-block .text-info { color: #2d7f90 !important; }
+        .erp-performance-report-block .text-danger { color: #c65f6d !important; }
+        .erp-performance-report-block .text-success { color: #2f8f4c !important; }
+        .erp-performance-report-block .text-secondary { color: #516173 !important; }
+        .erp-performance-report-block .text-dark { color: #334155 !important; }
+        .erp-performance-report-block .text-warning { color: #bc7a2a !important; }
+    </style>
+}
+
 <div dir="rtl" class="container-fluid py-3">
     <div class="erp-list-filter-bar erp-performance-report-block d-print-none">
         <h4 class="mb-3 fs-5 text-secondary fw-bold">تقرير أداء المبيعات</h4>

@@ -30,3 +30,6 @@ Logs/
 
 # برنامج/بيانات المشتريات المرجعية (أورجا، إكسيل، إلخ) — خارج Git
 Purchasing1.Web/
+ERP_BACKUP_*
+bin_verify*/
+bin_verify_*/

@@ -1,69 +1,169 @@
-@model ERP.Models.DebitNote
+﻿@model ERP.Models.DebitNote
 
 @{
-    ViewData["Title"] = "إشعار خصم";
+    ViewData["Title"] = "إيصال إشعار خصم";
 }
 
+<style>
+    .dn-print-page {
+        max-width: 980px;
+        margin: 1rem auto;
+        border: 2px solid #5b8def;
+        border-radius: 14px;
+        box-shadow: 0 10px 26px rgba(37, 99, 235, .12);
+        background: #fff;
+        overflow: hidden;
+    }
+    .dn-print-head {
+        background: linear-gradient(135deg, #f8fbff 0%, #edf5ff 100%);
+        border-bottom: 1px solid #dbe3ef;
+        padding: 1rem 1.25rem;
+    }
+    .dn-print-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 0;
+    }
+    .dn-print-sub {
+        font-size: .88rem;
+        color: #475569;
+        margin-top: .25rem;
+    }
+    .dn-print-body { padding: 1.2rem 1.4rem; }
+    .dn-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .7rem .9rem;
+    }
+    .dn-box {
+        border: 1.5px solid #c7d8f7;
+        border-radius: 10px;
+        padding: .7rem .85rem;
+        background: #f8fafc;
+    }
+    .dn-label {
+        color: #64748b;
+        font-size: .8rem;
+        margin-bottom: .15rem;
+        display: block;
+    }
+    .dn-value {
+        color: #0f172a;
+        font-weight: 600;
+        font-size: 1.05rem;
+    }
+    .dn-signs {
+        margin-top: 1rem;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+    }
+    .dn-sign {
+        border-top: 1px dashed #94a3b8;
+        text-align: center;
+        padding-top: .35rem;
+        color: #334155;
+        min-height: 48px;
+    }
+
+    @@media print {
+        body * { visibility: hidden !important; }
+        #debitPrintArea, #debitPrintArea * { visibility: visible !important; }
+        #debitPrintArea {
+            position: fixed;
+            inset: 0;
+            margin: 0 !important;
+            max-width: none !important;
+            border: 2px solid #5b8def !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            padding: 8mm 10mm;
+            background: #fff !important;
+        }
+        .dn-no-print { display: none !important; }
+    }
+</style>
+
 <div class="container mt-3" dir="rtl">
-    <div class="card" style="max-width: 700px; margin:auto;">
-        <div class="card-header text-center">
-            <h4 class="mb-0">إشعار خصم — @Model.DebitNoteId</h4>
-        </div>
-        <div class="card-body">
-            <div class="d-flex justify-content-between mb-3">
+    <div id="debitPrintArea" class="dn-print-page erp-print-area">
+        <div class="dn-print-head">
+            <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <strong>رقم الإشعار:</strong> @Model.DebitNoteId<br />
-                    <strong>التاريخ:</strong> @Model.NoteDate.ToString("yyyy-MM-dd")
+                    <h4 class="dn-print-title">إيصال إشعار خصم</h4>
+                    <div class="dn-print-sub">ERP - إشعار خصم</div>
                 </div>
-                <div class="text-end">
-                    <strong>الطرف:</strong> @Model.Customer?.CustomerName<br />
-                    <strong>المبلغ:</strong> @Model.Amount.ToString("N2")
-                </div>
-            </div>
-
-            <hr />
-
-            <p><strong>إشعار خصم بقيمة:</strong> @Model.Amount.ToString("N2")</p>
-            <p><strong>على الطرف:</strong> @Model.Customer?.CustomerName</p>
-            <p><strong>حساب الطرف:</strong> @(Model.Account != null ? $"{Model.Account.AccountCode} - {Model.Account.AccountName}" : "-")</p>
-            @if (Model.OffsetAccount != null)
-            {
-                <p><strong>الحساب المقابل:</strong> @($"{Model.OffsetAccount.AccountCode} - {Model.OffsetAccount.AccountName}")</p>
-            }
-            @if (!string.IsNullOrEmpty(Model.Reason))
-            {
-                <p><strong>السبب:</strong> @Model.Reason</p>
-            }
-            @if (!string.IsNullOrEmpty(Model.Description))
-            {
-                <p><strong>البيان:</strong> @Model.Description</p>
-            }
-
-            <p class="mt-2">
-                <span class="badge @(Model.IsPosted ? "bg-success" : "bg-secondary")">
-                    @(Model.IsPosted ? "مرحلة 1" : "غير مرحلة")
-                </span>
-            </p>
-
-            <hr />
-
-            <div class="row mt-4">
-                <div class="col text-center">
-                    <strong>المستلم</strong>
-                    <div style="height:60px;border-bottom:1px dashed #999;"></div>
-                </div>
-                <div class="col text-center">
-                    <strong>المراجع</strong>
-                    <div style="height:60px;border-bottom:1px dashed #999;"></div>
-                </div>
+                <div class="text-end small text-muted">@DateTime.Now.ToString("yyyy/MM/dd HH:mm")</div>
             </div>
         </div>
-        <div class="card-footer d-flex justify-content-between">
-            <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
-            <div>
-                <a asp-action="Edit" asp-route-id="@Model.DebitNoteId" class="btn btn-primary btn-sm">تعديل</a>
-                <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">طباعة</button>
+
+        <div class="dn-print-body">
+            <div class="dn-grid">
+                <div class="dn-box"><span class="dn-label">رقم الإشعار</span><span class="dn-value">@Model.DebitNoteId</span></div>
+                <div class="dn-box"><span class="dn-label">التاريخ</span><span class="dn-value">@Model.NoteDate.ToString("yyyy-MM-dd")</span></div>
+                <div class="dn-box"><span class="dn-label">العميل</span><span class="dn-value">@Model.Customer?.CustomerName</span></div>
+                <div class="dn-box"><span class="dn-label">المبلغ</span><span class="dn-value">@Model.Amount.ToString("N2")</span></div>
+            </div>
+
+            <div class="dn-box mt-3">
+                <span class="dn-label">سبب الإشعار</span>
+                <span class="dn-value">@(string.IsNullOrWhiteSpace(Model.Reason) ? "-" : Model.Reason)</span>
+            </div>
+
+            <div class="dn-signs">
+                <div class="dn-sign">المستلم</div>
+                <div class="dn-sign">المراجع</div>
             </div>
         </div>
     </div>
+
+    <div class="mt-2 d-flex justify-content-between dn-no-print">
+        <a class="btn btn-secondary btn-sm open-same-tab"
+           href="@Url.Action("Index", "DebitNotes", new { frame = 1 })"
+           data-tab-id="debit-notes"
+           data-tab-title="قائمة إشعارات الخصم"
+           data-url="@Url.Action("Index", "DebitNotes", new { frame = 1 })">عودة للقائمة</a>
+        <div class="d-flex gap-2">
+            <a class="btn btn-primary btn-sm open-same-tab"
+               href="@Url.Action("Edit", "DebitNotes", new { id = Model.DebitNoteId, frame = 1 })"
+               data-tab-id="list-edit-@Model.DebitNoteId"
+               data-tab-title="إشعار خصم"
+               data-url="@Url.Action("Edit", "DebitNotes", new { id = Model.DebitNoteId, frame = 1 })">تعديل</a>
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">طباعة</button>
+        </div>
+    </div>
 </div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const autoPrint = new URLSearchParams(window.location.search).get('autoPrint') === '1';
+            if (!autoPrint) return;
+
+            const returnUrl = new URLSearchParams(window.location.search).get('returnUrl') || document.referrer || '/DebitNotes';
+            let printed = false;
+
+            const finishAutoPrint = function () {
+                setTimeout(function () {
+                    try { window.close(); } catch (_) { }
+                    if (!window.closed) {
+                        window.location.replace(returnUrl);
+                    }
+                }, 120);
+            };
+
+            window.addEventListener('load', function () {
+                setTimeout(function () { window.print(); }, 240);
+            });
+
+            window.addEventListener('afterprint', function () {
+                printed = true;
+                finishAutoPrint();
+            }, { once: true });
+
+            window.addEventListener('focus', function () {
+                if (printed) finishAutoPrint();
+            });
+        })();
+    </script>
+}

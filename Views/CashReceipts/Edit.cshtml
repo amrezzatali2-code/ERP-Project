@@ -4,9 +4,49 @@
     ViewData["Title"] = "تعديل إذن استلام نقدية";
     bool lockCustomer = ViewBag.LockCustomer is bool b && b;
     bool isPosted = Model.IsPosted;
+    string rawStatus = (Model.Status ?? "").Trim();
+    bool isOpenForEdit = !isPosted && (rawStatus.Contains("مفتوح") || rawStatus.Contains("مفتوحة"));
+    string statusText = isPosted ? "مرحل" : (isOpenForEdit ? "مفتوح للتعديل" : "غير مرحل");
 }
 
+<style>
+    .cr-form-wrap .card {
+        border: 1px solid #dbe3ef;
+        border-radius: 14px;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, .06);
+        overflow: hidden;
+    }
+    .cr-form-wrap .card-body {
+        background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%);
+    }
+    .cr-form-wrap .form-label {
+        color: #334155;
+        font-weight: 600;
+        font-size: .88rem;
+        margin-bottom: .35rem;
+    }
+    .cr-form-wrap .form-control,
+    .cr-form-wrap .form-select {
+        border: 2px solid #9cb5de;
+        border-radius: .6rem;
+        min-height: 2.7rem;
+        font-size: 1.02rem;
+        color: #0f172a;
+        background-color: #fff;
+    }
+    .cr-form-wrap .form-control:focus,
+    .cr-form-wrap .form-select:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 .22rem rgba(37,99,235,.18);
+    }
+    .cr-form-wrap .card-footer {
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+    }
+</style>
+
 <div class="container" dir="rtl">
+<div class="cr-form-wrap">
     <h2 class="mb-3">تعديل إذن استلام نقدية</h2>
 
     @if (isPosted)
@@ -27,13 +67,13 @@
             <div class="card-body">
                 <div class="row g-3">
                     <!-- رقم الإذن (CashReceiptId - ثابت - ReadOnly) -->
-                    <div class="col-md-4">
+                    <div class="col-md-2 col-sm-4">
                         <label class="form-label">رقم الإذن</label>
-                        <input type="text" class="form-control" value="@Model.CashReceiptId" readonly />
+                        <input type="text" class="form-control form-control-sm text-center" style="max-width:120px;" value="@Model.CashReceiptId" readonly />
                     </div>
 
                     <!-- التاريخ -->
-                    <div class="col-md-4">
+                    <div class="col-md-5 col-sm-4">
                         <label asp-for="ReceiptDate" class="form-label"></label>
                         @if (isPosted)
                         {
@@ -47,22 +87,14 @@
                     </div>
 
                     <!-- حالة الترحيل -->
-                    <div class="col-md-4">
+                    <div class="col-md-5 col-sm-4">
                         <label class="form-label">الحالة</label>
-                        <input type="text" class="form-control" value="@(Model.Status ?? "غير مرحلة")" readonly />
-                        @if (isPosted)
-                        {
-                            <span class="badge bg-success">مرحلة 1</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-warning">غير مرحلة</span>
-                        }
+                        <input type="text" class="form-control" value="@statusText" readonly />
                     </div>
 
-                    <!-- الطرف (عميل) -->
+                    <!-- العميل -->
                     <div class="col-md-4">
-                        <label asp-for="CustomerId" class="form-label"></label>
+                        <label asp-for="CustomerId" class="form-label">العميل</label>
                         @if (lockCustomer || isPosted)
                         {
                             <select asp-for="CustomerId" 
@@ -133,9 +165,9 @@
                         <span asp-validation-for="CashAccountId" class="text-danger"></span>
                     </div>
 
-                    <!-- حساب الطرف (يتم تعبئته تلقائياً عند اختيار العميل) -->
+                    <!-- حساب العميل (يتم تعبئته تلقائياً عند اختيار العميل) -->
                     <div class="col-md-4">
-                        <label asp-for="CounterAccountId" class="form-label"></label>
+                        <label asp-for="CounterAccountId" class="form-label">حساب العميل</label>
                         @if (lockCustomer || isPosted)
                         {
                             <select asp-for="CounterAccountId" 
@@ -204,9 +236,18 @@
             </div>
 
             <div class="card-footer d-flex justify-content-between">
-                <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
+                <a class="btn btn-secondary btn-sm open-same-tab"
+                   href="@Url.Action("Index", "CashReceipts", new { frame = 1 })"
+                   data-tab-id="cash-receipts"
+                   data-tab-title="قائمة أذون استلام نقدية"
+                   data-url="@Url.Action("Index", "CashReceipts", new { frame = 1 })">عودة للقائمة</a>
                 <div class="d-flex gap-2 align-items-center">
-                    <a asp-action="Show" asp-route-id="@Model.CashReceiptId" target="_blank" class="btn btn-outline-primary btn-sm">
+                    <a asp-action="Show"
+                       asp-route-id="@Model.CashReceiptId"
+                       asp-route-autoPrint="1"
+                       asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)"
+                       target="_blank"
+                       class="btn btn-outline-primary btn-sm">
                         🖨️ طباعة الإذن
                     </a>
                     @if (isPosted)
@@ -222,6 +263,7 @@
         </div>
     </form>
 </div>
+</div>
 
 @section Scripts {
     @{
@@ -234,6 +276,44 @@
             if ($amount.length && ($amount.val() === '0' || $amount.val() === '0.00')) {
                 $amount.val('');
             }
+
+            var $customer = $('#customerSelect');
+            var focusAmount = function () {
+                if ($amount.length && !$amount.prop('readonly') && !$amount.prop('disabled')) {
+                    $amount.trigger('focus');
+                    $amount.trigger('select');
+                }
+            };
+
+            setTimeout(function () {
+                if ($customer.length && !$customer.prop('disabled')) {
+                    $customer.trigger('focus');
+                } else {
+                    focusAmount();
+                }
+            }, 120);
+
+            $customer.on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    focusAmount();
+                }
+            });
+
+            $amount.on('focus', function () {
+                if (!$(this).prop('readonly')) $(this).trigger('select');
+            });
+
+            $amount.on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var form = $('#receiptForm');
+                    if (form.length) {
+                        form.trigger('submit');
+                    }
+                }
+            });
+
             // ✅ عند اختيار العميل، نجلب حسابه ونملأ حساب الطرف تلقائياً
             $('#customerSelect').on('change', function() {
                 var customerId = $(this).val();

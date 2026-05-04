@@ -4,12 +4,152 @@
 @{
     ViewData["Title"] = "إضافة إذن دفع نقدية";
     bool lockCustomer = ViewBag.LockCustomer is bool b && b;
+    bool isPosted = Model.CashPaymentId > 0 && Model.IsPosted;
+    string rawStatus = (Model.Status ?? "").Trim();
+    bool isOpenForEdit = !isPosted && (rawStatus.Contains("مفتوح") || rawStatus.Contains("مفتوحة"));
+    string statusText = isPosted ? "مرحل" : (isOpenForEdit ? "مفتوح للتعديل" : "غير مرحل");
     var cashAccountSelectList = ViewData["CashAccountId"] as SelectList;
     bool treasuryCashBoxesEmpty = ViewData["TreasuryCashBoxesEmpty"] as bool? ?? false;
+    int? navCurrentId = ViewBag.NavCurrentId as int?;
+    int? navFirstId = ViewBag.NavFirstId as int?;
+    int? navLastId = ViewBag.NavLastId as int?;
+    int? navPrevId = ViewBag.NavPrevId as int?;
+    int? navNextId = ViewBag.NavNextId as int?;
 }
 
+<style>
+    .cp-form-wrap .card {
+        border: 1px solid #fdba74;
+        border-radius: 14px;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, .06);
+        overflow: hidden;
+    }
+    .cp-form-wrap .card-body { background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%); }
+    .cp-form-wrap h2 { color: #c2410c; }
+    .cp-form-wrap .form-label {
+        color: #334155;
+        font-weight: 600;
+        font-size: .88rem;
+        margin-bottom: .35rem;
+    }
+    .cp-form-wrap .form-control,
+    .cp-form-wrap .form-select {
+        border: 2px solid #9cb5de;
+        border-radius: .6rem;
+        min-height: 2.7rem;
+        font-size: 1.02rem;
+        color: #0f172a;
+        background-color: #fff;
+    }
+    .cp-form-wrap .form-control:focus,
+    .cp-form-wrap .form-select:focus {
+        border-color: #ea580c;
+        box-shadow: 0 0 0 .22rem rgba(234,88,12,.18);
+    }
+    .cp-form-wrap .card-footer {
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+    }
+    .cp-form-wrap .btn-primary {
+        background-color: #c2410c;
+        border-color: #c2410c;
+    }
+    .cp-form-wrap .btn-primary:hover {
+        background-color: #9a3412;
+        border-color: #9a3412;
+    }
+    .cp-nav .nav-label {
+        color: #c2410c;
+        font-weight: 700;
+    }
+    .cp-nav .nav-arrow {
+        min-width: 42px;
+        font-weight: 700;
+    }
+    .cp-nav .nav-help {
+        font-size: .78rem;
+        color: #c2410c;
+    }
+    .cp-nav .nav-search-input { max-width: 120px; min-width: 108px; }
+    .cp-nav .nav-top {
+        gap: .35rem;
+    }
+    .cp-nav .new-voucher-btn {
+        min-width: 132px;
+        min-height: 48px;
+        font-weight: 700;
+        font-size: 1.02rem;
+    }
+</style>
+
 <div class="container" dir="rtl">
+<div class="cp-form-wrap">
     <h2 class="mb-3">إضافة إذن دفع نقدية</h2>
+
+    <div class="card cp-nav mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-lg-3 d-flex justify-content-lg-end justify-content-center align-items-center">
+                    <a class="btn btn-success open-same-tab new-voucher-btn"
+                       href="@Url.Action("Create", "CashPayments", new { frame = 1 })"
+                       data-tab-id="cash-payment-create"
+                       data-tab-title="إذن دفع نقدية"
+                       data-url="@Url.Action("Create", "CashPayments", new { frame = 1 })">إذن جديد</a>
+                </div>
+                <div class="col-lg-9">
+                    <div class="d-flex flex-wrap nav-top align-items-center justify-content-end">
+                        @if (navFirstId.HasValue)
+                        {
+                            <a class="btn btn-outline-primary btn-sm nav-arrow open-same-tab"
+                               title="الأول"
+                               href="@Url.Action("Create", "CashPayments", new { frame = 1, id = navFirstId })"
+                               data-tab-id="cash-payment-create"
+                               data-tab-title="إذن دفع نقدية"
+                               data-url="@Url.Action("Create", "CashPayments", new { frame = 1, id = navFirstId })">⏮</a>
+                        }
+                        else { <button type="button" class="btn btn-outline-primary btn-sm nav-arrow" disabled title="الأول">⏮</button> }
+
+                        @if (navPrevId.HasValue)
+                        {
+                            <a class="btn btn-outline-primary btn-sm nav-arrow open-same-tab"
+                               title="السابق"
+                               href="@Url.Action("Create", "CashPayments", new { frame = 1, id = navPrevId })"
+                               data-tab-id="cash-payment-create"
+                               data-tab-title="إذن دفع نقدية"
+                               data-url="@Url.Action("Create", "CashPayments", new { frame = 1, id = navPrevId })">◀</a>
+                        }
+                        else { <button type="button" class="btn btn-outline-primary btn-sm nav-arrow" disabled title="السابق">◀</button> }
+
+                        @if (navNextId.HasValue)
+                        {
+                            <a class="btn btn-outline-primary btn-sm nav-arrow open-same-tab"
+                               title="التالي"
+                               href="@Url.Action("Create", "CashPayments", new { frame = 1, id = navNextId })"
+                               data-tab-id="cash-payment-create"
+                               data-tab-title="إذن دفع نقدية"
+                               data-url="@Url.Action("Create", "CashPayments", new { frame = 1, id = navNextId })">▶</a>
+                        }
+                        else { <button type="button" class="btn btn-outline-primary btn-sm nav-arrow" disabled title="التالي">▶</button> }
+
+                        @if (navLastId.HasValue)
+                        {
+                            <a class="btn btn-outline-primary btn-sm nav-arrow open-same-tab"
+                               title="الأخير"
+                               href="@Url.Action("Create", "CashPayments", new { frame = 1, id = navLastId })"
+                               data-tab-id="cash-payment-create"
+                               data-tab-title="إذن دفع نقدية"
+                               data-url="@Url.Action("Create", "CashPayments", new { frame = 1, id = navLastId })">⏭</a>
+                        }
+                        else { <button type="button" class="btn btn-outline-primary btn-sm nav-arrow" disabled title="الأخير">⏭</button> }
+                    </div>
+                    <div class="d-flex gap-2 align-items-center justify-content-end mt-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="paymentSearchBtn">بحث</button>
+                        <input type="text" class="form-control form-control-sm text-center nav-search-input" id="paymentSearchId" value="@(navCurrentId?.ToString() ?? "")" inputmode="numeric" placeholder="رقم الإذن" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     @* عرض رسائل النجاح/الخطأ *@
     @if (TempData["CashPaymentSuccess"] != null)
@@ -51,22 +191,22 @@
             <div class="card-body">
                 <div class="row g-3">
                     <!-- رقم الإذن (CashPaymentId - تلقائي - ReadOnly) -->
-                    <div class="col-md-4">
+                    <div class="col-md-2 col-sm-4">
                         <label class="form-label">رقم الإذن</label>
                         @if (Model.CashPaymentId > 0)
                         {
-                            <input type="text" class="form-control" value="@Model.CashPaymentId" readonly />
+                            <input type="text" class="form-control form-control-sm text-center" style="max-width:120px;" value="@Model.CashPaymentId" readonly />
                         }
                         else
                         {
-                            <input type="text" class="form-control" value="" readonly />
+                            <input type="text" class="form-control form-control-sm text-center" style="max-width:120px;" value="" readonly />
                         }
                     </div>
 
                     <!-- التاريخ -->
-                    <div class="col-md-4">
+                    <div class="col-md-5 col-sm-4">
                         <label asp-for="PaymentDate" class="form-label"></label>
-                        @if (Model.Status == "مغلق")
+                        @if (isPosted)
                         {
                             <input asp-for="PaymentDate" type="date" class="form-control" readonly />
                         }
@@ -78,15 +218,15 @@
                     </div>
 
                     <!-- حالة الترحيل -->
-                    <div class="col-md-4">
+                    <div class="col-md-5 col-sm-4">
                         <label class="form-label">الحالة</label>
-                        <input type="text" class="form-control" value="@(Model.Status ?? "غير مرحلة")" readonly />
+                        <input type="text" class="form-control" value="@statusText" readonly />
                     </div>
 
-                    <!-- الطرف (عميل/مورد/طرف آخر) -->
+                    <!-- العميل -->
                     <div class="col-md-4">
-                        <label asp-for="CustomerId" class="form-label"></label>
-                        @if (lockCustomer || Model.Status == "مغلق")
+                        <label asp-for="CustomerId" class="form-label">العميل</label>
+                        @if (lockCustomer || isPosted)
                         {
                             <select asp-for="CustomerId" 
                                     asp-items="ViewBag.CustomerId"
@@ -134,9 +274,9 @@
                         <span asp-validation-for="CashAccountId" class="text-danger"></span>
                     </div>
 
-                    <!-- حساب الطرف (يتم تعبئته تلقائياً عند اختيار العميل) -->
+                    <!-- حساب العميل (يتم تعبئته تلقائياً عند اختيار العميل) -->
                     <div class="col-md-4">
-                        <label asp-for="CounterAccountId" class="form-label"></label>
+                        <label asp-for="CounterAccountId" class="form-label">حساب العميل</label>
                         @if (lockCustomer)
                         {
                             @* ✅ العميل مقفل - نستخدم select disabled مع hidden input *@
@@ -165,7 +305,7 @@
                     <!-- المبلغ -->
                     <div class="col-md-4">
                         <label asp-for="Amount" class="form-label"></label>
-                        @if (Model.Status == "مغلق")
+                        @if (isPosted)
                         {
                             <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" readonly />
                         }
@@ -193,19 +333,28 @@
             </div>
 
             <div class="card-footer d-flex justify-content-between">
-                <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
+                <a class="btn btn-secondary btn-sm open-same-tab"
+                   href="@Url.Action("Index", "CashPayments", new { frame = 1 })"
+                   data-tab-id="cash-payments"
+                   data-tab-title="قائمة أذون دفع نقدية"
+                   data-url="@Url.Action("Index", "CashPayments", new { frame = 1 })">عودة للقائمة</a>
                 <div class="d-flex gap-2 align-items-center">
                     @if (Model.CashPaymentId > 0)
                     {
-                        <a asp-action="Show" asp-route-id="@Model.CashPaymentId" target="_blank" class="btn btn-outline-primary btn-sm">
+                        <a asp-action="Show"
+                           asp-route-id="@Model.CashPaymentId"
+                           asp-route-autoPrint="1"
+                           asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)"
+                           target="_blank"
+                           class="btn btn-outline-primary btn-sm">
                             🖨️ طباعة الإذن
                         </a>
                     }
-                    @if (Model.CashPaymentId > 0 && Model.Status == "مغلق")
+                    @if (Model.CashPaymentId > 0 && isPosted)
                     {
                         <button type="button" class="btn btn-warning btn-sm" id="btnOpenForEdit" data-id="@Model.CashPaymentId" data-url="@Url.Action("Open", "CashPayments", new { id = Model.CashPaymentId })">فتح للتعديل</button>
                     }
-                    @if (Model.Status != "مغلق")
+                    @if (!isPosted)
                     {
                         <button type="submit" class="btn btn-primary btn-sm">حفظ وإغلاق</button>
                     }
@@ -214,6 +363,7 @@
         </div>
     </form>
 </div>
+</div>
 
 @section Scripts {
     @{
@@ -221,6 +371,19 @@
     }
     <script>
         $(document).ready(function() {
+            var isSubmitting = false;
+            var $paymentForm = $('#paymentForm');
+            var $submitButton = $paymentForm.find('button[type="submit"]');
+
+            $paymentForm.on('submit', function () {
+                if (isSubmitting) return false;
+                isSubmitting = true;
+                if ($submitButton.length) {
+                    $submitButton.prop('disabled', true).text('جاري الحفظ...');
+                }
+                return true;
+            });
+
             // زر "فتح للتعديل": إرسال POST إلى Open بدون نموذج متداخل
             $('#btnOpenForEdit').on('click', function() {
                 var url = $(this).data('url');
@@ -235,6 +398,69 @@
             if ($amount.length && ($amount.val() === '0' || $amount.val() === '0.00')) {
                 $amount.val('');
             }
+
+            var $customer = $('#customerSelect');
+            var focusAmount = function () {
+                if ($amount.length && !$amount.prop('readonly') && !$amount.prop('disabled')) {
+                    $amount.trigger('focus');
+                    $amount.trigger('select');
+                }
+            };
+
+            setTimeout(function () {
+                if ($customer.length && !$customer.prop('disabled')) {
+                    $customer.trigger('focus');
+                } else {
+                    focusAmount();
+                }
+            }, 120);
+
+            $customer.on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    focusAmount();
+                }
+            });
+
+            $amount.on('focus', function () {
+                if (!$(this).prop('readonly')) $(this).trigger('select');
+            });
+
+            $amount.on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if ($paymentForm.length) $paymentForm.trigger('submit');
+                }
+            });
+
+            var normalizeDigits = function (v) {
+                if (!v) return '';
+                return v.toString()
+                    .replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); })
+                    .replace(/[^\d]/g, '');
+            };
+
+            var goToPaymentById = function () {
+                var raw = $('#paymentSearchId').val();
+                var normalized = normalizeDigits(raw);
+                var id = parseInt(normalized, 10);
+                if (!id || id <= 0) {
+                    return;
+                }
+                var url = '@Url.Action("Create", "CashPayments")' + '?frame=1&id=' + id;
+                window.location.href = url;
+            };
+
+            $('#paymentSearchBtn').on('click', function () {
+                goToPaymentById();
+            });
+
+            $('#paymentSearchId').on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    goToPaymentById();
+                }
+            });
             // ✅ التأكد من تحديد القيم المحددة مسبقاً عند تحميل الصفحة
             @if (Model.CashAccountId > 0)
             {
@@ -283,6 +509,7 @@
                     }
                 });
             });
+
         });
     </script>
 }

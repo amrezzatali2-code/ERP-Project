@@ -4,7 +4,17 @@
     ViewData["Title"] = "إضافة عميل جديد";
 }
 
-<div class="container product-form-page mt-3" dir="rtl">
+@section Styles {
+    <style>
+        .customer-create-form .product-form-card > .card-header {
+            background: linear-gradient(180deg, #eef8ff 0%, #e6f4ff 100%) !important;
+            border-bottom: 1px solid #8fd3ff !important;
+            color: #0f3554;
+        }
+    </style>
+}
+
+<div class="container product-form-page customer-create-form mt-3" dir="rtl">
     <h3 class="mb-3">@ViewData["Title"]</h3>
 
     <form asp-action="Create" method="post" class="row g-3">
@@ -14,10 +24,10 @@
             <div asp-validation-summary="ModelOnly" class="text-danger"></div>
         </div>
 
-        @* كارت 1: بيانات أساسية *@
-        <div class="col-12">
-            <div class="card product-form-card">
-                <div class="card-header bg-light py-2"><strong>بيانات أساسية</strong></div>
+        @* الكارت العلوي (يمين): بيانات أساسية *@
+        <div class="col-12 col-xl-6">
+            <div class="card product-form-card h-100">
+                <div class="card-header py-2"><strong>بيانات أساسية</strong></div>
                 <div class="card-body row g-3">
                     <div class="col-12">
                         <label asp-for="CustomerName" class="form-label"></label>
@@ -25,47 +35,20 @@
                         <span asp-validation-for="CustomerName" class="text-danger"></span>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <label asp-for="PolicyId" class="form-label">سياسة العميل</label>
                         <select asp-for="PolicyId" class="form-select" asp-items="ViewBag.PolicyList">
                             <option value="">-- بدون سياسة محددة --</option>
                         </select>
                         <span asp-validation-for="PolicyId" class="text-danger"></span>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <label asp-for="CreditLimit" class="form-label"></label>
                         <input type="number" step="0.01" name="CreditLimit" id="CreditLimit" value="@((Model?.CreditLimit ?? 0m).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))" class="form-control" />
                         <span asp-validation-for="CreditLimit" class="text-danger"></span>
                     </div>
 
-                    <div class="col-md-4">
-                        <label asp-for="Phone1" class="form-label"></label>
-                        <input asp-for="Phone1" class="form-control" />
-                        <span asp-validation-for="Phone1" class="text-danger"></span>
-                    </div>
-                    <div class="col-md-4">
-                        <label asp-for="Phone2" class="form-label"></label>
-                        <input asp-for="Phone2" class="form-control" />
-                        <span asp-validation-for="Phone2" class="text-danger"></span>
-                    </div>
-                    <div class="col-md-4">
-                        <label asp-for="Whatsapp" class="form-label"></label>
-                        <input asp-for="Whatsapp" class="form-control" />
-                        <span asp-validation-for="Whatsapp" class="text-danger"></span>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label asp-for="OrderContactName" class="form-label">مسئول الطلب</label>
-                        <input asp-for="OrderContactName" class="form-control" />
-                        <span asp-validation-for="OrderContactName" class="text-danger"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label asp-for="OrderContactPhone" class="form-label">هاتف مسئول الطلب</label>
-                        <input asp-for="OrderContactPhone" class="form-control" />
-                        <span asp-validation-for="OrderContactPhone" class="text-danger"></span>
-                    </div>
-
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <label class="form-label">نوع الطرف</label>
                         <select asp-for="PartyCategory" class="form-select" id="PartyCategorySelect">
                             <option value="">اختر</option>
@@ -79,13 +62,13 @@
                         </select>
                         <span asp-validation-for="PartyCategory" class="text-danger"></span>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <label asp-for="AccountId" class="form-label"></label>
                         <select asp-for="AccountId" class="form-select" asp-items="ViewBag.AccountId" id="AccountId"></select>
                         <span asp-validation-for="AccountId" class="text-danger"></span>
                     </div>
 
-                    <div class="col-12">
+                    <div class="col-12 col-md-6">
                         <label asp-for="UserId" class="form-label">المستخدم المسئول (المندوب)</label>
                         <select asp-for="UserId" class="form-select" asp-items="ViewBag.UserList">
                             <option value="">-- بدون ربط بمستخدم --</option>
@@ -93,7 +76,7 @@
                         <span asp-validation-for="UserId" class="text-danger"></span>
                     </div>
 
-                    <div class="col-12">
+                    <div class="col-12 col-md-6 d-flex align-items-end">
                         <div class="product-form-check-inline">
                             <input asp-for="IsActive" class="form-check-input" id="IsActive" />
                             <label asp-for="IsActive" class="form-check-label" for="IsActive"></label>
@@ -102,13 +85,13 @@
 
                     <div class="col-12">
                         <div class="row g-3 align-items-end">
-                            <div class="col-md-4">
+                            <div class="col-12 col-md-5">
                                 <div class="product-form-check-inline">
                                     <input asp-for="IsQuotaMultiplierEnabled" class="form-check-input" id="IsQuotaMultiplierEnabled" />
                                     <label class="form-check-label" for="IsQuotaMultiplierEnabled">مضاعفة الكوتة؟</label>
                                 </div>
                             </div>
-                            <div class="col-md-8">
+                            <div class="col-12 col-md-7">
                                 <label asp-for="QuotaMultiplier" class="form-label">رقم المضاعفة</label>
                                 <select asp-for="QuotaMultiplier" class="form-select">
                                     <option value="1">1 × (بدون مضاعفة)</option>
@@ -121,6 +104,41 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        @* الكارت العلوي (يسار): بيانات التواصل *@
+        <div class="col-12 col-xl-6">
+            <div class="card product-form-card h-100">
+                <div class="card-header py-2"><strong>بيانات التواصل</strong></div>
+                <div class="card-body row g-3">
+                    <div class="col-12 col-md-4">
+                        <label asp-for="Phone1" class="form-label"></label>
+                        <input asp-for="Phone1" class="form-control" />
+                        <span asp-validation-for="Phone1" class="text-danger"></span>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label asp-for="Phone2" class="form-label"></label>
+                        <input asp-for="Phone2" class="form-control" />
+                        <span asp-validation-for="Phone2" class="text-danger"></span>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label asp-for="Whatsapp" class="form-label"></label>
+                        <input asp-for="Whatsapp" class="form-control" />
+                        <span asp-validation-for="Whatsapp" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label asp-for="OrderContactName" class="form-label">مسئول الطلب</label>
+                        <input asp-for="OrderContactName" class="form-control" />
+                        <span asp-validation-for="OrderContactName" class="text-danger"></span>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label asp-for="OrderContactPhone" class="form-label">هاتف مسئول الطلب</label>
+                        <input asp-for="OrderContactPhone" class="form-control" />
+                        <span asp-validation-for="OrderContactPhone" class="text-danger"></span>
+                    </div>
 
                     <div class="col-12">
                         <label asp-for="Notes" class="form-label"></label>
@@ -131,10 +149,44 @@
             </div>
         </div>
 
-        @* كارت 2: العنوان والمنطقة *@
+        @* كارت 3: بيانات المستندات والتصنيف *@
         <div class="col-12">
             <div class="card product-form-card">
-                <div class="card-header bg-light py-2"><strong>العنوان والمنطقة</strong></div>
+                <div class="card-header py-2"><strong>بيانات المستندات والتصنيف</strong></div>
+                <div class="card-body row g-3">
+                    <div class="col-12 col-md-6 col-lg-3">
+                        <label asp-for="TaxIdOrNationalId" class="form-label"></label>
+                        <input asp-for="TaxIdOrNationalId" class="form-control" />
+                        <span asp-validation-for="TaxIdOrNationalId" class="text-danger"></span>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-3">
+                        <label asp-for="RecordNumber" class="form-label"></label>
+                        <input asp-for="RecordNumber" class="form-control" />
+                        <span asp-validation-for="RecordNumber" class="text-danger"></span>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-3">
+                        <label asp-for="LicenseNumber" class="form-label"></label>
+                        <input asp-for="LicenseNumber" class="form-control" />
+                        <span asp-validation-for="LicenseNumber" class="text-danger"></span>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-3">
+                        <label asp-for="Segment" class="form-label"></label>
+                        <input asp-for="Segment" class="form-control" />
+                        <span asp-validation-for="Segment" class="text-danger"></span>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-3">
+                        <label asp-for="LocationCode" class="form-label"></label>
+                        <input asp-for="LocationCode" class="form-control" />
+                        <span asp-validation-for="LocationCode" class="text-danger"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* كارت 4: العنوان والمنطقة *@
+        <div class="col-12">
+            <div class="card product-form-card">
+                <div class="card-header py-2"><strong>العنوان والمنطقة</strong></div>
                 <div class="card-body row g-3">
                     <div class="col-12">
                         <label asp-for="Address" class="form-label"></label>
@@ -176,7 +228,10 @@
 
         <div class="col-12">
             <button type="submit" class="btn btn-success">حفظ</button>
-            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+            <a asp-action="Index"
+               class="btn btn-secondary open-tab"
+               data-tab-id="customers"
+               data-tab-title="قائمة العملاء">رجوع للقائمة</a>
         </div>
     </form>
 </div>

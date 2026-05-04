@@ -271,6 +271,58 @@ namespace ERP.Services
         }
 
         /// <summary>
+        /// خصم السياسة المعرّف للعميل في ERP (MaxDiscountToCustomer)
+        /// بغض النظر عن خصم الشراء المرجّح. مفيد كـ fallback لواجهات الموبايل.
+        /// </summary>
+        public async Task<decimal> GetConfiguredPolicyDiscountAsync(int prodId, int warehouseId, int customerId)
+        {
+            if (warehouseId <= 0 || customerId <= 0)
+                return 0m;
+
+            int policyId = 1;
+            var customerPolicyId = await _context.Customers
+                .AsNoTracking()
+                .Where(c => c.CustomerId == customerId)
+                .Select(c => c.PolicyId)
+                .FirstOrDefaultAsync();
+            if (customerPolicyId.HasValue && customerPolicyId.Value > 0)
+                policyId = customerPolicyId.Value;
+
+            var productGroupId = await _context.Products
+                .AsNoTracking()
+                .Where(p => p.ProdId == prodId)
+                .Select(p => (int?)p.ProductGroupId)
+                .FirstOrDefaultAsync();
+
+            if (productGroupId.HasValue && productGroupId.Value > 0)
+            {
+                var groupCap = await _context.ProductGroupPolicies
+                    .AsNoTracking()
+                    .Where(gp =>
+                        gp.ProductGroupId == productGroupId.Value &&
+                        gp.PolicyId == policyId &&
+                        gp.WarehouseId == warehouseId &&
+                        gp.IsActive)
+                    .Select(gp => gp.MaxDiscountToCustomer)
+                    .FirstOrDefaultAsync();
+
+                if (groupCap.HasValue && groupCap.Value > 0m)
+                    return ClampPercent(groupCap.Value);
+            }
+
+            var whCap = await _context.WarehousePolicyRules
+                .AsNoTracking()
+                .Where(r => r.WarehouseId == warehouseId && r.PolicyId == policyId && r.IsActive)
+                .Select(r => r.MaxDiscountToCustomer)
+                .FirstOrDefaultAsync();
+
+            if (whCap.HasValue && whCap.Value > 0m)
+                return ClampPercent(whCap.Value);
+
+            return 0m;
+        }
+
+        /// <summary>
         /// خصم البيع لعمود «سياسة N» في تقرير أرصدة الأصناف.
         /// يعتمد نفس مسار الخصم العام لكن مع PolicyId العمود نفسه.
         /// </summary>

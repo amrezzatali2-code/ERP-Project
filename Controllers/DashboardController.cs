@@ -99,7 +99,7 @@ namespace ERP.Controllers
                 .Where(si => si.IsPosted &&
                     (myCustomerIds.Contains(si.CustomerId) ||
                      (creatorNames.Count > 0 && si.CreatedBy != null &&
-                      creatorNames.Contains(si.CreatedBy.Trim()))));
+                      creatorNames.Contains(si.CreatedBy))));
 
             var periodEnd = to.AddDays(1);
 
@@ -193,7 +193,7 @@ namespace ERP.Controllers
             // آخر فواتير المندوب في الفترة (التي أنشأها أو لعملائه) — تشمل المسودة والمرحّلة
             vm.RecentItems = await _context.SalesInvoices
                 .Where(si => (myCustomerIds.Contains(si.CustomerId) ||
-                    (creatorNames.Count > 0 && si.CreatedBy != null && creatorNames.Contains(si.CreatedBy.Trim())))
+                    (creatorNames.Count > 0 && si.CreatedBy != null && creatorNames.Contains(si.CreatedBy)))
                     && si.SIDate >= from && si.SIDate < periodEnd)
                 .Include(si => si.Customer)
                 .OrderByDescending(si => si.SIDate).ThenByDescending(si => si.SITime)

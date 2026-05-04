@@ -1229,6 +1229,10 @@ namespace ERP.Controllers
                         }
                     }
 
+                    batchRows = batchRows
+                        .Where(b => b.CurrentQty > 0)
+                        .ToList();
+
                     if (batchRows.Count >= 2)
                     {
                         dto.Batches = batchRows;
@@ -1430,6 +1434,7 @@ namespace ERP.Controllers
             var reportTypes = new List<SelectListItem>
             {
                 new SelectListItem { Value = "", Text = "— اختر نوع التقرير —", Selected = string.IsNullOrEmpty(reportType) },
+                new SelectListItem { Value = "All", Text = "كل التفاصيل (تجميعة كاملة)", Selected = reportType == "All" },
                 new SelectListItem { Value = "Sales", Text = "مبيعات الصنف بالتفصيل", Selected = reportType == "Sales" },
                 new SelectListItem { Value = "Purchases", Text = "مشتريات الصنف", Selected = reportType == "Purchases" },
                 new SelectListItem { Value = "SalesReturns", Text = "مرتجعات البيع", Selected = reportType == "SalesReturns" },
@@ -1483,7 +1488,8 @@ namespace ERP.Controllers
             var toDt = toDate.HasValue ? DateTime.SpecifyKind(toDate.Value, DateTimeKind.Local) : (DateTime?)null;
             var searchTrim = search?.Trim() ?? "";
 
-            if (!PdrDocNameArPasses(reportType!, filterCol_docNameAr))
+            if (!string.Equals(reportType, "All", StringComparison.OrdinalIgnoreCase)
+                && !PdrDocNameArPasses(reportType!, filterCol_docNameAr))
             {
                 ViewBag.TotalCount = 0;
                 ViewBag.TotalPages = 0;
@@ -1535,6 +1541,159 @@ namespace ERP.Controllers
             var fromDtCv = fromDate.HasValue ? DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Local) : (DateTime?)null;
             var toDtCv = toDate.HasValue ? DateTime.SpecifyKind(toDate.Value, DateTimeKind.Local) : (DateTime?)null;
             var mainSearchTrim = mainSearch?.Trim() ?? "";
+
+            if (string.Equals(reportType, "All", StringComparison.OrdinalIgnoreCase))
+            {
+                var (rows, _, _, _, _) = await LoadProductDetailsReportDataAsync(
+                    "All",
+                    fromDtCv,
+                    toDtCv,
+                    mainSearchTrim,
+                    null, null, null, null,
+                    null, null, null, null, null,
+                    null, null, null,
+                    null, null, null,
+                    "Date", "desc", 1, 0);
+
+                if (col == "author")
+                {
+                    var list = rows.Where(r => !string.IsNullOrWhiteSpace(r.Author))
+                        .Select(r => r.Author!.Trim())
+                        .Distinct()
+                        .OrderBy(x => x)
+                        .Take(500)
+                        .ToList();
+                    if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                    return Json(list.Select(v => new { value = v, display = v }));
+                }
+
+                if (col == "region")
+                {
+                    var list = rows.Where(r => !string.IsNullOrWhiteSpace(r.Region))
+                        .Select(r => r.Region!.Trim())
+                        .Distinct()
+                        .OrderBy(x => x)
+                        .Take(500)
+                        .ToList();
+                    if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                    return Json(list.Select(v => new { value = v, display = v }));
+                }
+
+                if (col == "docno")
+                {
+                    var list = rows.Where(r => !string.IsNullOrWhiteSpace(r.DocNo))
+                        .Select(r => r.DocNo.Trim())
+                        .Distinct()
+                        .Take(500)
+                        .ToList();
+                    if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                    return Json(list.Select(v => new { value = v, display = v }));
+                }
+
+                if (col == "party")
+                {
+                    var list = rows.Where(r => !string.IsNullOrWhiteSpace(r.PartyName))
+                        .Select(r => r.PartyName!.Trim())
+                        .Distinct()
+                        .OrderBy(x => x)
+                        .Take(500)
+                        .ToList();
+                    if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                    return Json(list.Select(v => new { value = v, display = v }));
+                }
+
+                if (col == "warehouse")
+                {
+                    var list = rows.Where(r => !string.IsNullOrWhiteSpace(r.WarehouseName))
+                        .Select(r => r.WarehouseName!.Trim())
+                        .Distinct()
+                        .OrderBy(x => x)
+                        .Take(500)
+                        .ToList();
+                    if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                    return Json(list.Select(v => new { value = v, display = v }));
+                }
+
+                if (col == "productcode")
+                {
+                    var list = rows.Where(r => !string.IsNullOrWhiteSpace(r.ProductCode))
+                        .Select(r => r.ProductCode.Trim())
+                        .Distinct()
+                        .Take(500)
+                        .ToList();
+                    if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                    return Json(list.Select(v => new { value = v, display = v }));
+                }
+
+                if (col == "productname")
+                {
+                    var list = rows.Where(r => !string.IsNullOrWhiteSpace(r.ProductName))
+                        .Select(r => r.ProductName.Trim())
+                        .Distinct()
+                        .OrderBy(x => x)
+                        .Take(500)
+                        .ToList();
+                    if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                    return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v }));
+                }
+
+                if (col == "date")
+                {
+                    var list = rows.Select(r => r.Date.Date)
+                        .Distinct()
+                        .OrderByDescending(x => x)
+                        .Take(300)
+                        .ToList();
+                    return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+                }
+
+                if (col == "batch")
+                {
+                    var list = rows.Where(r => !string.IsNullOrWhiteSpace(r.BatchNo))
+                        .Select(r => r.BatchNo!.Trim())
+                        .Distinct()
+                        .OrderBy(x => x)
+                        .Take(500)
+                        .ToList();
+                    if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                    return Json(list.Select(v => new { value = v, display = v }));
+                }
+
+                if (col == "expiry")
+                {
+                    var list = rows.Where(r => r.Expiry.HasValue)
+                        .Select(r => r.Expiry!.Value.Date)
+                        .Distinct()
+                        .OrderByDescending(x => x)
+                        .Take(300)
+                        .ToList();
+                    return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+                }
+
+                if (col == "notes")
+                {
+                    var list = rows.Where(r => !string.IsNullOrWhiteSpace(r.Notes))
+                        .Select(r => r.Notes!.Trim())
+                        .Distinct()
+                        .OrderBy(x => x)
+                        .Take(500)
+                        .ToList();
+                    if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                    return Json(list.Select(v => new { value = v, display = v.Length > 80 ? v.Substring(0, 80) + "…" : v }));
+                }
+
+                if (col == "docnamear")
+                {
+                    var list = rows.Where(r => !string.IsNullOrWhiteSpace(r.DocumentNameAr))
+                        .Select(r => r.DocumentNameAr!.Trim())
+                        .Distinct()
+                        .OrderBy(x => x)
+                        .Take(100)
+                        .ToList();
+                    if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                    return Json(list.Select(v => new { value = v, display = v }));
+                }
+            }
 
             if (reportType == "Sales")
             {
@@ -2991,6 +3150,10 @@ namespace ERP.Controllers
                         }
                     }
 
+                    batchRowsExp = batchRowsExp
+                        .Where(b => b.CurrentQty > 0)
+                        .ToList();
+
                     if (batchRowsExp.Count >= 2)
                     {
                         dtoExp.Batches = batchRowsExp;
@@ -4171,6 +4334,20 @@ namespace ERP.Controllers
             int? toSIId,
             int? routeId,
             int? warehouseId,
+            string? sort = "date",
+            string? dir = "desc",
+            string? filterCol_siidExpr = null,
+            string? filterCol_date = null,
+            string? filterCol_customer = null,
+            string? filterCol_route = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_bagsExpr = null,
+            string? filterCol_packetsExpr = null,
+            string? filterCol_cartonsExpr = null,
+            string? filterCol_fridgeitemsExpr = null,
+            string? filterCol_fridgeboxesExpr = null,
+            string? filterCol_notes = null,
+            string? filterCol_registered = null,
             bool loadReport = false,
             int page = 1,
             int pageSize = 100)
@@ -4195,6 +4372,21 @@ namespace ERP.Controllers
             ViewBag.ToSIId = toSIId;
             ViewBag.RouteId = routeId;
             ViewBag.WarehouseId = warehouseId;
+            ViewBag.Sort = sort;
+            ViewBag.Dir = dir;
+            ViewBag.FilterCol_SIIdExpr = filterCol_siidExpr;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_Customer = filterCol_customer;
+            ViewBag.FilterCol_Route = filterCol_route;
+            ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_BagsExpr = filterCol_bagsExpr;
+            ViewBag.FilterCol_PacketsExpr = filterCol_packetsExpr;
+            ViewBag.FilterCol_CartonsExpr = filterCol_cartonsExpr;
+            ViewBag.FilterCol_FridgeitemsExpr = filterCol_fridgeitemsExpr;
+            ViewBag.FilterCol_FridgeboxesExpr = filterCol_fridgeboxesExpr;
+            ViewBag.FilterCol_Notes = filterCol_notes;
+            ViewBag.FilterCol_Registered = filterCol_registered;
+            ViewBag.LoadReport = loadReport;
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
 
@@ -4206,17 +4398,190 @@ namespace ERP.Controllers
                 return View();
             }
 
+            var rows = await BuildRouteReportRowsAsync(fromDate, toDate, fromSIId, toSIId, routeId, warehouseId);
+            rows = ApplyRouteReportColumnFilters(
+                rows,
+                filterCol_siidExpr,
+                filterCol_date,
+                filterCol_customer,
+                filterCol_route,
+                filterCol_warehouse,
+                filterCol_bagsExpr,
+                filterCol_packetsExpr,
+                filterCol_cartonsExpr,
+                filterCol_fridgeitemsExpr,
+                filterCol_fridgeboxesExpr,
+                filterCol_notes,
+                filterCol_registered);
+
+            rows = ApplyRouteReportSort(rows, sort, dir);
+            var total = rows.Count;
+            var reportData = rows
+                .Skip(Math.Max(0, (page - 1) * pageSize))
+                .Take(pageSize)
+                .ToList();
+
+            ViewBag.ReportData = reportData;
+            ViewBag.TotalCount = total;
+            ViewBag.TotalPages = (int)Math.Ceiling(total / (double)Math.Max(1, pageSize));
+            return View();
+        }
+
+        [HttpGet]
+        [RequirePermission("Reports.RouteReport")]
+        public async Task<IActionResult> GetRouteReportColumnValues(
+            string column,
+            string? valuesSearch = null,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromSIId = null,
+            int? toSIId = null,
+            int? routeId = null,
+            int? warehouseId = null,
+            string? filterCol_siidExpr = null,
+            string? filterCol_date = null,
+            string? filterCol_customer = null,
+            string? filterCol_route = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_bagsExpr = null,
+            string? filterCol_packetsExpr = null,
+            string? filterCol_cartonsExpr = null,
+            string? filterCol_fridgeitemsExpr = null,
+            string? filterCol_fridgeboxesExpr = null,
+            string? filterCol_notes = null,
+            string? filterCol_registered = null)
+        {
+            var col = (column ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(col))
+                return Json(Array.Empty<object>());
+
+            // الأعمدة الرقمية يُدار فلترها بتعبير رقمي (بدون قائمة قيم).
+            if (col is "siid" or "bags" or "packets" or "cartons" or "fridgeitems" or "fridgeboxes")
+                return Json(Array.Empty<object>());
+
+            // تجاهل فلتر نفس العمود أثناء جلب القيم حتى تظهر كل الخيارات المتاحة.
+            if (col == "date") filterCol_date = null;
+            else if (col == "customer") filterCol_customer = null;
+            else if (col == "route") filterCol_route = null;
+            else if (col == "warehouse") filterCol_warehouse = null;
+            else if (col == "notes") filterCol_notes = null;
+            else if (col == "registered") filterCol_registered = null;
+
+            var rows = await BuildRouteReportRowsAsync(fromDate, toDate, fromSIId, toSIId, routeId, warehouseId);
+            rows = ApplyRouteReportColumnFilters(
+                rows,
+                filterCol_siidExpr,
+                filterCol_date,
+                filterCol_customer,
+                filterCol_route,
+                filterCol_warehouse,
+                filterCol_bagsExpr,
+                filterCol_packetsExpr,
+                filterCol_cartonsExpr,
+                filterCol_fridgeitemsExpr,
+                filterCol_fridgeboxesExpr,
+                filterCol_notes,
+                filterCol_registered);
+
+            var term = (valuesSearch ?? "").Trim().ToLowerInvariant();
+            bool MatchTerm(string? s) => string.IsNullOrEmpty(term) || (!string.IsNullOrWhiteSpace(s) && s!.ToLowerInvariant().Contains(term));
+
+            if (col == "date")
+            {
+                var list = rows.Select(r => r.SIDate.Date)
+                    .Distinct()
+                    .OrderByDescending(d => d)
+                    .Take(300)
+                    .Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") })
+                    .ToList();
+                return Json(list);
+            }
+
+            if (col == "customer")
+            {
+                var list = rows.Select(r => (r.CustomerName ?? "").Trim())
+                    .Where(s => !string.IsNullOrWhiteSpace(s) && MatchTerm(s))
+                    .Distinct()
+                    .OrderBy(s => s)
+                    .Take(500)
+                    .Select(v => new { value = v, display = v })
+                    .ToList();
+                return Json(list);
+            }
+
+            if (col == "route")
+            {
+                var list = rows.Select(r => (r.RouteName ?? "").Trim())
+                    .Where(s => !string.IsNullOrWhiteSpace(s) && MatchTerm(s))
+                    .Distinct()
+                    .OrderBy(s => s)
+                    .Take(500)
+                    .Select(v => new { value = v, display = v })
+                    .ToList();
+                return Json(list);
+            }
+
+            if (col == "warehouse")
+            {
+                var list = rows.Select(r => (r.WarehouseName ?? "").Trim())
+                    .Where(s => !string.IsNullOrWhiteSpace(s) && MatchTerm(s))
+                    .Distinct()
+                    .OrderBy(s => s)
+                    .Take(500)
+                    .Select(v => new { value = v, display = v })
+                    .ToList();
+                return Json(list);
+            }
+
+            if (col == "notes")
+            {
+                var list = rows.Select(r => (r.FridgeProductNames ?? "").Trim())
+                    .Where(s => !string.IsNullOrWhiteSpace(s) && MatchTerm(s))
+                    .Distinct()
+                    .OrderBy(s => s)
+                    .Take(500)
+                    .Select(v => new { value = v, display = v.Length > 80 ? v.Substring(0, 80) + "…" : v })
+                    .ToList();
+                return Json(list);
+            }
+
+            if (col == "registered")
+            {
+                var opts = new[]
+                {
+                    new { value = "نعم", display = "نعم" },
+                    new { value = "لا", display = "لا" }
+                }.Where(x => MatchTerm(x.display)).ToList();
+                return Json(opts);
+            }
+
+            return Json(Array.Empty<object>());
+        }
+
+        private IQueryable<SalesInvoice> BuildRouteReportBaseQuery(
+            DateTime? fromDate,
+            DateTime? toDate,
+            int? fromSIId,
+            int? toSIId,
+            int? routeId,
+            int? warehouseId)
+        {
             var q = _context.SalesInvoices
                 .AsNoTracking()
                 .Include(si => si.Customer).ThenInclude(c => c!.Route)
                 .Include(si => si.Warehouse)
                 .Include(si => si.Route)
+                    .ThenInclude(r => r!.FridgeLines)
+                        .ThenInclude(fl => fl.Product)
                 .AsQueryable();
 
             if (fromDate.HasValue)
                 q = q.Where(si => si.SIDate >= fromDate.Value.Date);
             if (toDate.HasValue)
-                q = q.Where(si => si.SIDate <= toDate.Value.Date);
+            {
+                var toExclusive = toDate.Value.Date.AddDays(1);
+                q = q.Where(si => si.SIDate < toExclusive);
+            }
             if (fromSIId.HasValue)
                 q = q.Where(si => si.SIId >= fromSIId.Value);
             if (toSIId.HasValue)
@@ -4226,16 +4591,91 @@ namespace ERP.Controllers
             if (warehouseId.HasValue && warehouseId.Value > 0)
                 q = q.Where(si => si.WarehouseId == warehouseId.Value);
 
-            q = q.OrderByDescending(si => si.SIDate).ThenByDescending(si => si.SIId);
+            return q;
+        }
 
-            int total = await q.CountAsync();
-            var list = await q.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+        private async Task<List<RouteReportRowDto>> BuildRouteReportRowsAsync(
+            DateTime? fromDate,
+            DateTime? toDate,
+            int? fromSIId,
+            int? toSIId,
+            int? routeId,
+            int? warehouseId)
+        {
+            var invoices = await BuildRouteReportBaseQuery(fromDate, toDate, fromSIId, toSIId, routeId, warehouseId)
+                .ToListAsync();
 
-            var reportData = new List<RouteReportRowDto>();
-            foreach (var si in list)
+            static string FormatQty(decimal qty)
+            {
+                return decimal.Truncate(qty) == qty
+                    ? qty.ToString("0", CultureInfo.InvariantCulture)
+                    : qty.ToString("0.##", CultureInfo.InvariantCulture);
+            }
+
+            // fallback: فواتير مسجلة بخط السير لكن بدون سطور أصناف ثلاجة محفوظة.
+            var missingFridgeNamesBySiId = new Dictionary<int, string>();
+            var missingFridgeSiIds = invoices
+                .Where(si => si.Route != null && (si.Route.FridgeLines == null || !si.Route.FridgeLines.Any()))
+                .Select(si => si.SIId)
+                .Distinct()
+                .ToList();
+
+            if (missingFridgeSiIds.Count > 0)
+            {
+                var inferred = await _context.SalesInvoiceLines
+                    .AsNoTracking()
+                    .Where(l => missingFridgeSiIds.Contains(l.SIId))
+                    .Join(_context.Products, l => l.ProdId, p => p.ProdId, (l, p) => new { l, p })
+                    .Join(_context.ProductClassifications, x => x.p.ClassificationId, c => c.Id, (x, c) => new { x.l, x.p, c })
+                    .Where(x => x.c.Name != null && x.c.Name.Contains("ثلاجة"))
+                    .GroupBy(x => new { x.l.SIId, x.p.ProdId, x.p.ProdName })
+                    .Select(g => new
+                    {
+                        g.Key.SIId,
+                        SortName = g.Key.ProdName ?? ("صنف #" + g.Key.ProdId),
+                        Name = g.Key.ProdName ?? ("صنف #" + g.Key.ProdId),
+                        Qty = g.Sum(x => x.l.Qty)
+                    })
+                    .ToListAsync();
+
+                missingFridgeNamesBySiId = inferred
+                    .GroupBy(x => x.SIId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => string.Join("، ", g
+                            .OrderBy(x => x.SortName)
+                            .Select(x => x.Name + " × " + FormatQty(x.Qty))));
+            }
+
+            var rows = new List<RouteReportRowDto>(invoices.Count);
+            foreach (var si in invoices)
             {
                 var routeData = si.Route;
-                reportData.Add(new RouteReportRowDto
+                var fridgeProductNames = routeData == null
+                    ? null
+                    : string.Join("، ", routeData.FridgeLines
+                        .OrderBy(fl => fl.Product != null ? fl.Product.ProdName : "")
+                        .Select(fl => fl.Product != null
+                            ? (fl.Product.ProdName + " × " + fl.Qty)
+                            : ("صنف #" + fl.ProductId + " × " + fl.Qty)));
+
+                if (string.IsNullOrWhiteSpace(fridgeProductNames)
+                    && missingFridgeNamesBySiId.TryGetValue(si.SIId, out var inferredNames))
+                {
+                    fridgeProductNames = inferredNames;
+                }
+
+                var fridgeDisplayNames = !string.IsNullOrWhiteSpace(fridgeProductNames)
+                    ? fridgeProductNames
+                    : (routeData?.Notes ?? "");
+
+                var combinedNotes = string.IsNullOrWhiteSpace(routeData?.Notes)
+                    ? (fridgeProductNames ?? "")
+                    : (string.IsNullOrWhiteSpace(fridgeProductNames)
+                        ? routeData!.Notes!
+                        : (routeData!.Notes + " | أصناف الثلاجة: " + fridgeProductNames));
+
+                rows.Add(new RouteReportRowDto
                 {
                     SIId = si.SIId,
                     SIDate = si.SIDate,
@@ -4243,19 +4683,132 @@ namespace ERP.Controllers
                     RouteId = si.Customer?.RouteId,
                     RouteName = si.Customer?.Route?.Name ?? "",
                     WarehouseName = si.Warehouse?.WarehouseName ?? "",
+                    IsRegisteredInRoute = routeData != null,
                     BagsCount = routeData?.BagsCount ?? 0,
                     PacketsCount = routeData?.PacketsCount ?? 0,
                     CartonsCount = routeData?.CartonsCount ?? 0,
                     FridgeItemsCount = routeData?.FridgeItemsCount ?? 0,
                     FridgeBoxesCount = routeData?.FridgeBoxesCount ?? 0,
-                    Notes = routeData?.Notes
+                    Notes = combinedNotes,
+                    FridgeProductNames = fridgeDisplayNames
                 });
             }
 
-            ViewBag.ReportData = reportData;
-            ViewBag.TotalCount = total;
-            ViewBag.TotalPages = (int)Math.Ceiling(total / (double)pageSize);
-            return View();
+            return rows;
+        }
+
+        private static readonly char[] _routeFilterSep = new[] { '|', ',', ';' };
+
+        private static List<string> SplitRouteFilterValues(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return new List<string>();
+            return raw.Split(_routeFilterSep, StringSplitOptions.RemoveEmptyEntries)
+                .Select(v => v.Trim())
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static List<RouteReportRowDto> ApplyRouteReportColumnFilters(
+            List<RouteReportRowDto> rows,
+            string? filterCol_siidExpr,
+            string? filterCol_date,
+            string? filterCol_customer,
+            string? filterCol_route,
+            string? filterCol_warehouse,
+            string? filterCol_bagsExpr,
+            string? filterCol_packetsExpr,
+            string? filterCol_cartonsExpr,
+            string? filterCol_fridgeitemsExpr,
+            string? filterCol_fridgeboxesExpr,
+            string? filterCol_notes,
+            string? filterCol_registered)
+        {
+            var filtered = rows;
+
+            if (!string.IsNullOrWhiteSpace(filterCol_siidExpr))
+                filtered = filtered.Where(r => CustomerBalancesNumericFilter.MatchesDecimal(r.SIId, filterCol_siidExpr)).ToList();
+
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var dateKeys = SplitRouteFilterValues(filterCol_date)
+                    .Select(v => DateTime.TryParse(v, out var d) ? d.Date : (DateTime?)null)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToHashSet();
+                if (dateKeys.Count > 0)
+                    filtered = filtered.Where(r => dateKeys.Contains(r.SIDate.Date)).ToList();
+            }
+
+            var customerVals = SplitRouteFilterValues(filterCol_customer);
+            if (customerVals.Count > 0)
+                filtered = filtered.Where(r => customerVals.Contains((r.CustomerName ?? "").Trim(), StringComparer.OrdinalIgnoreCase)).ToList();
+
+            var routeVals = SplitRouteFilterValues(filterCol_route);
+            if (routeVals.Count > 0)
+                filtered = filtered.Where(r => routeVals.Contains((r.RouteName ?? "").Trim(), StringComparer.OrdinalIgnoreCase)).ToList();
+
+            var warehouseVals = SplitRouteFilterValues(filterCol_warehouse);
+            if (warehouseVals.Count > 0)
+                filtered = filtered.Where(r => warehouseVals.Contains((r.WarehouseName ?? "").Trim(), StringComparer.OrdinalIgnoreCase)).ToList();
+
+            if (!string.IsNullOrWhiteSpace(filterCol_bagsExpr))
+                filtered = filtered.Where(r => CustomerBalancesNumericFilter.MatchesDecimal(r.BagsCount, filterCol_bagsExpr)).ToList();
+            if (!string.IsNullOrWhiteSpace(filterCol_packetsExpr))
+                filtered = filtered.Where(r => CustomerBalancesNumericFilter.MatchesDecimal(r.PacketsCount, filterCol_packetsExpr)).ToList();
+            if (!string.IsNullOrWhiteSpace(filterCol_cartonsExpr))
+                filtered = filtered.Where(r => CustomerBalancesNumericFilter.MatchesDecimal(r.CartonsCount, filterCol_cartonsExpr)).ToList();
+            if (!string.IsNullOrWhiteSpace(filterCol_fridgeitemsExpr))
+                filtered = filtered.Where(r => CustomerBalancesNumericFilter.MatchesDecimal(r.FridgeItemsCount, filterCol_fridgeitemsExpr)).ToList();
+            if (!string.IsNullOrWhiteSpace(filterCol_fridgeboxesExpr))
+                filtered = filtered.Where(r => CustomerBalancesNumericFilter.MatchesDecimal(r.FridgeBoxesCount, filterCol_fridgeboxesExpr)).ToList();
+
+            var noteVals = SplitRouteFilterValues(filterCol_notes);
+            if (noteVals.Count > 0)
+                filtered = filtered.Where(r => noteVals.Any(v => (r.FridgeProductNames ?? "").Contains(v, StringComparison.OrdinalIgnoreCase))).ToList();
+
+            var regVals = SplitRouteFilterValues(filterCol_registered).Select(v => v.Trim().ToLowerInvariant()).ToHashSet();
+            var includeYes = regVals.Contains("نعم") || regVals.Contains("yes") || regVals.Contains("true") || regVals.Contains("1");
+            var includeNo = regVals.Contains("لا") || regVals.Contains("no") || regVals.Contains("false") || regVals.Contains("0");
+            if (regVals.Count > 0 && includeYes != includeNo)
+                filtered = includeYes
+                    ? filtered.Where(r => r.IsRegisteredInRoute).ToList()
+                    : filtered.Where(r => !r.IsRegisteredInRoute).ToList();
+
+            return filtered;
+        }
+
+        private static List<RouteReportRowDto> ApplyRouteReportSort(List<RouteReportRowDto> rows, string? sort, string? dir)
+        {
+            var sortKey = (sort ?? "date").Trim().ToLowerInvariant();
+            var isDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+
+            Func<RouteReportRowDto, object> keySelector = sortKey switch
+            {
+                "siid" => r => r.SIId,
+                "date" => r => r.SIDate,
+                "customer" => r => r.CustomerName ?? "",
+                "route" => r => r.RouteName ?? "",
+                "warehouse" => r => r.WarehouseName ?? "",
+                "bags" => r => r.BagsCount,
+                "packets" => r => r.PacketsCount,
+                "cartons" => r => r.CartonsCount,
+                "fridgeitems" => r => r.FridgeItemsCount,
+                "fridgeboxes" => r => r.FridgeBoxesCount,
+                "notes" => r => r.Notes ?? "",
+                "registered" => r => r.IsRegisteredInRoute,
+                _ => r => r.SIDate
+            };
+
+            var ordered = isDesc ? rows.OrderByDescending(keySelector) : rows.OrderBy(keySelector);
+
+            if (sortKey == "date")
+                ordered = isDesc
+                    ? rows.OrderByDescending(r => r.SIDate).ThenByDescending(r => r.SIId)
+                    : rows.OrderBy(r => r.SIDate).ThenBy(r => r.SIId);
+
+            return ordered.ToList();
         }
     }
 }

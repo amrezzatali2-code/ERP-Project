@@ -162,7 +162,7 @@
 
             @* --- القسم الأول: البحث العام --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
-                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                <form method="get" action="@Url.Action(action, controller)" id="customersSearchForm" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في العملاء</label>
                     <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100" style="overflow-x:auto;">
                         <select name="searchMode" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
@@ -170,14 +170,14 @@
                             <option value="contains"@Html.Raw(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? " selected" : "")>يحتوي</option>
                             <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
                         </select>
-                        <input type="text" name="search" class="form-control erp-filter-input flex-shrink-1" placeholder="نص أو رقم..." value="@search" style="min-width:100px;max-width:200px;width:180px;" />
+                        <input type="text" id="customersSearchText" class="form-control erp-filter-input flex-shrink-1" placeholder="نص أو رقم..." value="@search" style="min-width:100px;max-width:200px;width:180px;" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:160px;min-width:130px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>البحث في الكل</option>
                             <option value="name"@Html.Raw(searchBy == "name" ? " selected" : "")>الاسم</option>
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود العميل</option>
                             <option value="phone"@Html.Raw(searchBy == "phone" ? " selected" : "")>الهاتف</option>
                             <option value="address"@Html.Raw(searchBy == "address" ? " selected" : "")>العنوان</option>
-                            <option value="type"@Html.Raw(searchBy == "type" ? " selected" : "")>نوع الطرف</option>
+                            <option value="type"@Html.Raw(searchBy == "type" ? " selected" : "")>نوع حساب العميل</option>
                             <option value="account"@Html.Raw(searchBy == "account" ? " selected" : "")>الحساب المحاسبي</option>
                             <option value="active"@Html.Raw(searchBy == "active" ? " selected" : "")>نشط/موقوف</option>
                         </select>
@@ -186,6 +186,7 @@
                         <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
                         <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
+                    <input type="hidden" name="search" id="customersSearchApplied" value="@search" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -237,7 +238,18 @@
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
                     @* الصف 1: إضافة + فلاتر + اختيار الأعمدة + طباعة *@
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
-                        <a class="btn btn-erp btn-erp-success btn-erp-sm" asp-action="Create">إضافة عميل</a>
+                        <a class="btn btn-erp btn-erp-success btn-erp-sm open-tab"
+                           asp-action="Create"
+                           data-tab-id="customer-create-tab"
+                           data-tab-title="إضافة عميل">إضافة عميل</a>
+                        @if (ViewBag.CanEdit == true)
+                        {
+                            <a class="btn btn-erp btn-erp-secondary btn-erp-sm open-same-tab"
+                               href="@Url.Action("CreditLimitAdjustment", "Customers", new { frame = 1 })"
+                               data-tab-id="customers-credit-limit-adjustment"
+                               data-tab-title="تعديل الحد الائتماني"
+                               data-url="@Url.Action("CreditLimitAdjustment", "Customers", new { frame = 1 })">تعديل الحد الائتماني</a>
+                        }
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalCustomers">اختيار الأعمدة</button>
                         <button type="button" id="btnPrintCustomers" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
@@ -339,7 +351,7 @@
 
                     <th style="width:100px;" data-col="id">@filterableCol("id", "id", "كود العميل")</th>
                     <th data-col="name">@filterableCol("name", "name", "اسم العميل")</th>
-                    <th data-col="type">@filterableCol("type", "type", "نوع الطرف")</th>
+                    <th data-col="type">@filterableCol("type", "type", "نوع حساب العميل")</th>
                     <th data-col="phone">@filterableCol("phone", "name", "هاتف")</th>
                     <th data-col="Address">@filterableCol("Address", "name", "العنوان")</th>
 
@@ -708,6 +720,20 @@
     <script src="~/js/erp-list-print.js" asp-append-version="true"></script>
     <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
     <script>
+        (function () {
+            const searchForm = document.getElementById("customersSearchForm");
+            const searchText = document.getElementById("customersSearchText");
+            const appliedSearch = document.getElementById("customersSearchApplied");
+            if (!searchForm || !searchText || !appliedSearch) return;
+
+            searchForm.addEventListener("submit", function () {
+                const typedValue = (searchText.value || "").trim();
+                if (typedValue) {
+                    appliedSearch.value = typedValue;
+                }
+            });
+        })();
+
         // جعل الشريط الأفقي يفتح من جهة اليمين (بداية الجدول في RTL)
         (function () {
             var table = document.getElementById("customersTable");
@@ -873,19 +899,49 @@
                 });
             }
 
-            bulkBtn?.addEventListener("click", function () {
+            bulkBtn?.addEventListener("click", async function () {
                 var checks = getRowCheckboxes().filter(function (cb) { return cb.checked; });
                 if (checks.length === 0) {
-                    alert("من فضلك اختر على الأقل عميل واحد للحذف.");
+                    if (window.ERP && typeof ERP.showAlertModal === "function") {
+                        await ERP.showAlertModal({
+                            title: "تنبيه",
+                            message: "من فضلك اختر على الأقل عميل واحد للحذف.",
+                            okText: "حسناً"
+                        });
+                    } else {
+                        alert("من فضلك اختر على الأقل عميل واحد للحذف.");
+                    }
                     return;
                 }
-                if (!confirm("هل أنت متأكد من حذف العملاء المحددين؟")) return;
+                var confirmedBulkDelete = false;
+                if (window.ERP && typeof ERP.showConfirmModal === "function") {
+                    confirmedBulkDelete = await ERP.showConfirmModal({
+                        title: "حذف العملاء المحددين",
+                        message: "هل أنت متأكد من حذف العملاء المحددين؟",
+                        confirmText: "حذف",
+                        cancelText: "إلغاء"
+                    });
+                } else {
+                    confirmedBulkDelete = confirm("هل أنت متأكد من حذف العملاء المحددين؟");
+                }
+                if (!confirmedBulkDelete) return;
                 if (bulkDeleteIdsInput) bulkDeleteIdsInput.value = checks.map(function (cb) { return cb.value; }).join(",");
                 bulkForm?.submit();
             });
 
-            deleteAllBtn?.addEventListener("click", function () {
-                if (!confirm("تحذير: سيتم حذف جميع العملاء. هل أنت متأكد؟")) return;
+            deleteAllBtn?.addEventListener("click", async function () {
+                var confirmedDeleteAll = false;
+                if (window.ERP && typeof ERP.showConfirmModal === "function") {
+                    confirmedDeleteAll = await ERP.showConfirmModal({
+                        title: "حذف جميع العملاء",
+                        message: "تحذير: سيتم حذف جميع العملاء. هل أنت متأكد؟",
+                        confirmText: "حذف الجميع",
+                        cancelText: "إلغاء"
+                    });
+                } else {
+                    confirmedDeleteAll = confirm("تحذير: سيتم حذف جميع العملاء. هل أنت متأكد؟");
+                }
+                if (!confirmedDeleteAll) return;
                 formDeleteAll?.submit();
             });
 

@@ -20,6 +20,7 @@ public class SalesInvoicesController_SaveTaxJson_Tests
         var docTotals = new DocumentTotalsService(db, new Mock<ILogger<DocumentTotalsService>>().Object);
         var stock = new StockAnalysisService(db);
         var fifo = new SalesFifoCostRepairService(db);
+        var missingStockRepair = new SalesInvoiceMissingStockRepairService(db);
         var mockActivity = new Mock<IUserActivityLogger>();
         var mockLedger = new Mock<ILedgerPostingService>();
         var mockFullReturn = new Mock<IFullReturnService>();
@@ -37,7 +38,8 @@ public class SalesInvoicesController_SaveTaxJson_Tests
             mockPerm.Object,
             mockListVisibility.Object,
             mockVis.Object,
-            fifo);
+            fifo,
+            missingStockRepair);
     }
 
     [Fact]

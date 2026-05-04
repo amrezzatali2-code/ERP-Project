@@ -3,14 +3,15 @@
     var baseUrl = Url.Action("", "SalesInvoiceRoutes");
 }
 <style>
-    #routeEntryPage { max-height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
-    #routeEntryPage .route-entry-form { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; border-radius: 12px; border: 1px solid #6366f1; box-shadow: 0 1px 3px rgba(99,102,241,.2); }
-    #routeEntryPage #fridgeList { max-height: 90px; overflow-y: auto; overflow-x: hidden; border-radius: 8px; }
+    #routeEntryPage { max-height: none; min-height: calc(100vh - 1rem); overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; padding-bottom: 0.75rem; }
+    #routeEntryPage .route-entry-form { flex: 0 0 auto; min-height: 0; overflow: visible; display: flex; flex-direction: column; border-radius: 12px; border: 2px solid #2563eb; box-shadow: 0 6px 18px rgba(37,99,235,.12); background: #fff; }
+    #routeEntryPage #fridgeList { max-height: 260px; min-height: 170px; overflow-y: auto; overflow-x: hidden; border-radius: 8px; border: 1px solid #64748b; background: #fff; padding: 0.35rem; }
     #routeEntryPage .route-entry-form .form-label { margin-bottom: 0.2rem; font-size: 0.875rem; font-weight: 500; color: #374151; }
     #routeEntryPage .route-entry-form .form-control,
     #routeEntryPage .route-entry-form .form-select {
         padding: 0.4rem 0.6rem; font-size: 0.9rem;
-        border-radius: 8px; border: 1px solid #d1d5db;
+        border-radius: 8px; border: 1.5px solid #94a3b8;
+        background-color: #ffffff;
         transition: border-color .15s, box-shadow .15s;
     }
     #routeEntryPage .route-entry-form .form-select {
@@ -21,15 +22,34 @@
     }
     #routeEntryPage .route-entry-form .form-control:focus,
     #routeEntryPage .route-entry-form .form-select:focus {
-        border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.2); outline: 0;
+        border-color: #1d4ed8; box-shadow: 0 0 0 3px rgba(29,78,216,.16); outline: 0;
     }
     #routeEntryPage #invoiceSummary, #routeEntryPage #alreadyInRouteWarning { border-radius: 10px; border: none; }
     #routeEntryPage .card { border-radius: 12px; }
     #routeEntryPage .btn { border-radius: 8px; }
     #routeEntryPage #fridgeList .table { border-radius: 8px; overflow: hidden; }
-    #routeEntryPage #fridgeProductSelect { min-width: 260px; max-width: 320px; }
+    #routeEntryPage #fridgeProductSelect { min-width: 360px; max-width: 520px; }
     #routeEntryPage #fridgeQty { width: 88px; min-width: 88px; }
     #routeEntryPage .fridge-summary-box { width: 100px; border-radius: 8px; border: 1px solid #d1d5db; padding: 0.35rem 0.5rem; font-size: 0.9rem; background: #f9fafb; text-align: center; }
+    #routeEntryPage .fridge-panel { border: 1.5px solid #64748b; border-radius: 10px; padding: 0.65rem; background: #f8fafc; }
+    #routeEntryPage .section-card { border: 1.5px solid #475569; border-radius: 10px; background: #f8fafc; padding: 0.4rem 0.55rem; }
+    #routeEntryPage .section-toggle {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 0;
+        background: transparent;
+        font-weight: 700;
+        color: #0f172a;
+        padding: 0.1rem 0;
+    }
+    #routeEntryPage .section-toggle .chev { transition: transform .15s ease; font-size: 0.8rem; color: #475569; }
+    #routeEntryPage .section-toggle[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+    #routeEntryPage .section-body.is-collapsed { display: none; }
+    @@media (max-width: 767.98px) {
+        #routeEntryPage #fridgeProductSelect { min-width: 100%; max-width: 100%; }
+    }
 </style>
 <div id="routeEntryPage" class="container-fluid px-3 py-2" dir="rtl">
     <div class="d-flex align-items-center mb-2">
@@ -48,7 +68,7 @@
     <form id="routeEntryForm" class="card border route-entry-form p-2 flex-grow-1">
         @Html.AntiForgeryToken()
         <div class="row g-2">
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-2">
                 <label for="siId" class="form-label">رقم الفاتورة</label>
                 <input type="number" id="siId" class="form-control" placeholder="رقم الفاتورة" tabindex="1" min="1" />
                 <div id="siIdErr" class="text-danger small d-none">الفاتورة غير موجودة</div>
@@ -59,55 +79,78 @@
                     <option value="">—</option>
                 </select>
             </div>
-            <div class="col-6 col-md-3">
-                <label for="preparerEmployeeId" class="form-label">المحضر</label>
-                <select id="preparerEmployeeId" class="form-select" tabindex="3">
-                    <option value="">—</option>
-                </select>
-            </div>
-            <div class="col-6 col-md-3">
-                <label for="distributorEmployeeId" class="form-label">الموزع</label>
-                <select id="distributorEmployeeId" class="form-select" tabindex="4">
-                    <option value="">—</option>
-                </select>
-            </div>
-            <div class="col-4 col-md-2">
+            <div class="col-6 col-md-2 ms-md-auto">
                 <label for="bagsCount" class="form-label">عدد الشنط</label>
                 <input type="number" id="bagsCount" class="form-control" value="0" min="0" tabindex="5" />
             </div>
-            <div class="col-4 col-md-2">
+            <div class="col-6 col-md-2">
                 <label for="packetsCount" class="form-label">البواكي</label>
                 <input type="number" id="packetsCount" class="form-control" value="0" min="0" tabindex="6" />
             </div>
-            <div class="col-4 col-md-2">
-                <label for="cartonsCount" class="form-label">الكراتين</label>
-                <input type="number" id="cartonsCount" class="form-control" value="0" min="0" tabindex="7" />
+            <div class="col-12 col-md-4">
+                <div class="section-card">
+                    <button type="button" class="section-toggle" data-target="cartonsSectionBody" aria-expanded="true">
+                        <span>الكراتين</span>
+                        <span class="chev">▾</span>
+                    </button>
+                    <div id="cartonsSectionBody" class="section-body mt-1">
+                        <input type="number" id="cartonsCount" class="form-control" value="0" min="0" tabindex="7" />
+                    </div>
+                </div>
             </div>
-            <div class="col-12">
-                <label class="form-label">أصناف الثلاجة</label>
-                <div class="d-flex flex-wrap gap-2 align-items-end">
-                    <div>
-                        <select id="fridgeProductSelect" class="form-select" tabindex="8">
-                            <option value="">— صنف ثلاجة</option>
+            <div class="col-12 col-md-4">
+                <div class="section-card">
+                    <button type="button" class="section-toggle" data-target="preparerSectionBody" aria-expanded="true">
+                        <span>المحضر</span>
+                        <span class="chev">▾</span>
+                    </button>
+                    <div id="preparerSectionBody" class="section-body mt-1">
+                        <select id="preparerEmployeeId" class="form-select" tabindex="3">
+                            <option value="">—</option>
                         </select>
                     </div>
-                    <div>
-                        <label for="fridgeQty" class="form-label small">الكمية</label>
-                        <input type="number" id="fridgeQty" class="form-control" value="1" min="1" tabindex="9" />
-                    </div>
-                    <button type="button" id="btnAddFridge" class="btn btn-erp btn-erp-primary">إضافة صنف ثلاجة</button>
                 </div>
-                <div class="d-flex gap-2 align-items-end flex-wrap mt-2">
-                    <div>
-                        <label class="form-label small text-muted d-block mb-0">عدد أصناف الثلاجة</label>
-                        <div id="fridgeItemsCount" class="fridge-summary-box">0</div>
-                    </div>
-                    <div>
-                        <label class="form-label small text-muted d-block mb-0">إجمالي أصناف الثلاجة</label>
-                        <div id="fridgeTotalQty" class="fridge-summary-box">0</div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="section-card">
+                    <button type="button" class="section-toggle" data-target="distributorSectionBody" aria-expanded="true">
+                        <span>الموزع</span>
+                        <span class="chev">▾</span>
+                    </button>
+                    <div id="distributorSectionBody" class="section-body mt-1">
+                        <select id="distributorEmployeeId" class="form-select" tabindex="4">
+                            <option value="">—</option>
+                        </select>
                     </div>
                 </div>
-                <div id="fridgeList" class="mt-1"></div>
+            </div>
+            <div class="col-12">
+                <div class="fridge-panel">
+                    <label class="form-label">أصناف الثلاجة</label>
+                    <div class="d-flex flex-wrap gap-2 align-items-end">
+                        <div>
+                            <select id="fridgeProductSelect" class="form-select" tabindex="8">
+                                <option value="">— صنف ثلاجة</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="fridgeQty" class="form-label small">الكمية</label>
+                            <input type="number" id="fridgeQty" class="form-control" value="1" min="1" tabindex="9" />
+                        </div>
+                        <button type="button" id="btnAddFridge" class="btn btn-erp btn-erp-primary">إضافة صنف ثلاجة</button>
+                    </div>
+                    <div class="d-flex gap-2 align-items-end flex-wrap mt-2">
+                        <div>
+                            <label class="form-label small text-muted d-block mb-0">عدد أصناف الثلاجة</label>
+                            <div id="fridgeItemsCount" class="fridge-summary-box">0</div>
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted d-block mb-0">إجمالي أصناف الثلاجة</label>
+                            <div id="fridgeTotalQty" class="fridge-summary-box">0</div>
+                        </div>
+                    </div>
+                    <div id="fridgeList" class="mt-2"></div>
+                </div>
             </div>
             <div class="col-12 d-flex gap-2 align-items-end flex-wrap">
                 <div class="flex-grow-1" style="min-width:180px">
@@ -133,15 +176,38 @@
     const antiForgery = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
     const initialSIId = @(ViewBag.InitialSIId != null ? ViewBag.InitialSIId.ToString() : "null");
 
-    const fields = ['siId','controlEmployeeId','preparerEmployeeId','distributorEmployeeId','bagsCount','packetsCount','cartonsCount','fridgeProductSelect','fridgeQty','notes'];
+    const fields = ['siId','controlEmployeeId','bagsCount','packetsCount','cartonsCount','preparerEmployeeId','distributorEmployeeId','fridgeProductSelect','fridgeQty','notes'];
     const fieldIds = fields.map(f => (f === 'fridgeProductSearch' || f === 'fridgeQty') ? f : f);
     let fridgeRows = [];
+
+    function isVisibleField(el) {
+        if (!el) return false;
+        return el.offsetParent !== null;
+    }
 
     function focusNext(currentId) {
         const idx = fields.indexOf(currentId);
         if (idx < 0 || idx >= fields.length - 1) return;
-        const next = document.getElementById(fields[idx + 1]);
-        if (next) next.focus();
+        for (let i = idx + 1; i < fields.length; i++) {
+            const next = document.getElementById(fields[i]);
+            if (isVisibleField(next)) {
+                next.focus();
+                break;
+            }
+        }
+    }
+
+    function initSectionToggles() {
+        document.querySelectorAll('.section-toggle').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var targetId = btn.getAttribute('data-target');
+                var body = targetId ? document.getElementById(targetId) : null;
+                if (!body) return;
+                var willExpand = body.classList.contains('is-collapsed');
+                body.classList.toggle('is-collapsed', !willExpand);
+                btn.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+            });
+        });
     }
 
     function loadInvoice(onLoaded) {
@@ -244,6 +310,14 @@
                 document.getElementById('packetsCount').value = data.packetsCount ?? 0;
                 document.getElementById('cartonsCount').value = data.cartonsCount ?? 0;
                 document.getElementById('notes').value = data.notes || '';
+                fridgeRows = (data.fridgeLines || []).map(function (x) {
+                    return {
+                        productId: parseInt(x.productId, 10) || 0,
+                        name: (x.name || '').trim(),
+                        qty: parseInt(x.qty, 10) || 0
+                    };
+                }).filter(function (x) { return x.productId > 0 && x.qty > 0; });
+                renderFridgeList();
                 var cid = data.controlEmployeeId;
                 var pid = data.preparerEmployeeId;
                 var did = data.distributorEmployeeId;
@@ -293,7 +367,7 @@
         var el = document.getElementById(id);
         el.addEventListener('focus', function () { setTimeout(function() { this.select(); }.bind(this), 0); });
         el.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') { e.preventDefault(); const idx = fields.indexOf(id); if (idx >= 0 && idx < fields.length - 1) document.getElementById(fields[idx + 1]).focus(); }
+            if (e.key === 'Enter') { e.preventDefault(); focusNext(id); }
         });
     });
 
@@ -418,6 +492,8 @@
     } else {
         document.getElementById('siId').focus();
     }
+
+    initSectionToggles();
 })();
 </script>
 }

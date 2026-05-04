@@ -49,6 +49,47 @@ namespace ERP.Controllers
 
         private static Task<bool> CanViewInvestorsAsync() => Task.FromResult(true); // إظهار/إخفاء 3101 يعتمد على «الحسابات المسموح رؤيتها» فقط
 
+        private async Task<string?> ValidateCustomerCreditForDebitNoteAsync(int? customerId, decimal amount)
+        {
+            if (!customerId.HasValue || customerId.Value <= 0 || amount <= 0m)
+                return null;
+
+            var cust = await _context.Customers
+                .AsNoTracking()
+                .Where(c => c.CustomerId == customerId.Value)
+                .Select(c => new
+                {
+                    c.CustomerId,
+                    c.CurrentBalance,
+                    c.CreditLimit,
+                    c.CreditLimitTemporaryIncrease,
+                    c.CreditLimitTemporaryUntil
+                })
+                .FirstOrDefaultAsync();
+
+            if (cust == null) return null;
+
+            var ledgerBalance = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e => e.CustomerId == cust.CustomerId)
+                .SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
+
+            var effectiveLimit = CustomerCreditLimitCalculator.GetEffectiveCreditLimit(
+                cust.CreditLimit,
+                cust.CreditLimitTemporaryIncrease,
+                cust.CreditLimitTemporaryUntil,
+                DateTime.Now);
+
+            if (effectiveLimit <= 0m) return null; // حد غير مقيّد
+
+            var currentDebit = Math.Max(cust.CurrentBalance, ledgerBalance);
+            var newDebit = currentDebit + amount;
+            if (newDebit <= effectiveLimit) return null;
+
+            var remaining = Math.Max(0m, effectiveLimit - currentDebit);
+            return $"لا يمكن حفظ إشعار الخصم: المبلغ يتجاوز المتبقي من الحد الائتماني للعميل ({remaining:N2} جنيه).";
+        }
+
         // =========================================================
         // دالة مساعدة: تحميل القوائم المنسدلة (الطرف + الحسابات)
         // =========================================================
@@ -809,6 +850,10 @@ namespace ERP.Controllers
             if (debitNote.AccountId <= 0)
                 ModelState.AddModelError(nameof(DebitNote.AccountId), "حساب الطرف مطلوب.");
 
+            var creditErrorCreate = await ValidateCustomerCreditForDebitNoteAsync(debitNote.CustomerId, debitNote.Amount);
+            if (!string.IsNullOrWhiteSpace(creditErrorCreate))
+                ModelState.AddModelError(nameof(DebitNote.Amount), creditErrorCreate);
+
             if (ModelState.IsValid)
             {
                 debitNote.CreatedAt = DateTime.Now;
@@ -895,6 +940,10 @@ namespace ERP.Controllers
             }
             if (input.AccountId <= 0)
                 ModelState.AddModelError(nameof(DebitNote.AccountId), "حساب الطرف مطلوب.");
+
+            var creditErrorEdit = await ValidateCustomerCreditForDebitNoteAsync(input.CustomerId, input.Amount);
+            if (!string.IsNullOrWhiteSpace(creditErrorEdit))
+                ModelState.AddModelError(nameof(DebitNote.Amount), creditErrorEdit);
 
             if (!ModelState.IsValid)
             {

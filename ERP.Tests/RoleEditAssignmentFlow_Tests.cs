@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Moq;
 
 namespace ERP.Tests;
@@ -138,7 +139,8 @@ public class RoleEditAssignmentFlow_Tests
 
         Assert.IsType<RedirectToActionResult>(assignResult);
 
-        var redirectService = new LoginRedirectService(new PermissionService(db, new HttpContextAccessor()));
+        var redirectService = new LoginRedirectService(
+            new PermissionService(db, new HttpContextAccessor(), new MemoryCache(new MemoryCacheOptions())));
         var target = await redirectService.GetTargetAsync(user.UserId);
 
         Assert.Equal("Index", target.Action);

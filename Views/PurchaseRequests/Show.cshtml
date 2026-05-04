@@ -15,8 +15,12 @@
             -moz-appearance: textfield;
         }
 
+        html, body {
+            min-height: 100%;
+            background: #ffffff !important;
+        }
         .invoice-page {
-            background-color: #f3f6fb;
+            background: #ffffff !important;
             min-height: 100vh;
             padding-bottom: 1rem;
         }
@@ -126,7 +130,6 @@
             margin-top: 0.25rem;
         }
         .si-settings-panel.show { display: block; }
-
         /* هيدر جدول السطور — أبيض + ثابت عند التمرير (مثل فاتورة المبيعات) */
         .invoice-lines-container .erp-table-wrapper table thead.invoice-lines-header th {
             position: sticky;
@@ -431,6 +434,7 @@
             max-height: 220px;
             min-height: 40px;
             overflow-y: auto;
+            overscroll-behavior: contain; /* امنع انتقال سكرول القائمة إلى الصفحة */
             z-index: 9999;
             margin-top: 2px;
             border: 1px solid #dee2e6;
@@ -900,6 +904,14 @@
                                     <option value="alpha">أبجدي (حسب اسم الصنف)</option>
                                 </select>
                             </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1" for="siThemeSelect">لون الخلفية</label>
+                                <select id="siThemeSelect" class="form-select form-select-sm">
+                                    <option value="dark-navy">كحلي داكن</option>
+                                    <option value="dark-slate">فحمي داكن</option>
+                                    <option value="dark-plum">برقوقي داكن</option>
+                                </select>
+                            </div>
                             <button type="button" id="btnSaveInvoiceSettingsInline" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
                                 حفظ الإعدادات
                             </button>
@@ -1043,6 +1055,10 @@
                                         <input id="CustomerCodeDisplay"
                                                class="form-control form-control-sm text-center"
                                                type="number"
+                                               autocomplete="one-time-code"
+                                               data-lpignore="true"
+                                               data-1p-ignore="true"
+                                               data-bwignore="true"
                                                data-lock-posted="1"
                                                value="@(Model != null && Model.CustomerId > 0 ? Model.CustomerId.ToString() : "")" />
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
@@ -1053,11 +1069,10 @@
                                             <div class="product-dropdown-onebox" id="prSupplierDropdownInputGroup">
                                                 <span class="product-dropdown-arrow-inside" id="prSupplierDropdownArrow" title="افتح القائمة">▼</span>
                                                 <input id="CustomerNameInput"
-                                                       name="pr_supplier_lookup"
                                                        type="text"
                                                        class="form-control form-control-sm customer-name-input product-dropdown-input"
                                                        placeholder="اكتب اسم المورد ثم اختره من القائمة"
-                                                       autocomplete="new-password"
+                                                       autocomplete="one-time-code"
                                                        autocorrect="off"
                                                        autocapitalize="off"
                                                        spellcheck="false"
@@ -1278,6 +1293,10 @@
                                         <input type="number" id="ProdCodeInput"
                                                class="form-control form-control-sm text-center pi-input"
                                                placeholder="بحث بالكود..."
+                                               autocomplete="one-time-code"
+                                               data-lpignore="true"
+                                               data-1p-ignore="true"
+                                               data-bwignore="true"
                                                data-lock-posted="1" />
                                     </div>
 
@@ -1288,10 +1307,9 @@
                                                 <span class="product-dropdown-arrow-inside" id="prProductDropdownArrow" title="افتح القائمة">▼</span>
                                                 <input id="ProdNameInput"
                                                        type="text"
-                                                       name="pr_product_lookup"
                                                        class="form-control form-control-sm pi-input pi-product-name-input product-dropdown-input"
                                                        placeholder="اكتب اسم الصنف أو جزء منه..."
-                                                       autocomplete="new-password"
+                                                       autocomplete="one-time-code"
                                                        autocorrect="off"
                                                        autocapitalize="off"
                                                        spellcheck="false"
@@ -1749,24 +1767,46 @@
                          // =========================================================
                          // (0.5) إعدادات واجهة طلب الشراء — مثل فاتورة المبيعات
                          // =========================================================
-                         const SI_UI_SETTINGS_KEY = 'erp.purchaserequest.ui.settings.v1';
-                         function readSiUiSettings() {
+                         const SI_UI_SETTINGS_DEFAULTS = { showClearAll: true, maxItems: 35, sortMode: 'location' };
+                         const SI_THEME_STORAGE_KEY = 'erp.purchaserequest.page.theme.v2';
+                         const SI_THEME_DEFAULT = 'dark-plum';
+                         function normalizeInvoiceTheme(value) {
+                             const theme = (value || '').toString().toLowerCase();
+                             return (theme === 'dark-slate' || theme === 'dark-plum' || theme === 'dark-navy')
+                                 ? theme
+                                 : SI_THEME_DEFAULT;
+                         }
+                         function readStoredInvoiceTheme() {
                              try {
-                                 const raw = localStorage.getItem(SI_UI_SETTINGS_KEY);
-                                 if (!raw) return { showClearAll: true, maxItems: 35, sortMode: 'location' };
-                                 const parsed = JSON.parse(raw);
-                                 const sortModeRaw = (parsed.sortMode || '').toString().toLowerCase();
-                                 const sortMode = (sortModeRaw === 'alpha' || sortModeRaw === 'location' || sortModeRaw === 'auto')
-                                     ? sortModeRaw
-                                     : 'location';
-                                 return {
-                                     showClearAll: parsed.showClearAll !== false,
-                                     maxItems: (Number(parsed.maxItems) > 0 ? Number(parsed.maxItems) : 35),
-                                     sortMode: sortMode
-                                 };
+                                 return normalizeInvoiceTheme(localStorage.getItem(SI_THEME_STORAGE_KEY));
                              } catch {
-                                 return { showClearAll: true, maxItems: 35, sortMode: 'location' };
+                                 return SI_THEME_DEFAULT;
                              }
+                         }
+                         function writeStoredInvoiceTheme(theme) {
+                             try {
+                                 localStorage.setItem(SI_THEME_STORAGE_KEY, normalizeInvoiceTheme(theme));
+                             } catch {
+                             }
+                         }
+                         function applyInvoiceTheme(theme) {
+                             const invoicePage = document.querySelector('.invoice-page');
+                             if (!invoicePage) return;
+                             invoicePage.classList.remove('theme-dark-navy', 'theme-dark-slate', 'theme-dark-plum');
+                             const themeSelect = document.getElementById('siThemeSelect');
+                             if (themeSelect) themeSelect.value = 'dark-navy';
+                         }
+                         let siUiSettingsMemory = { ...SI_UI_SETTINGS_DEFAULTS };
+                         function readSiUiSettings() {
+                             const sortModeRaw = (siUiSettingsMemory.sortMode || '').toString().toLowerCase();
+                             const sortMode = (sortModeRaw === 'alpha' || sortModeRaw === 'location' || sortModeRaw === 'auto')
+                                 ? sortModeRaw
+                                 : 'location';
+                             return {
+                                 showClearAll: siUiSettingsMemory.showClearAll !== false,
+                                 maxItems: (Number(siUiSettingsMemory.maxItems) > 0 ? Number(siUiSettingsMemory.maxItems) : 35),
+                                 sortMode: sortMode
+                             };
                          }
                          function writeSiUiSettings(s) {
                              const maxItems = (Number(s.maxItems) > 0 ? Number(s.maxItems) : 35);
@@ -1774,11 +1814,11 @@
                              const sortMode = (sortModeRaw === 'alpha' || sortModeRaw === 'location' || sortModeRaw === 'auto')
                                  ? sortModeRaw
                                  : 'location';
-                             localStorage.setItem(SI_UI_SETTINGS_KEY, JSON.stringify({
+                             siUiSettingsMemory = {
                                  showClearAll: !!s.showClearAll,
                                  maxItems: maxItems,
                                  sortMode: sortMode
-                             }));
+                             };
                          }
                          function getInvoiceMaxItemsFromSettings() {
                              return readSiUiSettings().maxItems || 35;
@@ -1804,15 +1844,22 @@
                              const chk = document.getElementById('siShowClearAllChk');
                              const maxItemsInput = document.getElementById('siMaxItemsInput');
                              const sortModeSelect = document.getElementById('siSortModeSelect');
+                             const themeSelect = document.getElementById('siThemeSelect');
                              if (toggleBtn && panel) {
                                  toggleBtn.addEventListener('click', function () {
                                      panel.classList.toggle('show');
+                                 });
+                             }
+                             if (themeSelect) {
+                                 themeSelect.addEventListener('change', function () {
+                                     applyInvoiceTheme(themeSelect.value);
                                  });
                              }
                              if (saveBtn && chk) {
                                  saveBtn.addEventListener('click', function () {
                                      const maxItems = maxItemsInput ? parseInt(maxItemsInput.value || '35', 10) : 35;
                                      const sortMode = sortModeSelect ? sortModeSelect.value : 'location';
+                                     writeStoredInvoiceTheme(themeSelect ? themeSelect.value : SI_THEME_DEFAULT);
                                      writeSiUiSettings({
                                          showClearAll: chk.checked,
                                          maxItems: (isNaN(maxItems) ? 35 : maxItems),
@@ -1825,6 +1872,7 @@
                                      showToast('تم حفظ إعدادات الفاتورة.', 'success', 2000);
                                  });
                              }
+                             applyInvoiceTheme(readStoredInvoiceTheme());
                              applySiUiSettings();
                          });
 
@@ -2465,9 +2513,24 @@
                                 if (productDropdownList.getAttribute('data-open') !== 'true') return;
 
                                 const r = productDropdownWrap.getBoundingClientRect();
+                                const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+                                const safeGap = 6;
+                                const defaultMax = 220;
+                                const minVisible = 140;
+                                const spaceBelow = Math.max(0, viewportH - r.bottom - safeGap);
+                                const spaceAbove = Math.max(0, r.top - safeGap);
+
+                                // اختَر الاتجاه الأكثر اتساعًا: أسفل الحقل أولًا، ثم أعلى الحقل إذا المساحة أقل.
+                                const shouldOpenUp = spaceBelow < minVisible && spaceAbove > spaceBelow;
+                                const available = shouldOpenUp ? spaceAbove : spaceBelow;
+                                const dynamicMaxHeight = Math.max(80, Math.min(defaultMax, available));
+
                                 productDropdownList.style.width = r.width + 'px';
-                                productDropdownList.style.top = r.bottom + 'px';
                                 productDropdownList.style.left = r.left + 'px';
+                                productDropdownList.style.maxHeight = dynamicMaxHeight + 'px';
+                                productDropdownList.style.top = shouldOpenUp
+                                    ? Math.max(safeGap, (r.top - dynamicMaxHeight - 2)) + 'px'
+                                    : (r.bottom + 2) + 'px';
                             }
 
                             function closeProductDropdown() {
@@ -2627,6 +2690,66 @@
                                     prodNameInput?.focus();
                                     openProductDropdown();
                                 });
+                            }
+
+                            // أثناء فتح القائمة: أي Scroll/Resize يعيد تموضعها أسفل خانة الصنف مباشرة
+                            if (productDropdownWrap && !productDropdownWrap.dataset.boundReposition) {
+                                productDropdownWrap.dataset.boundReposition = '1';
+                                const repositionProductDropdown = function () {
+                                    if (!productDropdownList) return;
+                                    if (productDropdownList.getAttribute('data-open') === 'true') {
+                                        positionProductDropdownList();
+                                    }
+                                };
+                                window.addEventListener('scroll', repositionProductDropdown, true);
+                                window.addEventListener('resize', repositionProductDropdown);
+                                if (window.visualViewport) {
+                                    window.visualViewport.addEventListener('resize', repositionProductDropdown);
+                                    window.visualViewport.addEventListener('scroll', repositionProductDropdown);
+                                }
+                            }
+
+                            // منع سكرول الصفحة عند تمرير عجلة الماوس داخل القائمة نفسها
+                            if (productDropdownList && !productDropdownList.dataset.boundWheel) {
+                                productDropdownList.dataset.boundWheel = '1';
+                                productDropdownList.addEventListener('wheel', function (ev) {
+                                    const target = ev.currentTarget;
+                                    const delta = ev.deltaY || 0;
+                                    if (delta === 0) return;
+
+                                    const atTop = target.scrollTop <= 0;
+                                    const atBottom = Math.ceil(target.scrollTop + target.clientHeight) >= target.scrollHeight;
+
+                                    if ((delta < 0 && !atTop) || (delta > 0 && !atBottom)) {
+                                        target.scrollTop += delta;
+                                        ev.preventDefault();
+                                    }
+                                    ev.stopPropagation();
+                                }, { passive: false });
+
+                                let lastTouchY = 0;
+                                productDropdownList.addEventListener('touchstart', function (ev) {
+                                    if (!ev.touches || !ev.touches.length) return;
+                                    lastTouchY = ev.touches[0].clientY;
+                                }, { passive: true });
+
+                                productDropdownList.addEventListener('touchmove', function (ev) {
+                                    if (!ev.touches || !ev.touches.length) return;
+                                    const target = ev.currentTarget;
+                                    const currentY = ev.touches[0].clientY;
+                                    const delta = lastTouchY - currentY;
+                                    lastTouchY = currentY;
+
+                                    const atTop = target.scrollTop <= 0;
+                                    const atBottom = Math.ceil(target.scrollTop + target.clientHeight) >= target.scrollHeight;
+                                    const tryingUp = delta < 0;
+                                    const tryingDown = delta > 0;
+
+                                    if ((tryingUp && atTop) || (tryingDown && atBottom)) {
+                                        ev.preventDefault();
+                                    }
+                                    ev.stopPropagation();
+                                }, { passive: false });
                             }
 
                             // إغلاق عند الضغط خارج البوكس (مرة واحدة)

@@ -1,4 +1,6 @@
 @using ERP.ViewModels
+@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.WebUtilities
 @{
     ViewData["Title"] = "تقرير خط السير";
     var reportData = ViewBag.ReportData as List<RouteReportRowDto> ?? new List<RouteReportRowDto>();
@@ -6,6 +8,9 @@
     var page = ViewBag.Page as int? ?? 1;
     var pageSize = ViewBag.PageSize as int? ?? 100;
     var totalPages = ViewBag.TotalPages as int? ?? 1;
+    var loadReport = ViewBag.LoadReport as bool? ?? false;
+    var sort = (ViewBag.Sort as string ?? "date").Trim();
+    var dir = (ViewBag.Dir as string ?? "desc").Trim();
     var fromDate = ViewBag.FromDate as DateTime?;
     var toDate = ViewBag.ToDate as DateTime?;
     var fromSIId = ViewBag.FromSIId as int?;
@@ -14,8 +19,111 @@
     var warehouseId = ViewBag.WarehouseId as int?;
     var routes = ViewBag.Routes as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
     var warehouses = ViewBag.Warehouses as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var selectedRouteName = routes.FirstOrDefault(r => r.Value == routeId?.ToString())?.Text ?? "الكل";
+    var serialStart = ((page - 1) * pageSize) + 1;
+
+    string? filterCol_siidExpr = ViewBag.FilterCol_SIIdExpr as string;
+    string? filterCol_date = ViewBag.FilterCol_Date as string;
+    string? filterCol_customer = ViewBag.FilterCol_Customer as string;
+    string? filterCol_route = ViewBag.FilterCol_Route as string;
+    string? filterCol_warehouse = ViewBag.FilterCol_Warehouse as string;
+    string? filterCol_bagsExpr = ViewBag.FilterCol_BagsExpr as string;
+    string? filterCol_packetsExpr = ViewBag.FilterCol_PacketsExpr as string;
+    string? filterCol_cartonsExpr = ViewBag.FilterCol_CartonsExpr as string;
+    string? filterCol_fridgeitemsExpr = ViewBag.FilterCol_FridgeitemsExpr as string;
+    string? filterCol_fridgeboxesExpr = ViewBag.FilterCol_FridgeboxesExpr as string;
+    string? filterCol_notes = ViewBag.FilterCol_Notes as string;
+    string? filterCol_registered = ViewBag.FilterCol_Registered as string;
+
+    var colValuesUrl = Url.Action("GetRouteReportColumnValues", "Reports") ?? "";
+
+    string? FilterForCol(string colKey) =>
+        colKey == "siid" ? filterCol_siidExpr
+        : colKey == "date" ? filterCol_date
+        : colKey == "customer" ? filterCol_customer
+        : colKey == "route" ? filterCol_route
+        : colKey == "warehouse" ? filterCol_warehouse
+        : colKey == "bags" ? filterCol_bagsExpr
+        : colKey == "packets" ? filterCol_packetsExpr
+        : colKey == "cartons" ? filterCol_cartonsExpr
+        : colKey == "fridgeitems" ? filterCol_fridgeitemsExpr
+        : colKey == "fridgeboxes" ? filterCol_fridgeboxesExpr
+        : colKey == "notes" ? filterCol_notes
+        : colKey == "registered" ? filterCol_registered
+        : null;
+
+    Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
+    {
+        string? currentFilter = FilterForCol(colKey);
+        bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
+        var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
+        var sortDir = isCurrentSort ? dir : "asc";
+        var btnStateClass = hasFilter ? "text-primary" : (isCurrentSort ? "text-info" : "text-muted");
+
+        return new HtmlString($@"
+            <div class=""d-flex align-items-center gap-1 erp-col-header-filterable"" style=""position:relative;z-index:2;"">
+                <span class=""erp-col-title"">{caption}</span>
+                <button type=""button"" class=""btn btn-sm p-0 erp-col-filter-btn {btnStateClass}""
+                        data-col=""{colKey}"" data-sort-key=""{sortKey}"" data-col-title=""{caption}""
+                        data-current-sort=""{sortKey}"" data-current-dir=""{sortDir}""
+                        title=""ترتيب وفلتر العمود"" style=""min-width:22px;"">
+                    <svg xmlns=""http://www.w3.org/2000/svg"" width=""16"" height=""16"" viewBox=""0 0 24 24"" fill=""currentColor"">
+                        <path d=""M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z""/>
+                        <path d=""M7 8l4-4 4 4H7zm0 8l4 4 4-4H7z"" opacity=""0.3""/>
+                    </svg>
+                </button>
+            </div>");
+    };
 }
-<div dir="rtl" class="container-fluid">
+<style>
+    .route-registered-checkbox{
+        appearance: none;
+        -webkit-appearance: none;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #94a3b8;
+        border-radius: 4px;
+        background: #fff;
+        cursor: default;
+        position: relative;
+        pointer-events: none;
+    }
+    .route-registered-checkbox:checked{
+        background: #16a34a;
+        border-color: #16a34a;
+    }
+    .route-registered-checkbox:checked::after{
+        content: "✓";
+        color: #fff;
+        font-size: 15px;
+        font-weight: 800;
+        position: absolute;
+        top: -2px;
+        left: 3px;
+        line-height: 1;
+    }
+    .route-report-print-head{ display: none; }
+    .erp-col-filter-btn { color: #64748b; }
+    .erp-col-filter-btn:hover { color: #475569; }
+    #erpColumnFilterPanelRoute.erp-column-filter-panel { min-width: 280px; max-width: min(380px, 92vw); z-index: 1055; }
+    @@media print{
+        .d-print-none{ display:none !important; }
+        .route-report-print-head{
+            display: block !important;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        .route-report-print-head h5{
+            margin: 0 0 6px;
+            font-weight: 700;
+        }
+        .route-report-print-head .meta{
+            font-size: 12px;
+            color: #374151;
+        }
+    }
+</style>
+<div dir="rtl" class="container-fluid erp-print-area">
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h4 class="mb-0">@ViewData["Title"]</h4>
         @if (reportData.Any())
@@ -25,8 +133,23 @@
     </div>
 
     <div class="erp-list-filter-bar d-print-none mt-2">
-        <form method="get" asp-action="RouteReport" asp-controller="Reports">
+        <form method="get" asp-action="RouteReport" asp-controller="Reports" id="routeReportFiltersForm">
             <input type="hidden" name="loadReport" value="true" />
+            <input type="hidden" name="sort" value="@sort" />
+            <input type="hidden" name="dir" value="@dir" />
+            <input type="hidden" name="page" value="1" />
+            @if (!string.IsNullOrWhiteSpace(filterCol_siidExpr)) { <input type="hidden" name="filterCol_siidExpr" value="@filterCol_siidExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_date)) { <input type="hidden" name="filterCol_date" value="@filterCol_date" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_route)) { <input type="hidden" name="filterCol_route" value="@filterCol_route" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_warehouse)) { <input type="hidden" name="filterCol_warehouse" value="@filterCol_warehouse" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_bagsExpr)) { <input type="hidden" name="filterCol_bagsExpr" value="@filterCol_bagsExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_packetsExpr)) { <input type="hidden" name="filterCol_packetsExpr" value="@filterCol_packetsExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_cartonsExpr)) { <input type="hidden" name="filterCol_cartonsExpr" value="@filterCol_cartonsExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_fridgeitemsExpr)) { <input type="hidden" name="filterCol_fridgeitemsExpr" value="@filterCol_fridgeitemsExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_fridgeboxesExpr)) { <input type="hidden" name="filterCol_fridgeboxesExpr" value="@filterCol_fridgeboxesExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_notes)) { <input type="hidden" name="filterCol_notes" value="@filterCol_notes" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_registered)) { <input type="hidden" name="filterCol_registered" value="@filterCol_registered" /> }
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-md-2">
                     <label class="form-label">من تاريخ</label>
@@ -67,6 +190,7 @@
                 <div class="col-12 col-md-auto">
                     <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">تجميع التقرير</button>
                     <a class="btn btn-erp btn-erp-secondary btn-erp-sm" asp-action="RouteReport" asp-controller="Reports">إعادة تعيين</a>
+                    <button type="button" id="btnPrintRouteReport" class="btn btn-erp btn-erp-secondary btn-erp-sm" @(reportData.Any() ? null : "disabled")>طباعة</button>
                 </div>
             </div>
             @if (reportData.Any())
@@ -77,21 +201,33 @@
     </div>
 
     <div class="erp-table-scroll-container mt-3">
-        <div class="erp-table-wrapper">
-            <table class="table table-striped table-hover table-sm erp-table mb-0">
+        <div class="route-report-print-head">
+            <h5>تقرير خط السير</h5>
+            <div class="meta">
+                خط السير: @selectedRouteName
+                |
+                من: @(fromDate?.ToString("yyyy-MM-dd") ?? "-")
+                |
+                إلى: @(toDate?.ToString("yyyy-MM-dd") ?? "-")
+            </div>
+        </div>
+        <div id="routeReportScrollWrapper" class="erp-table-wrapper">
+            <table id="routeReportTable" class="table table-striped table-hover table-sm erp-table mb-0 erp-table-sortable">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 10;">
                     <tr>
-                        <th class="text-center" style="width:80px">رقم الفاتورة</th>
-                        <th style="width:100px">التاريخ</th>
-                        <th>العميل</th>
-                        <th>خط السير</th>
-                        <th>المخزن</th>
-                        <th class="text-center" style="width:70px">الشنط</th>
-                        <th class="text-center" style="width:70px">البواكي</th>
-                        <th class="text-center" style="width:70px">الكراتين</th>
-                        <th class="text-center" style="width:80px">أصناف الثلاجة</th>
-                        <th class="text-center" style="width:80px">علب الثلاجة</th>
-                        <th>ملاحظات</th>
+                        <th class="text-center" style="width:65px">م</th>
+                        <th class="text-center" style="width:90px">@filterableCol("siid", "siid", "رقم الفاتورة")</th>
+                        <th style="width:120px">@filterableCol("date", "date", "التاريخ")</th>
+                        <th>@filterableCol("customer", "customer", "العميل")</th>
+                        <th>@filterableCol("route", "route", "خط السير")</th>
+                        <th>@filterableCol("warehouse", "warehouse", "المخزن")</th>
+                        <th class="text-center" style="width:80px">@filterableCol("bags", "bags", "الشنط")</th>
+                        <th class="text-center" style="width:80px">@filterableCol("packets", "packets", "البواكي")</th>
+                        <th class="text-center" style="width:80px">@filterableCol("cartons", "cartons", "الكراتين")</th>
+                        <th class="text-center" style="width:100px">@filterableCol("fridgeitems", "fridgeitems", "أصناف الثلاجة")</th>
+                        <th class="text-center" style="width:100px">@filterableCol("fridgeboxes", "fridgeboxes", "علب الثلاجة")</th>
+                        <th>@filterableCol("notes", "notes", "اسم صنف الثلاجة")</th>
+                        <th class="text-center no-print" style="width:140px">@filterableCol("registered", "registered", "مسجل بخط السير")</th>
                         <th class="no-print" style="width:100px">إجراءات</th>
                     </tr>
                 </thead>
@@ -99,14 +235,16 @@
                     @if (!reportData.Any())
                     {
                         <tr>
-                            <td colspan="12" class="text-center text-muted py-4">اختر الفلاتر واضغط «تجميع التقرير».</td>
+                            <td colspan="14" class="text-center text-muted py-4">اختر الفلاتر واضغط «تجميع التقرير».</td>
                         </tr>
                     }
                     else
                     {
+                        var serial = serialStart;
                         foreach (var row in reportData)
                         {
                             <tr>
+                                <td class="text-center">@(serial++)</td>
                                 <td class="text-center">
                                     <a asp-controller="SalesInvoices" asp-action="Show" asp-route-id="@row.SIId">@row.SIId</a>
                                 </td>
@@ -119,9 +257,37 @@
                                 <td class="text-center">@row.CartonsCount</td>
                                 <td class="text-center">@row.FridgeItemsCount</td>
                                 <td class="text-center">@row.FridgeBoxesCount</td>
-                                <td>@(row.Notes ?? "")</td>
+                                <td>@(row.FridgeProductNames ?? "")</td>
+                                <td class="text-center no-print">
+                                    <input type="checkbox"
+                                           class="route-registered-checkbox"
+                                           disabled
+                                           @(row.IsRegisteredInRoute ? "checked" : null)
+                                           title="@(row.IsRegisteredInRoute ? "مسجل بخط السير" : "غير مسجل بخط السير")" />
+                                </td>
                                 <td class="no-print">
-                                    <a asp-controller="SalesInvoiceRoutes" asp-action="Entry" asp-route-siId="@row.SIId" asp-route-frame="1" class="btn btn-erp btn-erp-secondary btn-erp-sm">تعديل</a>
+                                    @if (!row.IsRegisteredInRoute)
+                                    {
+                                        <a asp-controller="SalesInvoiceRoutes"
+                                           asp-action="Entry"
+                                           asp-route-siId="@row.SIId"
+                                           asp-route-frame="1"
+                                           class="btn btn-erp btn-erp-success btn-erp-sm open-same-tab"
+                                           data-tab-id="sales-invoice-routes-entry"
+                                           data-tab-title="إدخال بيانات خط السير"
+                                           data-url="@Url.Action("Entry", "SalesInvoiceRoutes", new { frame = 1, siId = row.SIId })">إضافة إلى خط السير</a>
+                                    }
+                                    else
+                                    {
+                                        <a asp-controller="SalesInvoiceRoutes"
+                                           asp-action="Entry"
+                                           asp-route-siId="@row.SIId"
+                                           asp-route-frame="1"
+                                           class="btn btn-erp btn-erp-secondary btn-erp-sm open-same-tab"
+                                           data-tab-id="sales-invoice-routes-entry"
+                                           data-tab-title="إدخال بيانات خط السير"
+                                           data-url="@Url.Action("Entry", "SalesInvoiceRoutes", new { frame = 1, siId = row.SIId })">تعديل</a>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -131,18 +297,74 @@
         </div>
     </div>
 
+    <div id="erpColumnFilterPanelRoute" class="erp-column-filter-panel d-none" dir="rtl" style="min-width: 280px; max-width: min(380px, 92vw); z-index: 1055;">
+        <div class="erp-column-filter-header">
+            <span id="erpColumnFilterTitleRoute">ترتيب وفلتر</span>
+            <button type="button" class="btn-close btn-sm" id="erpColumnFilterCloseRoute" aria-label="إغلاق"></button>
+        </div>
+        <div class="erp-column-filter-body">
+            <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
+                <label class="form-label small mb-1 fw-bold">الترتيب:</label>
+                <div class="d-flex flex-column gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc">▲ ترتيب تصاعدي</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc">▼ ترتيب تنازلي</button>
+                </div>
+            </div>
+            <div class="erp-filter-section">
+                <div id="erpColumnFilterSearchRow">
+                    <label class="form-label small mb-1 fw-bold">الفلترة:</label>
+                    <input type="text" id="erpColumnFilterSearchRoute" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." autocomplete="off" />
+                </div>
+                <div id="erpColumnFilterListRoute" class="erp-column-filter-list">
+                    <div class="text-muted text-center py-3">جاري التحميل...</div>
+                </div>
+            </div>
+            <div class="erp-column-filter-actions">
+                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" data-action="apply">تطبيق</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-action="clear">مسح الفلتر</button>
+            </div>
+        </div>
+    </div>
+
     @if (totalPages > 1)
     {
         <nav class="d-flex justify-content-end align-items-center gap-2 mt-2" dir="rtl">
             <span class="text-muted small">عرض @(((page - 1) * pageSize) + 1)–@(Math.Min(totalCount, page * pageSize)) من @totalCount</span>
             <ul class="pagination pagination-sm mb-0">
                 <li class="page-item @(page <= 1 ? "disabled" : "")">
-                    <a class="page-link" href="@Url.Action("RouteReport", "Reports", new { fromDate, toDate, routeId, warehouseId, loadReport = true, page = page - 1, pageSize })">السابق</a>
+                    <a class="page-link" href="@Url.Action("RouteReport", "Reports", new { fromDate, toDate, fromSIId, toSIId, routeId, warehouseId, sort, dir, filterCol_siidExpr, filterCol_date, filterCol_customer, filterCol_route, filterCol_warehouse, filterCol_bagsExpr, filterCol_packetsExpr, filterCol_cartonsExpr, filterCol_fridgeitemsExpr, filterCol_fridgeboxesExpr, filterCol_notes, filterCol_registered, loadReport = true, page = page - 1, pageSize })">السابق</a>
                 </li>
                 <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                    <a class="page-link" href="@Url.Action("RouteReport", "Reports", new { fromDate, toDate, routeId, warehouseId, loadReport = true, page = page + 1, pageSize })">التالي</a>
+                    <a class="page-link" href="@Url.Action("RouteReport", "Reports", new { fromDate, toDate, fromSIId, toSIId, routeId, warehouseId, sort, dir, filterCol_siidExpr, filterCol_date, filterCol_customer, filterCol_route, filterCol_warehouse, filterCol_bagsExpr, filterCol_packetsExpr, filterCol_cartonsExpr, filterCol_fridgeitemsExpr, filterCol_fridgeboxesExpr, filterCol_notes, filterCol_registered, loadReport = true, page = page + 1, pageSize })">التالي</a>
                 </li>
             </ul>
         </nav>
     }
 </div>
+
+@section Scripts {
+<script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
+<script>
+    (function () {
+        var btn = document.getElementById('btnPrintRouteReport');
+        if (btn) {
+            btn.addEventListener('click', function () {
+                window.print();
+            });
+        }
+
+        var shouldInit = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(loadReport));
+        if (!shouldInit || typeof ERP === 'undefined' || !ERP.initListColumnFilter) return;
+
+        ERP.initListColumnFilter({
+            panelId: 'erpColumnFilterPanelRoute',
+            tableId: 'routeReportTable',
+            wrapperId: 'routeReportScrollWrapper',
+            getColumnValuesUrl: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(colValuesUrl)),
+            defaultSort: 'date',
+            defaultDir: 'desc',
+            numericColumns: ['siid', 'bags', 'packets', 'cartons', 'fridgeitems', 'fridgeboxes']
+        });
+    })();
+</script>
+}

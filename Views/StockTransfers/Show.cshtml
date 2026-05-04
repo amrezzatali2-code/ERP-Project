@@ -227,6 +227,13 @@
                         </a>
 
                         <button type="button"
+                                class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100"
+                                id="btnOpenTrackingInfo"
+                                title="يعرض العبوات المتتبعة المرتبطة بالسطر المحدد">
+                            🧬 معلومات التتبع
+                        </button>
+
+                        <button type="button"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
                                 id="btnDeleteSelectedLine"
                                 disabled
@@ -1345,6 +1352,49 @@
                 console.warn('تعذر تحديث التاب الحالي عبر postMessage:', err);
             }
             window.location.assign(url);
+        });
+
+        function openTransferTabFromFrame(url, tabId, title) {
+            try {
+                if (window.top && window.top !== window) {
+                    window.top.postMessage({
+                        type: 'erp-open-tab',
+                        tabId: tabId || '',
+                        title: title || '',
+                        url: url
+                    }, '*');
+                    return;
+                }
+            } catch (err) {
+                console.warn('تعذر فتح التاب عبر postMessage:', err);
+            }
+            if (window.erpTabs && typeof window.erpTabs.openTab === 'function') {
+                window.erpTabs.openTab(tabId, url, title);
+            } else {
+                window.location.assign(url);
+            }
+        }
+
+        document.getElementById('btnOpenTrackingInfo')?.addEventListener('click', function(e) {
+            e.preventDefault();
+            const transferId = parseInt(document.getElementById('TransferId')?.value || '0', 10);
+            if (!transferId || transferId <= 0) {
+                showToast('من فضلك احفظ التحويل أولاً قبل فتح معلومات التتبع.', 'warning', 4500);
+                return;
+            }
+            const lineId = parseInt(document.getElementById('SelectedLineId')?.value || '0', 10);
+            if (!lineId || lineId <= 0) {
+                showToast('من فضلك اختر سطراً من جدول التحويل أولاً.', 'warning', 4500);
+                return;
+            }
+            const params = new URLSearchParams();
+            params.set('frame', '1');
+            params.set('sourceType', 'stock-transfer');
+            params.set('documentId', String(transferId));
+            params.set('lineId', String(lineId));
+            const base = '@Url.Action("Index", "TrackTrace")';
+            const sep = base.includes('?') ? '&' : '?';
+            openTransferTabFromFrame(base + sep + params.toString(), 'track-trace-info', 'معلومات التتبع');
         });
 
         // Save header

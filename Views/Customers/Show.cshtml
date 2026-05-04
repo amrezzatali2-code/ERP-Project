@@ -29,9 +29,22 @@
     var debitNotes = ViewBag.DebitNotesList as IEnumerable<ERP.Models.DebitNote> ?? Enumerable.Empty<ERP.Models.DebitNote>();
     var creditNotes = ViewBag.CreditNotesList as IEnumerable<ERP.Models.CreditNote> ?? Enumerable.Empty<ERP.Models.CreditNote>();
     var warehouses = ViewBag.Warehouses as Dictionary<int, string> ?? new Dictionary<int, string>();
+    decimal totalCashReceipts = cashReceipts.Sum(r => r.Amount);
+    decimal totalCashPayments = cashPayments.Sum(p => p.Amount);
+    decimal totalDebitNotes = debitNotes.Sum(d => d.Amount);
+    decimal totalCreditNotes = creditNotes.Sum(c => c.Amount);
+    Func<decimal, string> formatAmount = amount => amount == decimal.Truncate(amount)
+        ? amount.ToString("#,##0")
+        : amount.ToString("#,##0.##");
 }
 
 <style>
+    html, body,
+    main[role="main"],
+    .customer-dashboard,
+    .dashboard-content {
+        background: #ffffff !important;
+    }
     /* تحسينات التصميم: استغلال المساحة وتصميم موحد */
     .customer-dashboard {
         min-height: calc(100vh - 120px);
@@ -142,27 +155,97 @@
         color: #000 !important;
         border-color: #ffc107 !important;
     }
+    .customer-dashboard #customerVolumeBtnView {
+        min-width: 4.5rem;
+        flex-shrink: 0;
+        white-space: nowrap;
+        color: #0d6efd !important;
+        border: 1.5px solid #0d6efd !important;
+        background-color: #fff !important;
+        box-shadow: none !important;
+        transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .customer-dashboard #customerVolumeBtnView:not(:disabled):hover {
+        background-color: #0d6efd !important;
+        color: #fff !important;
+        border-color: #0d6efd !important;
+        box-shadow: 0 0.15rem 0.5rem rgba(13, 110, 253, 0.2);
+    }
+    .customer-dashboard #customerVolumeBtnView:disabled {
+        color: #0d6efd !important;
+        border-color: #0d6efd !important;
+        background-color: #fff !important;
+        opacity: 1 !important;
+        cursor: not-allowed;
+    }
 
     /* بطاقات الملخص: في منتصف الشاشة، كلها نفس المقاس */
+    .customer-summary-cards-wrap {
+        display: flex;
+        justify-content: space-between;
+        align-items: stretch;
+        gap: 0.75rem;
+        direction: rtl;
+    }
     .customer-summary-cards {
         display: flex;
         flex-wrap: nowrap;
-        justify-content: center;
+        justify-content: flex-start;
         align-items: stretch;
         direction: rtl;
         gap: 0.5rem;
+        overflow-x: auto;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .customer-summary-balance-slot {
+        flex: 0 0 108px;
+        min-width: 108px;
+        max-width: 108px;
+        order: -1;
     }
     .customer-summary-cards .customer-stat-card {
-        flex: 0 0 130px;
-        min-width: 130px;
-        max-width: 130px;
+        flex: 0 0 108px;
+        min-width: 108px;
+        max-width: 108px;
+    }
+    .customer-summary-balance-slot .card {
+        width: 100%;
+        min-width: 108px;
+        max-width: 108px;
+        height: 100%;
     }
     .customer-summary-cards .customer-stat-card .card {
         width: 100%;
-        min-width: 130px;
+        min-width: 108px;
+        max-width: 108px;
+        height: 100%;
     }
-    .customer-summary-cards .compact-label { font-size: 0.75rem !important; }
-    .customer-summary-cards .compact-stat { font-size: 1.05rem !important; }
+    .customer-summary-cards .compact-label,
+    .customer-summary-balance-slot .compact-label {
+        font-size: 0.68rem !important;
+        color: #475569 !important;
+        font-weight: 600 !important;
+    }
+    .customer-summary-cards .compact-stat,
+    .customer-summary-balance-slot .compact-stat {
+        font-size: 0.9rem !important;
+        color: #0f172a !important;
+        font-weight: 700 !important;
+    }
+    .customer-summary-cards .card,
+    .customer-summary-balance-slot .card {
+        border: 1px solid #b7c0d0 !important;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12) !important;
+    }
+    .customer-summary-cards .card-body,
+    .customer-summary-balance-slot .card-body {
+        min-height: 86px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
 
     /* بطاقة الرصيد الحالي: حدود مميزة وأرقام واضحة */
     .customer-balance-card {
@@ -171,14 +254,32 @@
         background: linear-gradient(to bottom, #f8fafc 0%, #fff 100%) !important;
     }
     .customer-balance-value {
-        font-size: 1.15rem !important;
+        font-size: 0.76rem !important;
         font-weight: 700 !important;
         letter-spacing: 0.02em;
+        white-space: nowrap;
+        direction: ltr;
+        unicode-bidi: plaintext;
+        display: inline-block;
+        line-height: 1.35;
     }
     .customer-balance-label {
-        font-size: 0.8rem !important;
+        font-size: 0.72rem !important;
         font-weight: 600 !important;
     }
+    .customer-summary-cards .compact-stat,
+    .customer-summary-balance-slot .compact-stat {
+        white-space: nowrap;
+        direction: ltr;
+        unicode-bidi: plaintext;
+        display: inline-block;
+    }
+    .customer-summary-cards .text-success { color: #15803d !important; }
+    .customer-summary-cards .text-primary { color: #1d4ed8 !important; }
+    .customer-summary-cards .text-danger { color: #b91c1c !important; }
+    .customer-summary-cards .text-warning { color: #b45309 !important; }
+    .customer-summary-cards .text-info { color: #0f766e !important; }
+    .customer-summary-cards .text-secondary { color: #334155 !important; }
 
     /* كارت صف الملخص — نفس حركة الصنف (حدود بنفسجي #6366f1) */
     .product-movement-unified-card {
@@ -226,10 +327,22 @@
     }
 
     /* ===== دروب داون مخصص: بحث العميل داخل حجم التعامل ===== */
+    .customer-dashboard #partyCodeSearchInput,
+    .customer-dashboard #partySearchInput {
+        min-height: 2rem !important;
+        height: 2rem !important;
+        font-size: 0.875rem !important;
+        padding: 0.4rem 0.55rem !important;
+        border-radius: 0.375rem !important;
+    }
+
+    .customer-dashboard #partyCodeSearchInput {
+        border-color: #ced4da !important;
+    }
+
     #partyDropdownWrap {
         border: 2px solid #4f46e5 !important;
         border-radius: 0.55rem !important;
-        padding: 3px !important;
         box-shadow: none !important;
     }
     #partyDropdownWrap:focus-within {
@@ -240,6 +353,10 @@
         border: 0 !important;
         background: transparent !important;
         border-radius: 0.45rem !important;
+    }
+    #partyDropdownWrap .product-dropdown-onebox:focus-within {
+        box-shadow: none !important;
+        border-color: transparent !important;
     }
     .product-dropdown-onebox {
         position: relative;
@@ -304,16 +421,16 @@
 
     /* كارت/Badge كود العميل جنب الاسم */
     .customer-code-badge {
-        border: 2px solid currentColor !important;
-        border-radius: 0.55rem !important;
-        padding: 0.35rem 0.6rem !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
         box-shadow: none !important;
         background: transparent !important;
-        color: inherit !important;
-        font-weight: 700;
-        font-size: 0.95rem;
+        color: #6c757d !important;
+        font-weight: 400;
+        font-size: 0.875rem;
         white-space: nowrap;
-        line-height: 1.1;
+        line-height: 1.4;
     }
 </style>
 
@@ -328,7 +445,7 @@
                   method="get"
                   asp-action="Show"
                   asp-controller="Customers"
-                  class="row g-3 align-items-end"
+                  class="row g-2 align-items-end"
                   autocomplete="off">
 
                 <input type="hidden" id="partySearchId" name="id" value="@(Model?.CustomerId.ToString() ?? "")" />
@@ -337,30 +454,41 @@
                     <input type="hidden" name="frame" value="1" />
                 }
 
-                <div class="col-4 col-sm-3 col-lg-1 erp-filter-section">
+                <div class="col-5 col-sm-3 col-lg-auto erp-filter-section">
                     <label class="form-label small mb-1">كود العميل</label>
-                    <div class="mx-auto mx-lg-0" style="max-width: 4.75rem;">
+                    <div class="mx-auto mx-lg-0" style="width: 7rem; max-width: 100%;">
                         <input id="partyCodeSearchInput"
                                type="text"
                                inputmode="numeric"
                                class="form-control form-control-sm erp-filter-input text-center px-1"
                                placeholder="كود"
-                               autocomplete="off"
+                               autocomplete="new-password"
+                               autocorrect="off"
+                               autocapitalize="off"
+                               spellcheck="false"
+                               data-form-type="other"
+                               readonly
                                dir="ltr"
                                value="@(Model?.CustomerId.ToString() ?? "")" />
                     </div>
                 </div>
 
-                <div class="col-8 col-sm-5 col-lg-4 erp-filter-section">
+                <div class="col-7 col-sm-5 col-lg-4 erp-filter-section">
                     <label class="form-label">اسم العميل</label>
                     <div class="position-relative" id="partyDropdownWrap">
                         <div class="product-dropdown-onebox" id="partyDropdownInputGroup">
                             <span class="product-dropdown-arrow-inside" id="partyDropdownArrow" title="افتح القائمة">▼</span>
                             <input id="partySearchInput"
                                    type="text"
+                                   name="cv_party_display"
                                    class="form-control form-control-sm erp-filter-input product-dropdown-input"
                                    placeholder="بحث بالاسم..."
-                                   autocomplete="off"
+                                   autocomplete="new-password"
+                                   autocorrect="off"
+                                   autocapitalize="off"
+                                   spellcheck="false"
+                                   data-form-type="other"
+                                   readonly
                                    value="@(Model != null ? Model.CustomerName : "")" />
                         </div>
                         <div id="partyDropdownList"
@@ -450,16 +578,16 @@
         <div class="erp-list-filter-bar mb-2">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                 <div>
-                    <div class="d-flex flex-wrap align-items-center gap-3">
+                    <div class="d-flex flex-wrap align-items-center gap-3 mb-1">
                         <h4 class="mb-0 fw-bold" style="font-size: 1.4rem;">@Model.CustomerName</h4>
-                        <div class="customer-code-badge" title="كود العميل">
-                            كود: @Model.CustomerId
-                        </div>
                     </div>
-                    @if (Model.Route != null)
-                    {
-                        <small class="text-muted">خط السير: @Model.Route.Name</small>
-                    }
+                    <div class="d-flex flex-wrap align-items-center gap-3">
+                        @if (Model.Route != null)
+                        {
+                            <small class="text-muted">خط السير: @Model.Route.Name</small>
+                        }
+                        <span class="customer-code-badge" title="كود العميل">كود: @Model.CustomerId</span>
+                    </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2 flex-nowrap" dir="rtl">
                     <button type="button" id="customerVolumeBtnView" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض المستند المحدد">عرض</button>
@@ -496,78 +624,111 @@
            ===================================================== *@
         <div class="card product-movement-unified-card mb-2 flex-shrink-0">
             <div class="card-body p-2 p-md-3">
-        <div class="row g-1 flex-nowrap customer-summary-cards" style="overflow-x: auto;">
-            <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
-                     onclick="window.location.href='@Url.Action("Index", "SalesInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
-                    <div class="card-body p-1">
-                        <div class="compact-label text-muted" style="font-size: 0.65rem;">المبيعات</div>
-                        <div class="compact-stat text-success" style="font-size: 0.95rem;">@totalSales.ToString("N2")</div>
+                <div class="customer-summary-cards-wrap">
+                    <div class="customer-summary-cards">
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
+                                 onclick="window.location.href='@Url.Action("Index", "SalesInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">المبيعات</div>
+                                    <div class="compact-stat text-success" style="font-size: 0.95rem;">@formatAmount(totalSales)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
+                                 onclick="window.location.href='@Url.Action("Index", "PurchaseInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">المشتريات</div>
+                                    <div class="compact-stat text-primary" style="font-size: 0.95rem;">@formatAmount(totalPurchases)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
+                                 onclick="window.location.href='@Url.Action("Index", "SalesReturns", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات البيع</div>
+                                    <div class="compact-stat text-success" style="font-size: 0.95rem;">@formatAmount(totalSalesReturns)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
+                                 onclick="window.location.href='@Url.Action("Index", "PurchaseReturns", new { searchBy = "customerId", search = Model.CustomerId.ToString() })'">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات الشراء</div>
+                                    <div class="compact-stat text-primary" style="font-size: 0.95rem;">@formatAmount(totalPurchaseReturns)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">إذن استلام</div>
+                                    <div class="compact-stat text-success" style="font-size: 0.95rem;">@formatAmount(totalCashReceipts)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">إذن دفع</div>
+                                    <div class="compact-stat text-danger" style="font-size: 0.95rem;">@formatAmount(totalCashPayments)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">إشعار خصم</div>
+                                    <div class="compact-stat text-warning" style="font-size: 0.95rem;">@formatAmount(totalDebitNotes)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">إشعار إضافة</div>
+                                    <div class="compact-stat text-info" style="font-size: 0.95rem;">@formatAmount(totalCreditNotes)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">رصيد أول المدة</div>
+                                    <div class="compact-stat text-secondary" style="font-size: 0.95rem;">@formatAmount(openingBalance)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">عدد الفواتير</div>
+                                    <div class="compact-stat" style="font-size: 0.95rem;">@invoiceCount</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="customer-stat-card">
+                            <div class="card compact-card text-center shadow-sm">
+                                <div class="card-body p-1">
+                                    <div class="compact-label text-muted" style="font-size: 0.65rem;">آخر عملية</div>
+                                    <div class="compact-stat" style="font-size: 0.85rem;">@(lastTransDate?.ToString("yyyy/MM/dd") ?? "-")</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="customer-summary-balance-slot">
+                            <div class="card compact-card text-center shadow-sm customer-balance-card">
+                            <div class="card-body p-1">
+                                <div class="compact-label text-muted">الرصيد الحالي</div>
+                                <div class="compact-stat fw-bold @balanceCss customer-balance-value">@formatAmount(currentBalance)</div>
+                                <small class="@balanceCss fw-semibold customer-balance-label">@balanceText</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
-                     onclick="window.location.href='@Url.Action("Index", "PurchaseInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
-                    <div class="card-body p-1">
-                        <div class="compact-label text-muted" style="font-size: 0.65rem;">المشتريات</div>
-                        <div class="compact-stat text-primary" style="font-size: 0.95rem;">@totalPurchases.ToString("N2")</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
-                     onclick="window.location.href='@Url.Action("Index", "SalesReturns", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
-                    <div class="card-body p-1">
-                        <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات البيع</div>
-                        <div class="compact-stat text-success" style="font-size: 0.95rem;">@totalSalesReturns.ToString("N2")</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
-                     onclick="window.location.href='@Url.Action("Index", "PurchaseReturns", new { searchBy = "customerId", search = Model.CustomerId.ToString() })'">
-                    <div class="card-body p-1">
-                        <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات الشراء</div>
-                        <div class="compact-stat text-primary" style="font-size: 0.95rem;">@totalPurchaseReturns.ToString("N2")</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm">
-                    <div class="card-body p-1">
-                        <div class="compact-label text-muted" style="font-size: 0.65rem;">رصيد أول المدة</div>
-                        <div class="compact-stat text-secondary" style="font-size: 0.95rem;">@openingBalance.ToString("N2")</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm customer-balance-card">
-                    <div class="card-body p-1">
-                        <div class="compact-label text-muted">الرصيد الحالي</div>
-                        <div class="compact-stat fw-bold @balanceCss customer-balance-value">@currentBalance.ToString("N2")</div>
-                        <small class="@balanceCss fw-semibold customer-balance-label">@balanceText</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm">
-                    <div class="card-body p-1">
-                        <div class="compact-label text-muted" style="font-size: 0.65rem;">عدد الفواتير</div>
-                        <div class="compact-stat" style="font-size: 0.95rem;">@invoiceCount</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm">
-                    <div class="card-body p-1">
-                        <div class="compact-label text-muted" style="font-size: 0.65rem;">آخر عملية</div>
-                        <div class="compact-stat" style="font-size: 0.85rem;">@(lastTransDate?.ToString("yyyy/MM/dd") ?? "-")</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
             </div>
         </div>
 
@@ -588,7 +749,6 @@
                             <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-payments">إيصالات دفع</button></li>
                             <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-debitNotes">إشعارات خصم</button></li>
                             <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-creditNotes">إشعارات إضافة</button></li>
-                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-settlements">تسويات</button></li>
                         </ul>
                     </div>
                 </div>
@@ -988,24 +1148,6 @@
                         </div>
                     </div>
 
-                    <div class="tab-pane fade h-100" id="tab-settlements" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
-                            <table class="table table-sm table-striped table-compact mb-0">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        <th>التاريخ</th>
-                                        <th>نوع التسوية</th>
-                                        <th class="text-end">مدين</th>
-                                        <th class="text-end">دائن</th>
-                                        <th>ملاحظات</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط التسويات بعد.</small></td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -1026,10 +1168,33 @@
             var form = document.getElementById('customerSearchForm');
             var codeInput = document.getElementById('partyCodeSearchInput');
 
+            function hardDisableSavedInfo(el, seed) {
+                if (!el) return;
+                el.setAttribute('autocomplete', 'off');
+                el.setAttribute('autocorrect', 'off');
+                el.setAttribute('autocapitalize', 'off');
+                el.setAttribute('spellcheck', 'false');
+                el.setAttribute('data-form-type', 'other');
+                el.setAttribute('name', seed + '_' + Date.now());
+                el.setAttribute('readonly', 'readonly');
+
+                var unlock = function () {
+                    el.removeAttribute('readonly');
+                };
+                el.addEventListener('focus', unlock, { once: true });
+                el.addEventListener('pointerdown', unlock, { once: true });
+                el.addEventListener('mousedown', unlock, { once: true });
+                el.addEventListener('keydown', unlock, { once: true });
+                el.addEventListener('touchstart', unlock, { once: true });
+            }
+
+            hardDisableSavedInfo(input, 'cv_customer_lookup');
+            hardDisableSavedInfo(codeInput, 'cv_customer_code_lookup');
+
             var activeIndex = -1;
             var selectableCustomers = [];
             var isSelectingCustomer = false;
-            var CUSTOMER_LIST_MAX = 80;
+            var CUSTOMER_LIST_MAX = 30;
             var partySelectionTs = 0;
 
             var allCustomers = [];

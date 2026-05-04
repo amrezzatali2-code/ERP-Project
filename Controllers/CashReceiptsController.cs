@@ -57,10 +57,16 @@ namespace ERP.Controllers
         // =========================================================
         private async Task PopulateDropdownsAsync(int? customerId = null,
                                                   int? cashAccountId = null,
-                                                  int? counterAccountId = null)
+                                                  int? counterAccountId = null,
+                                                  int? areaId = null,
+                                                  int? distributorUserId = null)
         {
             var canViewInvestors = await CanViewInvestorsAsync();
             var customerQueryCr = _context.Customers.AsNoTracking().Where(c => c.IsActive == true);
+            if (areaId.HasValue && areaId.Value > 0)
+                customerQueryCr = customerQueryCr.Where(c => c.AreaId == areaId.Value);
+            if (distributorUserId.HasValue && distributorUserId.Value > 0)
+                customerQueryCr = customerQueryCr.Where(c => c.UserId == distributorUserId.Value);
             customerQueryCr = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customerQueryCr);
             // قائمة العملاء / الأطراف مع AccountId في data attribute
             var customers = await customerQueryCr
@@ -189,6 +195,402 @@ namespace ERP.Controllers
             return Json(new { success = true, accountId = customer.AccountId.Value });
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GetBatchCustomers(int? areaId, int? distributorEmployeeId = null)
+        {
+            var query = _context.Customers.AsNoTracking()
+                .Where(c => c.IsActive);
+            query = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(query);
+
+            var allItems = await query
+                .OrderBy(c => c.CustomerName)
+                .Select(c => new
+                {
+                    id = c.CustomerId,
+                    name = c.CustomerName
+                })
+                .ToListAsync();
+
+            return Json(allItems);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetBatchCustomerByCode(int? areaId, string? code)
+        {
+            if (string.IsNullOrWhiteSpace(code))
+                return Json(new { found = false });
+
+            var normalizedCode = code.Trim();
+            var parsedNumeric = int.TryParse(normalizedCode, out var parsedId);
+
+            var query = _context.Customers.AsNoTracking()
+                .Where(c => c.IsActive);
+            query = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(query);
+
+            var item = await query
+                .Where(c =>
+                    (parsedNumeric && c.CustomerId == parsedId) ||
+                    (c.ExternalCode != null && c.ExternalCode.Trim() == normalizedCode))
+                .OrderBy(c => c.CustomerName)
+                .Select(c => new
+                {
+                    id = c.CustomerId,
+                    name = c.CustomerName,
+                    code = c.ExternalCode
+                })
+                .FirstOrDefaultAsync();
+
+            if (item == null)
+            {
+                var fallbackQuery = _context.Customers.AsNoTracking().Where(c => c.IsActive);
+                fallbackQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(fallbackQuery);
+                item = await fallbackQuery
+                    .Where(c =>
+                        (parsedNumeric && c.CustomerId == parsedId) ||
+                        (c.ExternalCode != null && c.ExternalCode.Trim() == normalizedCode))
+                    .OrderBy(c => c.CustomerName)
+                    .Select(c => new
+                    {
+                        id = c.CustomerId,
+                        name = c.CustomerName,
+                        code = c.ExternalCode
+                    })
+                    .FirstOrDefaultAsync();
+            }
+
+            if (item == null)
+                return Json(new { found = false });
+
+            return Json(new
+            {
+                found = true,
+                id = item.id,
+                name = item.name,
+                code = item.code
+            });
+        }
+
+        private async Task SetGroupedContextViewBagAsync(int? groupAreaId, int? groupDistributorUserId, DateTime? groupDate)
+        {
+            ViewBag.GroupAreaId = groupAreaId;
+            ViewBag.GroupDistributorUserId = groupDistributorUserId;
+            ViewBag.GroupDate = groupDate?.Date;
+            ViewBag.GroupMode = groupAreaId.HasValue && groupAreaId.Value > 0 && groupDistributorUserId.HasValue && groupDistributorUserId.Value > 0;
+
+            if (groupAreaId.HasValue && groupAreaId.Value > 0)
+                ViewBag.GroupAreaName = await _context.Areas.AsNoTracking()
+                    .Where(a => a.AreaId == groupAreaId.Value)
+                    .Select(a => a.AreaName)
+                    .FirstOrDefaultAsync();
+
+            if (groupDistributorUserId.HasValue && groupDistributorUserId.Value > 0)
+            {
+                var employeeName = await _context.Employees.AsNoTracking()
+                    .Where(e => e.UserId == groupDistributorUserId.Value)
+                    .OrderByDescending(e => e.IsActive)
+                    .ThenBy(e => e.FullName)
+                    .Select(e => e.FullName)
+                    .FirstOrDefaultAsync();
+
+                ViewBag.GroupDistributorName = !string.IsNullOrWhiteSpace(employeeName)
+                    ? employeeName
+                    : await _context.Users.AsNoTracking()
+                        .Where(u => u.UserId == groupDistributorUserId.Value)
+                        .Select(u => u.DisplayName != null && u.DisplayName != "" ? u.DisplayName : u.UserName)
+                        .FirstOrDefaultAsync();
+            }
+        }
+
+        private async Task PopulateCreateNavigationAsync(int? currentId)
+        {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenCustomerAccountIds = (await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync()).ToList();
+            var restrictedOnly = false;
+
+            var ids = await BuildQuery(
+                    search: null,
+                    searchBy: null,
+                    sort: "CashReceiptId",
+                    dir: "asc",
+                    useDateRange: false,
+                    fromDate: null,
+                    toDate: null,
+                    fromCode: null,
+                    toCode: null,
+                    canViewInvestors: canViewInvestors,
+                    hiddenCustomerAccountIds: hiddenCustomerAccountIds,
+                    restrictedToAllowedOnly: restrictedOnly,
+                    searchMode: null)
+                .Select(x => x.CashReceiptId)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToArrayAsync();
+
+            int current = currentId.GetValueOrDefault();
+            int first = ids.Length > 0 ? ids[0] : 0;
+            int last = ids.Length > 0 ? ids[ids.Length - 1] : 0;
+            int prev = 0;
+            int next = 0;
+
+            if (current > 0 && ids.Length > 0)
+            {
+                var idx = Array.IndexOf(ids, current);
+                if (idx >= 0)
+                {
+                    prev = idx > 0 ? ids[idx - 1] : 0;
+                    next = idx < ids.Length - 1 ? ids[idx + 1] : 0;
+                }
+                else
+                {
+                    prev = last;
+                    next = first;
+                }
+            }
+            else if (ids.Length > 0)
+            {
+                prev = last;
+                next = first;
+            }
+
+            ViewBag.NavCurrentId = current > 0 ? current : (int?)null;
+            ViewBag.NavFirstId = first > 0 ? first : (int?)null;
+            ViewBag.NavLastId = last > 0 ? last : (int?)null;
+            ViewBag.NavPrevId = prev > 0 ? prev : (int?)null;
+            ViewBag.NavNextId = next > 0 ? next : (int?)null;
+        }
+
+        private async Task<(int? DistributorUserId, string? DistributorName)> ResolveDistributorFromEmployeeAsync(int? distributorEmployeeId)
+        {
+            if (!distributorEmployeeId.HasValue || distributorEmployeeId.Value <= 0)
+                return (null, null);
+
+            var employee = await _context.Employees.AsNoTracking()
+                .Where(e => e.Id == distributorEmployeeId.Value)
+                .Select(e => new { e.UserId, e.FullName })
+                .FirstOrDefaultAsync();
+
+            if (employee == null)
+                return (null, null);
+
+            return (employee.UserId, employee.FullName);
+        }
+
+        private async Task PopulateBatchCreateLookupsAsync(int? areaId, int? distributorEmployeeId)
+        {
+            ViewBag.Areas = new SelectList(
+                await _context.Areas.AsNoTracking().OrderBy(a => a.AreaName).ToListAsync(),
+                "AreaId",
+                "AreaName",
+                areaId);
+
+            var distributors = await _context.Employees.AsNoTracking()
+                .Where(e => e.IsActive)
+                .OrderBy(e => e.FullName)
+                .Select(e => new
+                {
+                    EmployeeId = e.Id,
+                    UserId = e.UserId,
+                    Label = string.IsNullOrWhiteSpace(e.Code) ? e.FullName : (e.FullName + " - " + e.Code)
+                })
+                .ToListAsync();
+            ViewBag.Distributors = new SelectList(distributors, "EmployeeId", "Label", distributorEmployeeId);
+
+            if (areaId.HasValue && areaId.Value > 0 && distributorEmployeeId.HasValue && distributorEmployeeId.Value > 0)
+            {
+                var customersQ = _context.Customers.AsNoTracking()
+                    .Where(c => c.IsActive);
+                customersQ = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customersQ);
+                var customers = await customersQ
+                    .OrderBy(c => c.CustomerName)
+                    .ToListAsync();
+                ViewBag.BatchCustomers = new SelectList(customers, "CustomerId", "CustomerName");
+            }
+            else
+            {
+                ViewBag.BatchCustomers = new SelectList(Array.Empty<SelectListItem>(), "Value", "Text");
+            }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> BatchCreate(
+            int? areaId = null,
+            int? distributorEmployeeId = null,
+            int? distributorUserId = null,
+            DateTime? batchDate = null,
+            string? batchTime = null,
+            string? autofocus = null)
+        {
+            if ((!distributorEmployeeId.HasValue || distributorEmployeeId.Value <= 0) && distributorUserId.HasValue && distributorUserId.Value > 0)
+            {
+                distributorEmployeeId = await _context.Employees.AsNoTracking()
+                    .Where(e => e.UserId == distributorUserId.Value)
+                    .OrderByDescending(e => e.IsActive)
+                    .ThenBy(e => e.FullName)
+                    .Select(e => (int?)e.Id)
+                    .FirstOrDefaultAsync();
+            }
+
+            var (_, resolvedDistributorName) = await ResolveDistributorFromEmployeeAsync(distributorEmployeeId);
+
+            var model = new CashReceiptBatchViewModel
+            {
+                AreaId = areaId,
+                DistributorEmployeeId = distributorEmployeeId,
+                DistributorUserId = null,
+                BatchDate = (batchDate ?? DateTime.Today).Date,
+                BatchTime = DateTime.Now.TimeOfDay
+            };
+
+            if (!string.IsNullOrWhiteSpace(batchTime) && TimeSpan.TryParse(batchTime, out var parsedTime))
+                model.BatchTime = parsedTime;
+
+            await PopulateBatchCreateLookupsAsync(areaId, distributorEmployeeId);
+
+            if (areaId.HasValue && areaId.Value > 0)
+            {
+                model.AreaName = await _context.Areas.AsNoTracking()
+                    .Where(a => a.AreaId == areaId.Value)
+                    .Select(a => a.AreaName)
+                    .FirstOrDefaultAsync();
+            }
+
+            model.DistributorName = resolvedDistributorName;
+
+            var receiptsQ = _context.CashReceipts.AsNoTracking()
+                .Include(r => r.Customer)
+                .ThenInclude(c => c.Area)
+                .Where(r => r.ReceiptDate.Date == model.BatchDate.Date);
+
+            if (areaId.HasValue && areaId.Value > 0)
+                receiptsQ = receiptsQ.Where(r => r.Customer != null && r.Customer.AreaId == areaId.Value);
+            if (distributorEmployeeId.HasValue && distributorEmployeeId.Value > 0)
+            {
+                var distToken = $"[DIST:{distributorEmployeeId.Value}]";
+                receiptsQ = receiptsQ.Where(r => r.Description != null && r.Description.Contains(distToken));
+            }
+
+            model.Receipts = await receiptsQ
+                .OrderByDescending(r => r.CashReceiptId)
+                .Take(250)
+                .ToListAsync();
+
+            ViewBag.AutoFocusCustomer = string.Equals(autofocus, "customer", StringComparison.OrdinalIgnoreCase);
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> BatchCreate(
+            int? areaId,
+            int? distributorEmployeeId,
+            DateTime? batchDate,
+            string? batchTime,
+            int? customerId,
+            decimal? amount)
+        {
+            var date = (batchDate ?? DateTime.Today).Date;
+            var distributor = distributorEmployeeId.HasValue && distributorEmployeeId.Value > 0
+                ? await _context.Employees.AsNoTracking()
+                    .Where(e => e.Id == distributorEmployeeId.Value)
+                    .Select(e => new { e.Id, e.FullName, e.UserId })
+                    .FirstOrDefaultAsync()
+                : null;
+
+            if (!areaId.HasValue || areaId.Value <= 0 || distributor == null)
+            {
+                TempData["CashReceiptError"] = "اختر المنطقة والموزع أولاً لبدء إذن الاستلام المجمّع.";
+                return RedirectToAction(nameof(BatchCreate), new { areaId, distributorEmployeeId, batchDate = date.ToString("yyyy-MM-dd") });
+            }
+
+            if (!customerId.HasValue || customerId.Value <= 0)
+            {
+                TempData["CashReceiptError"] = "اختر اسم العميل.";
+                return RedirectToAction(nameof(BatchCreate), new { areaId, distributorEmployeeId, batchDate = date.ToString("yyyy-MM-dd") });
+            }
+
+            if (!amount.HasValue || amount.Value <= 0)
+            {
+                TempData["CashReceiptError"] = "أدخل مبلغًا أكبر من صفر.";
+                return RedirectToAction(nameof(BatchCreate), new { areaId, distributorEmployeeId, batchDate = date.ToString("yyyy-MM-dd") });
+            }
+
+            var customer = await _context.Customers.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.CustomerId == customerId.Value && c.IsActive);
+
+            if (customer == null)
+            {
+                TempData["CashReceiptError"] = "العميل غير موجود أو غير نشط.";
+                return RedirectToAction(nameof(BatchCreate), new { areaId, distributorEmployeeId, batchDate = date.ToString("yyyy-MM-dd") });
+            }
+
+            if (!customer.AccountId.HasValue || customer.AccountId.Value <= 0)
+            {
+                TempData["CashReceiptError"] = "العميل غير مربوط بحساب طرف محاسبي.";
+                return RedirectToAction(nameof(BatchCreate), new { areaId, distributorEmployeeId, batchDate = date.ToString("yyyy-MM-dd") });
+            }
+
+            try
+            {
+                var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+                var cashAccountId = await TreasuryCashAccounts.QueryTreasuryCashBoxes(_context.Accounts.AsNoTracking())
+                    .Where(a => !hiddenAccountIds.Contains(a.AccountId))
+                    .OrderBy(a => a.AccountCode == "1101" ? 0 : 1)
+                    .ThenBy(a => a.AccountCode)
+                    .ThenBy(a => a.AccountName)
+                    .Select(a => (int?)a.AccountId)
+                    .FirstOrDefaultAsync();
+
+                if (!cashAccountId.HasValue || cashAccountId.Value <= 0)
+                {
+                    TempData["CashReceiptError"] = "لا توجد خزينة/صندوق متاح للحفظ.";
+                    return RedirectToAction(nameof(BatchCreate), new { areaId, distributorEmployeeId, batchDate = date.ToString("yyyy-MM-dd") });
+                }
+
+                var areaName = await _context.Areas.AsNoTracking()
+                    .Where(a => a.AreaId == areaId.Value)
+                    .Select(a => a.AreaName)
+                    .FirstOrDefaultAsync();
+                var distributorName = distributor.FullName;
+
+                var receipt = new CashReceipt
+                {
+                    ReceiptDate = date,
+                    CustomerId = customer.CustomerId,
+                    CashAccountId = cashAccountId.Value,
+                    CounterAccountId = customer.AccountId.Value,
+                    Amount = amount.Value,
+                    Description = $"[DIST:{distributor.Id}] إذن استلام مجمع - المنطقة: {areaName ?? "-"} - الموزع: {distributorName ?? "-"}",
+                    Status = "غير مرحلة",
+                    IsPosted = false,
+                    CreatedAt = DateTime.Now,
+                    CreatedBy = User?.Identity?.Name ?? "SYSTEM"
+                };
+
+                _context.CashReceipts.Add(receipt);
+                await _context.SaveChangesAsync();
+
+                receipt.ReceiptNumber = receipt.CashReceiptId.ToString();
+                await _context.SaveChangesAsync();
+
+                await _ledgerPostingService.PostCashReceiptAsync(receipt.CashReceiptId, User?.Identity?.Name ?? "SYSTEM");
+
+                TempData["CashReceiptSuccess"] = $"تم إضافة الإيصال رقم {receipt.CashReceiptId} بنجاح.";
+                return RedirectToAction(nameof(BatchCreate), new
+                {
+                    areaId,
+                    distributorEmployeeId,
+                    batchDate = date.ToString("yyyy-MM-dd"),
+                    batchTime,
+                    autofocus = "customer"
+                });
+            }
+            catch (Exception ex)
+            {
+                TempData["CashReceiptError"] = $"حدث خطأ أثناء إضافة الإيصال: {ex.Message}";
+                return RedirectToAction(nameof(BatchCreate), new { areaId, distributorEmployeeId, batchDate = date.ToString("yyyy-MM-dd"), batchTime });
+            }
+        }
+
         // =========================================================
         // دالة خاصة: تجهيز الاستعلام الأساسي + الفلاتر + البحث + الترتيب
         // نستخدمها في Index و Export حتى لا نكرر الكود.
@@ -212,6 +614,9 @@ namespace ERP.Controllers
             IQueryable<CashReceipt> q = _context.CashReceipts
                 .AsNoTracking()
                 .Include(r => r.Customer)
+                .ThenInclude(c => c.Area)
+                .Include(r => r.Customer)
+                .ThenInclude(c => c.User)
                 .Include(r => r.CashAccount)
                 .Include(r => r.CounterAccount);
 
@@ -259,7 +664,18 @@ namespace ERP.Controllers
                     ["cashAccount"] = r => r.CashAccount != null ? r.CashAccount.AccountName : "",         // حساب الصندوق
                     ["counterAccount"] = r => r.CounterAccount != null ? r.CounterAccount.AccountName : "",   // حساب الطرف
                     ["description"] = r => r.Description ?? "",                                           // البيان
-                    ["status"] = r => r.IsPosted ? "مرحلة 1" : "غير مرحلة"                                // حالة الترحيل كنص
+                    ["status"] = r => r.IsPosted ? "مرحل" : "غير مرحل",                               // حالة الترحيل كنص
+                    ["writer"] = r => r.CreatedBy ?? "",
+                    ["region"] = r => r.Customer != null
+                        ? (r.Customer.Area != null ? r.Customer.Area.AreaName : (r.Customer.RegionName ?? ""))
+                        : "",
+                    ["employee"] = r => r.Customer != null && r.Customer.UserId.HasValue
+                        ? (_context.Employees
+                            .Where(e => e.UserId == r.Customer.UserId)
+                            .OrderByDescending(e => e.IsActive)
+                            .Select(e => e.FullName)
+                            .FirstOrDefault() ?? "")
+                        : ""
                 };
 
             // الحقول الرقمية (int) التى يمكن البحث فيها
@@ -281,6 +697,17 @@ namespace ERP.Controllers
                     ["CounterAccount"] = r => r.CounterAccount != null ? r.CounterAccount.AccountName : "",
                     ["Amount"] = r => r.Amount,                             // المبلغ
                     ["IsPosted"] = r => r.IsPosted,                           // الترحيل
+                    ["CreatedBy"] = r => r.CreatedBy ?? "",
+                    ["Region"] = r => r.Customer != null
+                        ? (r.Customer.Area != null ? r.Customer.Area.AreaName : (r.Customer.RegionName ?? ""))
+                        : "",
+                    ["Employee"] = r => r.Customer != null && r.Customer.UserId.HasValue
+                        ? (_context.Employees
+                            .Where(e => e.UserId == r.Customer.UserId)
+                            .OrderByDescending(e => e.IsActive)
+                            .Select(e => e.FullName)
+                            .FirstOrDefault() ?? "")
+                        : "",
                     ["CreatedAt"] = r => r.CreatedAt,                          // تاريخ الإنشاء
                     ["UpdatedAt"] = r => r.UpdatedAt ?? DateTime.MinValue      // آخر تعديل
                 };
@@ -303,12 +730,15 @@ namespace ERP.Controllers
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
-        private static IQueryable<CashReceipt> ApplyColumnFilters(
+        private IQueryable<CashReceipt> ApplyColumnFilters(
             IQueryable<CashReceipt> query,
             string? filterCol_id,
             string? filterCol_receiptNumber,
             string? filterCol_date,
             string? filterCol_customer,
+            string? filterCol_region,
+            string? filterCol_employee,
+            string? filterCol_writer,
             string? filterCol_cashAccount,
             string? filterCol_counterAccount,
             string? filterCol_amount,
@@ -351,6 +781,36 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(r => r.Customer != null && vals.Contains(r.Customer.CustomerName));
             }
+            if (!string.IsNullOrWhiteSpace(filterCol_region))
+            {
+                var vals = filterCol_region.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                {
+                    query = query.Where(r =>
+                        r.Customer != null &&
+                        vals.Contains(r.Customer.Area != null ? r.Customer.Area.AreaName : (r.Customer.RegionName ?? "")));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_employee))
+            {
+                var vals = filterCol_employee.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                {
+                    query = query.Where(r =>
+                        r.Customer != null &&
+                        r.Customer.UserId.HasValue &&
+                        _context.Employees.Any(e => e.UserId == r.Customer.UserId && vals.Contains(e.FullName)));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_writer))
+            {
+                var vals = filterCol_writer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(r => r.CreatedBy != null && vals.Contains(r.CreatedBy));
+            }
             if (!string.IsNullOrWhiteSpace(filterCol_cashAccount))
             {
                 var vals = filterCol_cashAccount.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -378,12 +838,12 @@ namespace ERP.Controllers
             {
                 var vals = filterCol_posted.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x.Trim().ToLowerInvariant())
-                    .Where(x => x == "true" || x == "1" || x == "مرحّل" || x == "مرحلة 1" || x == "false" || x == "0" || x == "مسودة" || x == "غير مرحلة")
+                    .Where(x => x == "true" || x == "1" || x == "مرحل" || x == "مرحّل" || x == "مرحلة 1" || x == "false" || x == "0" || x == "مسودة" || x == "غير مرحلة" || x == "غير مرحل")
                     .ToList();
                 if (vals.Count > 0)
                 {
-                    var postTrue = vals.Any(v => v == "true" || v == "1" || v == "مرحّل" || v == "مرحلة 1");
-                    var postFalse = vals.Any(v => v == "false" || v == "0" || v == "مسودة" || v == "غير مرحلة");
+                    var postTrue = vals.Any(v => v == "true" || v == "1" || v == "مرحل" || v == "مرحّل" || v == "مرحلة 1");
+                    var postFalse = vals.Any(v => v == "false" || v == "0" || v == "مسودة" || v == "غير مرحلة" || v == "غير مرحل");
                     if (postTrue && !postFalse) query = query.Where(r => r.IsPosted);
                     else if (postFalse && !postTrue) query = query.Where(r => !r.IsPosted);
                 }
@@ -406,6 +866,9 @@ namespace ERP.Controllers
             var canViewInvestors = await CanViewInvestorsAsync();
             IQueryable<CashReceipt> q = _context.CashReceipts.AsNoTracking()
                 .Include(r => r.Customer)
+                .ThenInclude(c => c.Area)
+                .Include(r => r.Customer)
+                .ThenInclude(c => c.User)
                 .Include(r => r.CashAccount)
                 .Include(r => r.CounterAccount);
 
@@ -436,6 +899,42 @@ namespace ERP.Controllers
                 if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
                 return Json(list.Select(v => new { value = v, display = v }));
             }
+            if (columnLower == "region")
+            {
+                var list = await q
+                    .Where(r => r.Customer != null)
+                    .Select(r => r.Customer!.Area != null ? r.Customer.Area.AreaName : (r.Customer.RegionName ?? ""))
+                    .Where(s => s != "")
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .Take(500)
+                    .ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "employee")
+            {
+                var userIdsQuery = q
+                    .Where(r => r.Customer != null && r.Customer.UserId.HasValue)
+                    .Select(r => r.Customer!.UserId!.Value)
+                    .Distinct();
+                var list = await _context.Employees.AsNoTracking()
+                    .Where(e => e.UserId.HasValue && userIdsQuery.Contains(e.UserId.Value))
+                    .Select(e => e.FullName)
+                    .Where(s => s != "")
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .Take(500)
+                    .ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "writer" || columnLower == "createdby")
+            {
+                var list = await q.Where(r => r.CreatedBy != null && r.CreatedBy != "").Select(r => r.CreatedBy!).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
             if (columnLower == "cashaccount")
             {
                 var list = await q.Where(r => r.CashAccount != null).Select(r => r.CashAccount!.AccountName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
@@ -455,7 +954,7 @@ namespace ERP.Controllers
             }
             if (columnLower == "posted" || columnLower == "isposted")
             {
-                return Json(new[] { new { value = "true", display = "مرحلة 1" }, new { value = "false", display = "غير مرحلة" } });
+                return Json(new[] { new { value = "true", display = "مرحل" }, new { value = "false", display = "غير مرحل" } });
             }
             if (columnLower == "created" || columnLower == "createdat")
             {
@@ -495,6 +994,9 @@ namespace ERP.Controllers
             string? filterCol_receiptNumber = null,
             string? filterCol_date = null,
             string? filterCol_customer = null,
+            string? filterCol_region = null,
+            string? filterCol_employee = null,
+            string? filterCol_writer = null,
             string? filterCol_cashAccount = null,
             string? filterCol_counterAccount = null,
             string? filterCol_amount = null,
@@ -531,7 +1033,7 @@ namespace ERP.Controllers
                 restrictedOnly,
                 searchMode);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_receiptNumber, filterCol_date, filterCol_customer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc, filterCol_idExpr, filterCol_amountExpr);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_receiptNumber, filterCol_date, filterCol_customer, filterCol_region, filterCol_employee, filterCol_writer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc, filterCol_idExpr, filterCol_amountExpr);
 
             var totalAmount = await q.Select(r => (decimal?)r.Amount).SumAsync() ?? 0m;
             int totalCount = await q.CountAsync();
@@ -548,6 +1050,22 @@ namespace ERP.Controllers
                 .Skip((page - 1) * effectivePageSize)
                 .Take(effectivePageSize)
                 .ToListAsync();
+
+            var userIds = items.Where(r => r.Customer?.UserId.HasValue == true)
+                .Select(r => r.Customer!.UserId!.Value)
+                .Distinct()
+                .ToList();
+            var employeeByUserId = userIds.Count == 0
+                ? new Dictionary<int, string>()
+                : await _context.Employees.AsNoTracking()
+                    .Where(e => e.UserId.HasValue && userIds.Contains(e.UserId.Value))
+                    .GroupBy(e => e.UserId!.Value)
+                    .Select(g => new
+                    {
+                        UserId = g.Key,
+                        Name = g.OrderByDescending(e => e.IsActive).ThenBy(e => e.FullName).Select(e => e.FullName).FirstOrDefault() ?? ""
+                    })
+                    .ToDictionaryAsync(x => x.UserId, x => x.Name);
 
             var model = new PagedResult<CashReceipt>(items, page, pageSize, totalCount)
             {
@@ -571,6 +1089,9 @@ namespace ERP.Controllers
             ViewBag.FilterCol_ReceiptNumber = filterCol_receiptNumber;
             ViewBag.FilterCol_Date = filterCol_date;
             ViewBag.FilterCol_Customer = filterCol_customer;
+            ViewBag.FilterCol_Region = filterCol_region;
+            ViewBag.FilterCol_Employee = filterCol_employee;
+            ViewBag.FilterCol_Writer = filterCol_writer;
             ViewBag.FilterCol_CashAccount = filterCol_cashAccount;
             ViewBag.FilterCol_CounterAccount = filterCol_counterAccount;
             ViewBag.FilterCol_Amount = filterCol_amount;
@@ -582,6 +1103,7 @@ namespace ERP.Controllers
             ViewBag.PageSize = pageSize;
             ViewBag.TotalCount = totalCount;
             ViewBag.TotalAmount = totalAmount;
+            ViewBag.EmployeeByUserId = employeeByUserId;
 
             return View(model);
         }
@@ -641,7 +1163,12 @@ namespace ERP.Controllers
         // =========================================================
 
         // GET: CashReceipts/Create — يدعم إنشاء جديد أو عرض إذن موجود (مثل إذن الدفع)
-        public async Task<IActionResult> Create(int? id = null, int? customerId = null)
+        public async Task<IActionResult> Create(
+            int? id = null,
+            int? customerId = null,
+            int? groupAreaId = null,
+            int? groupDistributorUserId = null,
+            DateTime? groupDate = null)
         {
             CashReceipt model;
 
@@ -675,7 +1202,7 @@ namespace ERP.Controllers
 
                 model = new CashReceipt
                 {
-                    ReceiptDate = DateTime.Now.Date,
+                    ReceiptDate = (groupDate ?? DateTime.Now).Date,
                     Status = "غير مرحلة",
                     IsPosted = false,
                     CashAccountId = defaultId ?? 0
@@ -699,18 +1226,39 @@ namespace ERP.Controllers
                 }
             }
 
-            await PopulateDropdownsAsync(model.CustomerId, model.CashAccountId > 0 ? (int?)model.CashAccountId : null, model.CounterAccountId > 0 ? (int?)model.CounterAccountId : null);
+            await PopulateDropdownsAsync(
+                model.CustomerId,
+                model.CashAccountId > 0 ? (int?)model.CashAccountId : null,
+                model.CounterAccountId > 0 ? (int?)model.CounterAccountId : null,
+                groupAreaId,
+                groupDistributorUserId);
+            await SetGroupedContextViewBagAsync(groupAreaId, groupDistributorUserId, groupDate);
+            await PopulateCreateNavigationAsync(model.CashReceiptId > 0 ? model.CashReceiptId : null);
             return View(model);
         }
 
         // POST: CashReceipts/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("CashReceiptId,ReceiptDate,CustomerId,CashAccountId,CounterAccountId,Amount,Description")]
-                                                CashReceipt cashReceipt)
+        public async Task<IActionResult> Create(
+            [Bind("CashReceiptId,ReceiptDate,CustomerId,CashAccountId,CounterAccountId,Amount,Description")] CashReceipt cashReceipt,
+            int? groupAreaId = null,
+            int? groupDistributorUserId = null,
+            DateTime? groupDate = null)
         {
             // ✅ تجاهل خطأ التحقق لـ ReceiptNumber لأنه سيتم توليده تلقائياً
             ModelState.Remove(nameof(CashReceipt.ReceiptNumber));
+
+            // في وضع سريع/مجمّع: لو حساب الطرف لم يُرسل من الواجهة نملؤه تلقائياً من حساب العميل.
+            if (cashReceipt.CustomerId.HasValue && cashReceipt.CustomerId.Value > 0 && cashReceipt.CounterAccountId <= 0)
+            {
+                var customerAccountId = await _context.Customers.AsNoTracking()
+                    .Where(c => c.CustomerId == cashReceipt.CustomerId.Value)
+                    .Select(c => c.AccountId)
+                    .FirstOrDefaultAsync();
+                if (customerAccountId.HasValue && customerAccountId.Value > 0)
+                    cashReceipt.CounterAccountId = customerAccountId.Value;
+            }
             
             // ✅ تسجيل القيم الواردة للتأكد من وصولها (للـ debugging)
             // يمكن إزالة هذا لاحقاً بعد حل المشكلة
@@ -744,11 +1292,20 @@ namespace ERP.Controllers
                 ModelState.AddModelError(nameof(CashReceipt.Amount), "يجب إدخال مبلغ أكبر من الصفر.");
             }
 
+            if (groupDate.HasValue && cashReceipt.ReceiptDate == default)
+                cashReceipt.ReceiptDate = groupDate.Value.Date;
+
             if (cashReceipt.CustomerId.HasValue && cashReceipt.CustomerId.Value > 0)
             {
                 var cust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == cashReceipt.CustomerId.Value);
                 if (cust != null && !cust.IsActive)
                     ModelState.AddModelError(nameof(CashReceipt.CustomerId), "لا يمكن التعامل مع عميل غير نشط. يرجى تفعيل العميل أولاً.");
+
+                if (cust != null && groupAreaId.HasValue && groupAreaId.Value > 0 && cust.AreaId != groupAreaId.Value)
+                    ModelState.AddModelError(nameof(CashReceipt.CustomerId), "العميل المختار ليس ضمن المنطقة المحددة للدورة.");
+
+                if (cust != null && groupDistributorUserId.HasValue && groupDistributorUserId.Value > 0 && cust.UserId != groupDistributorUserId.Value)
+                    ModelState.AddModelError(nameof(CashReceipt.CustomerId), "العميل المختار غير مرتبط بالموزع المحدد للدورة.");
             }
             
             if (ModelState.IsValid)
@@ -804,7 +1361,9 @@ namespace ERP.Controllers
                         .FirstOrDefaultAsync(r => r.CashReceiptId == cashReceipt.CashReceiptId);
                     if (saved != null)
                     {
-                        await PopulateDropdownsAsync(saved.CustomerId, saved.CashAccountId, saved.CounterAccountId);
+                        await PopulateDropdownsAsync(saved.CustomerId, saved.CashAccountId, saved.CounterAccountId, groupAreaId, groupDistributorUserId);
+                        await SetGroupedContextViewBagAsync(groupAreaId, groupDistributorUserId, groupDate);
+                        await PopulateCreateNavigationAsync(saved.CashReceiptId);
                         if (saved.CustomerId.HasValue)
                             ViewBag.LockCustomer = true;
                         return View(saved);
@@ -837,7 +1396,9 @@ namespace ERP.Controllers
                         catch { /* تجاهل أخطاء الحذف */ }
                     }
                     
-                    await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+                    await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId, groupAreaId, groupDistributorUserId);
+                    await SetGroupedContextViewBagAsync(groupAreaId, groupDistributorUserId, groupDate);
+                    await PopulateCreateNavigationAsync(cashReceipt.CashReceiptId > 0 ? cashReceipt.CashReceiptId : null);
                     if (cashReceipt.CustomerId.HasValue)
                         ViewBag.LockCustomer = true;
                     return View(cashReceipt);
@@ -845,7 +1406,9 @@ namespace ERP.Controllers
             }
 
             // لو هناك خطأ تحقق نرجّع القوائم المنسدلة
-            await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+            await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId, groupAreaId, groupDistributorUserId);
+            await SetGroupedContextViewBagAsync(groupAreaId, groupDistributorUserId, groupDate);
+            await PopulateCreateNavigationAsync(cashReceipt.CashReceiptId > 0 ? cashReceipt.CashReceiptId : null);
             if (cashReceipt.CustomerId.HasValue)
                 ViewBag.LockCustomer = true;
             return View(cashReceipt);
@@ -873,6 +1436,7 @@ namespace ERP.Controllers
                 ViewBag.LockCustomer = true;
 
             await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+            await PopulateCreateNavigationAsync(cashReceipt.CashReceiptId);
             return View("Create", cashReceipt);
         }
 
@@ -896,6 +1460,7 @@ namespace ERP.Controllers
             if (!ModelState.IsValid)
             {
                 await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+                await PopulateCreateNavigationAsync(cashReceipt.CashReceiptId > 0 ? cashReceipt.CashReceiptId : null);
                 if (cashReceipt.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
                 return View("Create", cashReceipt);
@@ -977,6 +1542,7 @@ namespace ERP.Controllers
 
                 TempData["CashReceiptSuccess"] = "تم تعديل وترحيل إذن الاستلام بنجاح.";
                 await PopulateDropdownsAsync(existing.CustomerId, existing.CashAccountId, existing.CounterAccountId);
+                await PopulateCreateNavigationAsync(existing.CashReceiptId);
                 if (existing.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
                 return View("Create", existing);
@@ -985,6 +1551,7 @@ namespace ERP.Controllers
             {
                 TempData["CashReceiptError"] = $"حدث خطأ: {ex.Message}";
                 await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+                await PopulateCreateNavigationAsync(cashReceipt.CashReceiptId > 0 ? cashReceipt.CashReceiptId : null);
                 if (cashReceipt.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
                 return View("Create", cashReceipt);
@@ -1164,6 +1731,9 @@ namespace ERP.Controllers
             string? filterCol_receiptNumber = null,
             string? filterCol_date = null,
             string? filterCol_customer = null,
+            string? filterCol_region = null,
+            string? filterCol_employee = null,
+            string? filterCol_writer = null,
             string? filterCol_cashAccount = null,
             string? filterCol_counterAccount = null,
             string? filterCol_amount = null,
@@ -1191,19 +1761,44 @@ namespace ERP.Controllers
                 restrictedOnly,
                 searchMode);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_receiptNumber, filterCol_date, filterCol_customer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc, filterCol_idExpr, filterCol_amountExpr);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_receiptNumber, filterCol_date, filterCol_customer, filterCol_region, filterCol_employee, filterCol_writer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc, filterCol_idExpr, filterCol_amountExpr);
 
             var list = await q.ToListAsync();
+            var userIds = list
+                .Where(r => r.Customer != null && r.Customer.UserId.HasValue)
+                .Select(r => r.Customer!.UserId!.Value)
+                .Distinct()
+                .ToList();
+            var employeeByUserId = userIds.Count == 0
+                ? new Dictionary<int, string>()
+                : await _context.Employees.AsNoTracking()
+                    .Where(e => e.UserId.HasValue && userIds.Contains(e.UserId.Value))
+                    .GroupBy(e => e.UserId!.Value)
+                    .Select(g => new
+                    {
+                        UserId = g.Key,
+                        Name = g.OrderByDescending(e => e.IsActive)
+                            .ThenBy(e => e.FullName)
+                            .Select(e => e.FullName)
+                            .FirstOrDefault() ?? ""
+                    })
+                    .ToDictionaryAsync(x => x.UserId, x => x.Name);
 
             var sb = new StringBuilder();
 
-            sb.AppendLine("رقم الإذن,رقم المستند,تاريخ الإذن,الطرف,حساب الصندوق/البنك,حساب الطرف,المبلغ,مرحّل؟,تاريخ الإنشاء,آخر تعديل,البيان");
+            sb.AppendLine("رقم الإذن,رقم المستند,تاريخ الإذن,الطرف,المنطقة,الموظف,الكاتب,حساب الصندوق/البنك,حساب الطرف,المبلغ,مرحّل؟,تاريخ الإنشاء,آخر تعديل,البيان");
 
             static string Q(string? s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
 
             foreach (var r in list)
             {
                 string customerName = r.Customer?.CustomerName ?? "";
+                string regionName = r.Customer?.Area?.AreaName ?? r.Customer?.RegionName ?? "";
+                string employeeName = (r.Customer != null
+                                       && r.Customer.UserId.HasValue
+                                       && employeeByUserId.TryGetValue(r.Customer.UserId.Value, out var empName))
+                    ? empName
+                    : "";
                 string cashAcc = r.CashAccount?.AccountName ?? "";
                 string counterAcc = r.CounterAccount?.AccountName ?? "";
 
@@ -1212,6 +1807,9 @@ namespace ERP.Controllers
                     Q(r.ReceiptNumber),
                     r.ReceiptDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                     Q(customerName),
+                    Q(regionName),
+                    Q(employeeName),
+                    Q(r.CreatedBy),
                     Q(cashAcc),
                     Q(counterAcc),
                     r.Amount.ToString("0.00", CultureInfo.InvariantCulture),

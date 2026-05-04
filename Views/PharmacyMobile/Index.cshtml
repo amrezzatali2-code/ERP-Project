@@ -1,0 +1,1404 @@
+@{
+    Layout = null;
+    ViewData["Title"] = "تطبيق الصيدلي";
+}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        :root {
+            --bg: #eef7fc;
+            --surface: #ffffff;
+            --surface-alt: #f6fbff;
+            --ink: #0b2235;
+            --muted: #466276;
+            --line: #bfd6e6;
+            --line-strong: #8db4cc;
+            --brand: #0ea5d7;
+            --brand-strong: #0b7db8;
+            --ok: #15805d;
+            --danger: #c43d3d;
+            --cta: #0f8fcc;
+            --badge: #e6f7ff;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--ink);
+            font-family: "Cairo", "Tajawal", "Segoe UI", sans-serif;
+            font-size: 16px;
+            line-height: 1.65;
+            background:
+                radial-gradient(circle at top right, rgba(102, 196, 234, .2), transparent 26%),
+                linear-gradient(180deg, #d7effa 0%, var(--bg) 220px, #f8fcff 100%);
+        }
+        .page { max-width: 1220px; margin: 0 auto; padding: 18px 18px 108px; }
+        .brand-strip {
+            margin-bottom: 12px;
+            border-radius: 22px;
+            border: 1px solid rgba(255,255,255,.28);
+            color: #fff;
+            background: linear-gradient(120deg, #0d7eb2 0%, #10b8d9 52%, #5dc8e7 100%);
+            box-shadow: 0 12px 30px rgba(11, 125, 184, .24);
+            padding: 18px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .brand-title { margin: 0; font-size: 1.25rem; font-weight: 900; }
+        .brand-sub { margin: 6px 0 0; font-size: .98rem; opacity: .95; }
+        .brand-badge {
+            background: rgba(255,255,255,.2);
+            border: 1px solid rgba(255,255,255,.4);
+            border-radius: 999px;
+            padding: 7px 13px;
+            font-size: .9rem;
+            font-weight: 800;
+        }
+        .brand-badge-action {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            min-width: 148px;
+            padding: 9px 16px;
+        }
+        .panel {
+            background: var(--surface);
+            border-radius: 22px;
+            border: 1px solid var(--line);
+            box-shadow: 0 16px 32px rgba(8, 61, 92, .08);
+            padding: 18px;
+            margin-bottom: 14px;
+        }
+        h1 { margin: 0 0 10px; font-size: 1.18rem; }
+        .small { color: var(--muted); font-size: .92rem; }
+        .row { display: grid; grid-template-columns: 1fr; gap: 8px; }
+        .section-title {
+            margin: 0 0 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.08rem;
+            font-weight: 800;
+        }
+        .section-title::before {
+            content: "";
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--brand);
+            box-shadow: 0 0 0 4px #d9f4ff;
+        }
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .control-grid .wide {
+            grid-column: span 2;
+        }
+        .split-input-btn {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+        }
+        .customer-box {
+            border: 1px solid #d3e5f0;
+            border-radius: 16px;
+            background: linear-gradient(180deg, #fbfeff 0%, #f2f9fd 100%);
+            padding: 14px;
+            color: #173448;
+        }
+        .customer-box .line { font-size: .98rem; margin: 4px 0; }
+        .input {
+            width: 100%;
+            border: 1px solid var(--line-strong);
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: 1rem;
+            background: #fff;
+            color: #123047;
+            min-height: 54px;
+        }
+        .input:focus {
+            outline: none;
+            border-color: var(--brand);
+            box-shadow: 0 0 0 4px rgba(14,165,215,.15);
+        }
+        .search-wrap {
+            position: relative;
+        }
+        .search-suggest {
+            position: absolute;
+            right: 0;
+            left: 0;
+            top: calc(100% + 4px);
+            z-index: 30;
+            background: #fff;
+            border: 1px solid #b9d7e9;
+            border-radius: 16px;
+            box-shadow: 0 16px 28px rgba(12, 125, 182, .14);
+            max-height: 280px;
+            overflow-y: auto;
+            display: none;
+        }
+        .search-suggest.open {
+            display: block;
+        }
+        .search-item {
+            cursor: pointer;
+            padding: 10px 12px;
+            border-bottom: 1px solid #eef6fb;
+        }
+        .search-item:last-child {
+            border-bottom: none;
+        }
+        .search-item:hover {
+            background: #f2f9ff;
+        }
+        .search-item .n {
+            font-size: .98rem;
+            font-weight: 800;
+            color: #0f2e46;
+        }
+        .search-item .m {
+            margin-top: 4px;
+            font-size: .86rem;
+            color: #5c7487;
+        }
+        .btn {
+            border: none;
+            border-radius: 14px;
+            color: #fff;
+            padding: 12px 14px;
+            font-size: 1rem;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all .18s ease;
+            font-weight: 800;
+            box-shadow: 0 8px 18px rgba(13, 106, 152, .18);
+        }
+        .btn-code {
+            --btn-main: #0b7eb5;
+            background: linear-gradient(120deg, #0d9fc3, #0b7eb5);
+        }
+        .btn-login {
+            --btn-main: #1369af;
+            background: linear-gradient(120deg, #1e83c9, #1369af);
+        }
+        .btn-add {
+            --btn-main: var(--ok);
+            background: var(--ok);
+            min-width: 44px;
+        }
+        .btn-sub {
+            --btn-main: var(--danger);
+            background: var(--danger);
+            min-width: 44px;
+        }
+        .btn-cart {
+            --btn-main: #0f7fb4;
+            background: linear-gradient(120deg, #0f9bc8, #0f7fb4);
+            width: 100%;
+            margin-top: 9px;
+            font-weight: 700;
+        }
+        .btn-logout {
+            --btn-main: #4f6576;
+            background: linear-gradient(120deg, #627788, #4f6576);
+            min-width: 148px;
+            font-weight: 900;
+        }
+        .btn:hover,
+        .btn:focus-visible,
+        .btn:active {
+            background: #fff !important;
+            color: var(--btn-main, #0f8fcc) !important;
+            border-color: var(--btn-main, #0f8fcc) !important;
+            box-shadow: 0 4px 10px rgba(9, 95, 142, .12);
+            outline: none;
+        }
+        .products {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 14px;
+        }
+        .toolbar {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            box-shadow: 0 10px 24px rgba(15, 143, 204, .08);
+            padding: 14px;
+            margin: 12px 0 14px;
+            display: grid;
+            gap: 10px;
+        }
+        .toolbar-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .toolbar-title {
+            font-size: .98rem;
+            color: #35566d;
+            font-weight: 800;
+        }
+        .toolbar-count {
+            background: var(--badge);
+            border: 1px solid #b9e9fb;
+            color: #0e6f9f;
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: .88rem;
+            font-weight: 800;
+        }
+        .chip-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .chip {
+            border: 1px solid #b9d7e9;
+            background: #fff;
+            color: #305a73;
+            border-radius: 999px;
+            padding: 8px 14px;
+            font-size: .9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: .15s ease;
+        }
+        .chip:hover {
+            border-color: #8ecded;
+            background: #f1faff;
+        }
+        .chip.active {
+            color: #fff;
+            border-color: transparent;
+            background: linear-gradient(120deg, #0f97ca, #0f75b1);
+            box-shadow: 0 5px 10px rgba(15, 117, 177, .25);
+        }
+        .action-chooser {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .action-btn {
+            border: 1px solid #9fd1ea;
+            background: #f5fbff;
+            color: #0f577d;
+            border-radius: 16px;
+            padding: 15px;
+            font-size: 1rem;
+            font-weight: 900;
+            cursor: pointer;
+            transition: all .18s ease;
+        }
+        .action-btn:hover {
+            border-color: #0f8fcc;
+            background: #ffffff;
+            color: #0f8fcc;
+        }
+        .action-btn.active {
+            border-color: transparent;
+            background: linear-gradient(120deg, #0f9bc8, #0f7fb4);
+            color: #fff;
+            box-shadow: 0 6px 12px rgba(15, 127, 180, .22);
+        }
+        .statement-summary {
+            border: 1px solid var(--line);
+            background: var(--surface-alt);
+            border-radius: 16px;
+            padding: 14px;
+            margin-bottom: 12px;
+            line-height: 1.8;
+            font-size: .98rem;
+        }
+        .statement-summary-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .statement-summary-name {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #123047;
+        }
+        .statement-summary-code {
+            color: var(--muted);
+            font-size: .86rem;
+            font-weight: 700;
+        }
+        .statement-summary-inline {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            color: #35566d;
+            font-size: .87rem;
+        }
+        .statement-summary-cards {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .statement-summary-card {
+            border-radius: 14px;
+            padding: 10px 12px;
+            color: #fff;
+            box-shadow: 0 8px 18px rgba(15, 143, 204, .12);
+        }
+        .statement-summary-card .label {
+            font-size: .82rem;
+            font-weight: 700;
+            opacity: .92;
+        }
+        .statement-summary-card .value {
+            margin-top: 4px;
+            font-size: 1.28rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+        .statement-summary-card.debit {
+            background: linear-gradient(120deg, #ef5350, #d64545);
+        }
+        .statement-summary-card.credit {
+            background: linear-gradient(120deg, #20b26b, #159f7c);
+        }
+        .statement-summary-card.balance {
+            background: linear-gradient(120deg, #0f9bc8, #0f7fb4);
+        }
+        .statement-summary-card.limit {
+            background: linear-gradient(120deg, #6f86d6, #4c63c7);
+        }
+        .statement-table-wrap {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            overflow: auto;
+            background: #fff;
+        }
+        .statement-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 760px;
+            font-size: .87rem;
+        }
+        .statement-table th,
+        .statement-table td {
+            border-bottom: 1px solid #e5eff6;
+            padding: 8px 10px;
+            white-space: nowrap;
+            text-align: right;
+            vertical-align: top;
+        }
+        .statement-table th {
+            background: #f3f9ff;
+            color: #235068;
+            font-weight: 800;
+        }
+        .statement-toggle-cell {
+            width: 52px;
+            text-align: center !important;
+        }
+        .statement-toggle {
+            width: 28px;
+            height: 28px;
+            border: 1px solid #9fd1ea;
+            border-radius: 8px;
+            background: #f4fbff;
+            color: #0f7fb4;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        .statement-toggle:hover {
+            background: #0f8fcc;
+            color: #fff;
+            border-color: #0f8fcc;
+        }
+        .statement-toggle:disabled {
+            opacity: .35;
+            cursor: default;
+        }
+        .statement-detail-row {
+            display: none;
+        }
+        .statement-detail-row.open {
+            display: table-row;
+        }
+        .statement-detail-cell {
+            padding: 0 !important;
+            background: #fbfeff;
+        }
+        .statement-detail-box {
+            padding: 12px;
+            border-top: 1px dashed #cfe1ef;
+        }
+        .statement-detail-title {
+            color: #235068;
+            font-size: .9rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+        .statement-detail-grid {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 540px;
+        }
+        .statement-detail-grid th,
+        .statement-detail-grid td {
+            padding: 7px 8px;
+            border-bottom: 1px solid #e7f1f8;
+            text-align: right;
+            white-space: nowrap;
+            font-size: .83rem;
+        }
+        .statement-detail-grid th {
+            background: #eef8ff;
+            color: #35566d;
+            font-weight: 800;
+        }
+        .statement-muted {
+            color: var(--muted);
+        }
+        .card {
+            background: #fff;
+            border-radius: 14px;
+            padding: 12px;
+            border: 1px solid #d9eaf6;
+            box-shadow: 0 8px 18px rgba(15, 143, 204, .11);
+            position: relative;
+        }
+        .card::before {
+            content: "";
+            position: absolute;
+            right: 0;
+            left: 0;
+            top: 0;
+            height: 5px;
+            border-radius: 14px 14px 0 0;
+            background: linear-gradient(90deg, #0f84be, #45c7e6);
+        }
+        .title {
+            font-weight: 700;
+            line-height: 1.45;
+            min-height: 44px;
+            margin-top: 2px;
+            font-size: .98rem;
+        }
+        .meta { color: var(--muted); font-size: .83rem; margin: 2px 0; }
+        .price { color: #0b70b8; font-weight: 800; font-size: 1.15rem; }
+        .discount {
+            color: #b42318;
+            font-weight: 800;
+            background: #fff4f4;
+            border: 1px solid #ffd9d9;
+            border-radius: 999px;
+            padding: 3px 9px;
+            display: inline-block;
+            margin-top: 2px;
+        }
+        .qty-box { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+        .qty-input {
+            flex: 1; text-align: center; border: 1px solid #d1d5db;
+            border-radius: 8px; padding: 8px; font-size: 1rem; min-width: 52px;
+        }
+        .offers { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+        .offer-row { display: flex; justify-content: space-between; gap: 6px; font-size: .84rem; margin-bottom: 4px; }
+        .footer {
+            position: fixed; right: 0; left: 0; bottom: 0; background: #fff;
+            border-top: 1px solid var(--line);
+            padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+            box-shadow: 0 -8px 22px rgba(12, 125, 182, .12);
+        }
+        .footer-wrap {
+            max-width: 1160px; margin: 0 auto; display: grid;
+            grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+        }
+        .checkout {
+            --btn-main: #0f6faf;
+            background: linear-gradient(120deg, #0f8fcc, #0f6faf);
+            color: #fff; border: none; border-radius: 12px;
+            padding: 12px 15px; font-weight: 700; font-size: 1rem; cursor: pointer;
+            transition: all .18s ease;
+        }
+        .checkout:hover,
+        .checkout:focus-visible,
+        .checkout:active {
+            background: #fff;
+            color: var(--btn-main);
+            border: 1px solid var(--btn-main);
+            box-shadow: 0 4px 10px rgba(9, 95, 142, .12);
+            outline: none;
+        }
+        .center-toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(.96);
+            z-index: 99999;
+            min-width: 240px;
+            max-width: 90vw;
+            text-align: center;
+            color: #fff;
+            background: linear-gradient(120deg, #10a6cf, #0d7fb7);
+            border: 1px solid rgba(255,255,255,.28);
+            border-radius: 14px;
+            box-shadow: 0 14px 28px rgba(8, 82, 122, .32);
+            padding: 12px 16px;
+            font-size: 1rem;
+            font-weight: 700;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s ease, transform .2s ease;
+        }
+        .center-toast.error {
+            background: linear-gradient(120deg, #d64f4f, #bf3f3f);
+            box-shadow: 0 14px 28px rgba(120, 35, 35, .28);
+        }
+        .center-toast.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        @@media (max-width: 920px) {
+            .control-grid { grid-template-columns: 1fr; }
+            .control-grid .wide { grid-column: span 1; }
+            .footer-wrap { grid-template-columns: 1fr 1fr; }
+            .checkout { grid-column: span 2; }
+            .action-chooser { grid-template-columns: 1fr; }
+            .statement-summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <section class="brand-strip">
+            <div>
+                <p id="brandCompanyName" class="brand-title">Pharma B2B Storefront</p>
+                <p class="brand-sub">كتالوج صيدلي احترافي لطلب الأصناف من شركات التوزيع</p>
+            </div>
+            <button id="logoutBtnHeader" type="button" class="btn btn-logout brand-badge brand-badge-action">تسجيل خروج</button>
+        </section>
+
+        <section id="loginPanel" class="panel">
+            <h1 class="section-title">تسجيل دخول الصيدلي</h1>
+            <div class="row">
+                <input id="loginUser" class="input" placeholder="اسم المستخدم" />
+                <input id="loginPass" class="input" type="password" placeholder="كلمة السر" />
+                <button id="loginBtn" class="btn btn-login">دخول التطبيق</button>
+            </div>
+            <div id="loginMsg" class="small" style="margin-top:8px;"></div>
+        </section>
+
+        <section id="appPanel" class="panel" style="display:none;">
+            <h1 class="section-title">متجر الصيدلي الإلكتروني</h1>
+            <div id="userInfo" class="small"></div>
+            <div id="customerInfo" class="customer-box" style="display:none; margin-top:8px;"></div>
+
+            <div class="control-grid">
+                <div class="split-input-btn wide">
+                    <input id="programCodeInput" class="input" placeholder="كود الشركة (هو نفسه كود البرنامج)" />
+                    <button id="programCodeBtn" class="btn btn-code">تأكيد كود الشركة</button>
+                </div>
+
+                <div class="split-input-btn">
+                    <input id="customerCodeInput" class="input" placeholder="كود الصيدلية (العميل)" />
+                    <button id="customerCodeBtn" class="btn btn-code">ربط الصيدلية</button>
+                </div>
+
+                <select id="warehouseSelect" class="input"></select>
+
+                <select id="modeSelect" class="input">
+                    <option value="single">شركة واحدة (بالكود)</option>
+                    <option value="compare">مقارنة الصنف عند كل الشركات</option>
+                </select>
+
+                <div class="search-wrap wide" style="display:none;">
+                    <input id="searchInput" class="input" placeholder="ابحث عن صنف..." />
+                    <div id="searchSuggest" class="search-suggest"></div>
+                </div>
+            </div>
+
+            <div id="postLinkActions" class="action-chooser" style="display:none;">
+                <button id="chooseBalanceBtn" class="action-btn">الرصيد / كشف الحساب</button>
+                <button id="chooseInvoiceBtn" class="action-btn">عمل فاتورة</button>
+            </div>
+        </section>
+
+        <section id="balancePanel" class="toolbar" style="display:none;">
+            <div class="toolbar-top">
+                <span class="toolbar-title">كشف حساب الصيدلية</span>
+            </div>
+            <div id="balanceSummary" class="statement-summary">اختر الصيدلية أولاً ثم اختر الرصيد.</div>
+            <div class="statement-table-wrap">
+                <table class="statement-table">
+                    <thead>
+                        <tr>
+                            <th class="statement-toggle-cell">+</th>
+                            <th>التاريخ</th>
+                            <th>النوع</th>
+                            <th>المرجع</th>
+                            <th>الحساب</th>
+                            <th>الوصف</th>
+                            <th>مدين</th>
+                            <th>دائن</th>
+                            <th>الرصيد الجاري</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statementBody">
+                        <tr><td colspan="9" class="small">لا توجد بيانات حتى الآن.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="invoicePanel" style="display:none;">
+            <section id="catalogToolbar" class="toolbar" style="display:none;">
+                <div class="toolbar-top">
+                    <span class="toolbar-title">كتالوج الأصناف</span>
+                    <span id="resultCount" class="toolbar-count">0 صنف</span>
+                </div>
+                <div class="chip-row">
+                    <button class="chip active" data-sort="default">الكل</button>
+                    <button class="chip" data-sort="discount">الأكثر خصمًا</button>
+                    <button class="chip" data-sort="priceDesc">الأعلى سعرًا</button>
+                    <button class="chip" data-sort="priceAsc">الأقل سعرًا</button>
+                    <button class="chip" data-sort="name">الاسم أ-ي</button>
+                </div>
+            </section>
+
+            <section id="products" class="products"></section>
+        </section>
+    </main>
+
+    <footer id="invoiceFooter" class="footer" style="display:none !important;">
+        <div class="footer-wrap">
+            <div id="cartSummary" class="small">السلة: 0 صنف</div>
+            <button id="checkoutBtn" class="checkout">إنشاء فاتورة</button>
+        </div>
+    </footer>
+    <div id="centerToast" class="center-toast">تم تأكيد كود الشركة</div>
+
+    <script>
+        const state = {
+            customerId: 0,
+            customerName: '',
+            warehouseId: 0,
+            supplierId: 0,
+            companyName: '',
+            mode: 'single',
+            sortMode: 'default',
+            programLinked: false,
+            selectedAction: '',
+            appReady: false,
+            cart: new Map()
+        };
+
+        const ui = {
+            loginPanel: document.getElementById('loginPanel'),
+            appPanel: document.getElementById('appPanel'),
+            loginUser: document.getElementById('loginUser'),
+            loginPass: document.getElementById('loginPass'),
+            loginBtn: document.getElementById('loginBtn'),
+            loginMsg: document.getElementById('loginMsg'),
+            userInfo: document.getElementById('userInfo'),
+            brandCompanyName: document.getElementById('brandCompanyName'),
+            customerInfo: document.getElementById('customerInfo'),
+            programCodeInput: document.getElementById('programCodeInput'),
+            programCodeBtn: document.getElementById('programCodeBtn'),
+            customerCodeInput: document.getElementById('customerCodeInput'),
+            customerCodeBtn: document.getElementById('customerCodeBtn'),
+            warehouseSelect: document.getElementById('warehouseSelect'),
+            modeSelect: document.getElementById('modeSelect'),
+            searchInput: document.getElementById('searchInput'),
+            searchSuggest: document.getElementById('searchSuggest'),
+            postLinkActions: document.getElementById('postLinkActions'),
+            chooseBalanceBtn: document.getElementById('chooseBalanceBtn'),
+            chooseInvoiceBtn: document.getElementById('chooseInvoiceBtn'),
+            balancePanel: document.getElementById('balancePanel'),
+            balanceSummary: document.getElementById('balanceSummary'),
+            statementBody: document.getElementById('statementBody'),
+            invoicePanel: document.getElementById('invoicePanel'),
+            catalogToolbar: document.getElementById('catalogToolbar'),
+            resultCount: document.getElementById('resultCount'),
+            products: document.getElementById('products'),
+            cartSummary: document.getElementById('cartSummary'),
+            checkoutBtn: document.getElementById('checkoutBtn'),
+            logoutBtn: document.getElementById('logoutBtnHeader'),
+            invoiceFooter: document.getElementById('invoiceFooter'),
+            centerToast: document.getElementById('centerToast')
+        };
+        let centerToastTimer = 0;
+
+        function money(v) { return Number(v || 0).toFixed(2); }
+        function normalizePortalRole(role) {
+            const raw = (role || '').toString().trim().toLowerCase();
+            if (raw === 'collector' || raw === 'موزع') return 'Collector';
+            if (raw === 'pharmacist' || raw === 'صيدلي') return 'Pharmacist';
+            return 'Employee';
+        }
+
+        async function getJson(url, options) {
+            const mergedOptions = { cache: 'no-store', ...(options || {}) };
+            const headers = new Headers((options && options.headers) || {});
+            headers.set('Cache-Control', 'no-cache, no-store, max-age=0');
+            headers.set('Pragma', 'no-cache');
+            mergedOptions.headers = headers;
+
+            const res = await fetch(url, mergedOptions);
+            const data = await res.json();
+            if (!res.ok || data.ok === false) throw new Error(data.message || 'حدث خطأ غير متوقع');
+            return data;
+        }
+
+        function updateCartSummary() {
+            let totalItems = 0;
+            for (const q of state.cart.values()) totalItems += q;
+            ui.cartSummary.textContent = `السلة: ${state.cart.size} صنف - عدد ${totalItems} علبة`;
+        }
+
+        function showApp(loggedIn) {
+            ui.loginPanel.style.display = loggedIn ? 'none' : 'block';
+            ui.appPanel.style.display = loggedIn ? 'block' : 'none';
+            ui.logoutBtn.style.display = loggedIn ? 'inline-flex' : 'none';
+            ui.invoiceFooter.style.display = 'none';
+            if (!loggedIn) {
+                ui.catalogToolbar.style.display = 'none';
+                ui.balancePanel.style.display = 'none';
+                ui.invoicePanel.style.display = 'none';
+            }
+        }
+
+        function updateActionUi() {
+            const ready = state.programLinked && state.customerId > 0;
+            const isBalance = ready && state.selectedAction === 'balance';
+            const isInvoice = ready && state.selectedAction === 'invoice';
+
+            ui.postLinkActions.style.display = ready ? 'grid' : 'none';
+            ui.balancePanel.style.display = isBalance ? 'grid' : 'none';
+            ui.invoicePanel.style.display = 'none';
+
+            ui.chooseBalanceBtn.classList.toggle('active', isBalance);
+            ui.chooseInvoiceBtn.classList.toggle('active', isInvoice);
+
+            ui.checkoutBtn.style.display = 'none';
+            ui.cartSummary.style.display = 'none';
+
+            if (!isInvoice) {
+                ui.catalogToolbar.style.display = 'none';
+                ui.products.innerHTML = '';
+                closeSearchSuggest();
+            }
+        }
+
+        function renderCustomerInfo(customer) {
+            const customerName = customer.CustomerName ?? customer.customerName ?? '-';
+            const customerCode = customer.CustomerCode ?? customer.customerCode ?? '-';
+            const currentBalance = Number(customer.CurrentBalance ?? customer.currentBalance ?? 0);
+            const creditLimit = Number(customer.CreditLimit ?? customer.creditLimit ?? 0);
+            const effectiveLimit = Number(customer.EffectiveCreditLimit ?? customer.effectiveCreditLimit ?? 0);
+            const remainingCredit = Number(customer.RemainingCredit ?? customer.remainingCredit ?? 0);
+
+            ui.customerInfo.innerHTML = `
+                <div class="line"><strong>بيانات الصيدلية:</strong> ${customerName} (الكود: ${customerCode})</div>
+                <div class="line"><strong>الرصيد الحالي:</strong> ${money(currentBalance)} ج.م | <strong>الحد الائتماني:</strong> ${money(creditLimit)} ج.م</div>
+                <div class="line"><strong>الحد الفعّال:</strong> ${money(effectiveLimit)} ج.م | <strong>المتاح:</strong> ${money(remainingCredit)} ج.م</div>
+            `;
+            ui.customerInfo.style.display = 'block';
+        }
+
+        function singleCard(item) {
+            const prodId = item.ProdId ?? item.prodId ?? 0;
+            const name = item.Name ?? item.name ?? '';
+            const vendorProductCode = item.VendorProductCode ?? item.vendorProductCode ?? '-';
+            const supplierPrice = item.SupplierPrice ?? item.supplierPrice ?? 0;
+            const companySaleDiscountPercent = item.CompanySaleDiscountPercent ?? item.companySaleDiscountPercent ?? 0;
+            const customerPolicyDiscountPercent = item.CustomerPolicyDiscountPercent ?? item.customerPolicyDiscountPercent ?? 0;
+            const qtyInCart = state.cart.get(prodId) || 1;
+            return `
+                <article class="card" data-id="${prodId}">
+                    <div class="title">${name}</div>
+                    <div class="meta">كود الصنف: ${prodId} | كود الشركة للصنف: ${vendorProductCode}</div>
+                    <div class="price">${money(supplierPrice)} ج.م</div>
+                    <div class="discount">خصم بيع الشركة للصيدلي: ${money(companySaleDiscountPercent)}%</div>
+                    <div class="meta">خصم سياسة ERP المحلي: ${money(customerPolicyDiscountPercent)}%</div>
+                    <div class="qty-box">
+                        <button class="btn btn-add" data-plus>+</button>
+                        <input class="qty-input" data-qty type="number" min="1" value="${qtyInCart}" />
+                        <button class="btn btn-sub" data-minus>-</button>
+                    </div>
+                    <button class="btn btn-cart" data-add>إضافة للسلة</button>
+                </article>
+            `;
+        }
+
+        function compareCard(item) {
+            const name = item.Name ?? item.name ?? '';
+            const basePrice = item.BasePrice ?? item.basePrice ?? 0;
+            const offers = item.Offers ?? item.offers ?? [];
+            const offersHtml = offers.map(o => {
+                const supplierName = o.SupplierName ?? o.supplierName ?? '';
+                const supplierCode = o.SupplierCode ?? o.supplierCode ?? '-';
+                const supplierPrice = o.SupplierPrice ?? o.supplierPrice ?? 0;
+                const discount = o.CompanySaleDiscountPercent ?? o.companySaleDiscountPercent ?? 0;
+                return `
+                <div class="offer-row">
+                    <span>${supplierName} (${supplierCode})</span>
+                    <span>${money(supplierPrice)} ج.م - خصم بيع ${money(discount)}%</span>
+                </div>
+            `;
+            }).join('');
+            return `
+                <article class="card">
+                    <div class="title">${name}</div>
+                    <div class="meta">السعر الأساسي: ${money(basePrice)} ج.م</div>
+                    <div class="offers">${offersHtml}</div>
+                </article>
+            `;
+        }
+
+        function updateResultsCount(count) {
+            ui.resultCount.textContent = `${count} صنف`;
+        }
+
+        function normalizeName(item) {
+            return (item.Name ?? item.name ?? '').toString();
+        }
+
+        function getItemPrice(item) {
+            if (state.mode === 'compare') {
+                const offers = item.Offers ?? item.offers ?? [];
+                if (!offers.length) return Number(item.BasePrice ?? item.basePrice ?? 0);
+                return Math.min(...offers.map(x => Number(x.SupplierPrice ?? x.supplierPrice ?? 0)));
+            }
+            return Number(item.SupplierPrice ?? item.supplierPrice ?? 0);
+        }
+
+        function getItemDiscount(item) {
+            if (state.mode === 'compare') {
+                const offers = item.Offers ?? item.offers ?? [];
+                if (!offers.length) return 0;
+                return Math.max(...offers.map(x => Number(x.CompanySaleDiscountPercent ?? x.companySaleDiscountPercent ?? 0)));
+            }
+            return Number(item.CompanySaleDiscountPercent ?? item.companySaleDiscountPercent ?? 0);
+        }
+
+        function sortItems(items) {
+            const list = [...items];
+            if (state.sortMode === 'discount') {
+                list.sort((a, b) => getItemDiscount(b) - getItemDiscount(a));
+            } else if (state.sortMode === 'priceDesc') {
+                list.sort((a, b) => getItemPrice(b) - getItemPrice(a));
+            } else if (state.sortMode === 'priceAsc') {
+                list.sort((a, b) => getItemPrice(a) - getItemPrice(b));
+            } else if (state.sortMode === 'name') {
+                list.sort((a, b) => normalizeName(a).localeCompare(normalizeName(b), 'ar'));
+            }
+            return list;
+        }
+
+        function syncSortChips() {
+            document.querySelectorAll('[data-sort]').forEach(chip => {
+                chip.classList.toggle('active', chip.getAttribute('data-sort') === state.sortMode);
+            });
+        }
+
+        function closeSearchSuggest() {
+            ui.searchSuggest.classList.remove('open');
+            ui.searchSuggest.innerHTML = '';
+        }
+
+        function renderSearchSuggest(items) {
+            if (!items || !items.length) {
+                closeSearchSuggest();
+                return;
+            }
+
+            ui.searchSuggest.innerHTML = items.map(item => {
+                const name = item.Name ?? item.name ?? '';
+                const code = item.ProdId ?? item.prodId ?? 0;
+                const price = Number(item.SupplierPrice ?? item.supplierPrice ?? 0);
+                return `
+                    <div class="search-item" data-pick-name="${name.replace(/"/g, '&quot;')}">
+                        <div class="n">${name}</div>
+                        <div class="m">كود: ${code} | سعر: ${money(price)} ج.م</div>
+                    </div>
+                `;
+            }).join('');
+            ui.searchSuggest.classList.add('open');
+        }
+
+        async function updateSearchSuggest() {
+            const q = (ui.searchInput.value || '').trim();
+            if (state.selectedAction !== 'invoice' || state.mode !== 'single' || !state.programLinked || !state.customerId || !state.supplierId || !q) {
+                closeSearchSuggest();
+                return;
+            }
+
+            const url = `/PharmacyMobile/SupplierProducts?supplierId=${state.supplierId}&customerId=${state.customerId}&warehouseId=${state.warehouseId}&search=${encodeURIComponent(q)}&page=1&pageSize=12`;
+            try {
+                const data = await getJson(url);
+                renderSearchSuggest(data.items || []);
+            } catch {
+                closeSearchSuggest();
+            }
+        }
+
+        async function loginApp() {
+            const userName = (ui.loginUser.value || '').trim();
+            const password = ui.loginPass.value || '';
+            if (!userName || !password) { ui.loginMsg.textContent = 'ادخل اسم المستخدم وكلمة السر.'; return; }
+
+            const loginResult = await getJson('/PharmacyMobile/AppLogin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userName, password })
+            });
+            ui.loginMsg.textContent = '';
+            if (normalizePortalRole(loginResult.user?.PortalRole) === 'Collector') {
+                window.location.replace('/PharmacyMobile/Collector');
+                return;
+            }
+            await initAppData();
+            showApp(true);
+        }
+
+        async function logoutApp() {
+            await getJson('/PharmacyMobile/AppLogout', { method: 'POST' });
+            state.customerId = 0;
+            state.customerName = '';
+            state.programLinked = false;
+            state.selectedAction = '';
+            state.appReady = false;
+            state.cart.clear();
+            ui.products.innerHTML = '';
+            ui.customerInfo.style.display = 'none';
+            ui.customerInfo.innerHTML = '';
+            ui.balanceSummary.textContent = 'اختر الصيدلية أولاً ثم اختر الرصيد.';
+            ui.statementBody.innerHTML = '<tr><td colspan="7" class="small">لا توجد بيانات حتى الآن.</td></tr>';
+            updateCartSummary();
+            updateActionUi();
+            showApp(false);
+        }
+
+        async function validateProgramCode() {
+            const code = (ui.programCodeInput.value || '').trim();
+            if (!code) { showCenterToast('اكتب كود الشركة أولاً', true); return; }
+            await getJson(`/PharmacyMobile/ValidateProgramCode?code=${encodeURIComponent(code)}`);
+            state.programLinked = true;
+            try {
+                await resolveSupplierByProgramCode(code);
+            } catch {
+                state.supplierId = 0;
+                showCenterToast('تم تأكيد الكود، لكن لم يتم ربط شركة بعد', true, 1600);
+            }
+            state.selectedAction = '';
+            updateActionUi();
+            showCenterToast('تم تأكيد كود الشركة');
+        }
+
+        function showCenterToast(message, isError = false, durationMs = 1000) {
+            if (!ui.centerToast) return;
+            ui.centerToast.textContent = message || 'تمت العملية بنجاح';
+            ui.centerToast.classList.toggle('error', !!isError);
+            ui.centerToast.classList.add('show');
+            clearTimeout(centerToastTimer);
+            centerToastTimer = setTimeout(() => {
+                ui.centerToast.classList.remove('show');
+                ui.centerToast.classList.remove('error');
+            }, durationMs);
+        }
+
+        async function resolveCustomerByCode() {
+            const code = (ui.customerCodeInput.value || '').trim();
+            if (!code) { showCenterToast('اكتب كود الصيدلية أولاً', true); return; }
+            const data = await getJson(`/PharmacyMobile/ResolveCustomerByCode?customerCode=${encodeURIComponent(code)}`);
+            state.customerId = Number(data.customer.CustomerId ?? data.customer.customerId ?? 0);
+            const customerName = data.customer.CustomerName ?? data.customer.customerName ?? '';
+            state.customerName = customerName;
+            ui.userInfo.textContent = ui.userInfo.textContent.split('| الصيدلية:')[0].trim() + ` | الصيدلية: ${customerName}`;
+            renderCustomerInfo(data.customer);
+            state.selectedAction = '';
+            updateActionUi();
+            showCenterToast('تم ربط الصيدلية بنجاح، اختر الرصيد أو عمل فاتورة', false, 1300);
+        }
+
+        async function resolveSupplierByProgramCode(code) {
+            const codeNorm = (code || '').trim();
+            if (!codeNorm) return;
+            const data = await getJson(`/PharmacyMobile/ResolveSupplierByCode?code=${encodeURIComponent(codeNorm)}`);
+            const id = Number(data.supplier.SupplierId ?? data.supplier.supplierId ?? 0);
+            state.supplierId = id;
+        }
+
+        async function loadProducts() {
+            if (!state.appReady) return;
+            if (state.selectedAction !== 'invoice') {
+                ui.catalogToolbar.style.display = 'none';
+                ui.products.innerHTML = '';
+                return;
+            }
+            if (!state.programLinked) {
+                ui.catalogToolbar.style.display = 'none';
+                ui.products.innerHTML = '<section class="panel"><div class="small">أكد كود البرنامج أولاً.</div></section>';
+                return;
+            }
+            if (!state.customerId) {
+                ui.catalogToolbar.style.display = 'none';
+                ui.products.innerHTML = '<section class="panel"><div class="small">اربط الصيدلية بكود العميل أولاً.</div></section>';
+                return;
+            }
+
+            ui.catalogToolbar.style.display = 'grid';
+            syncSortChips();
+
+            const search = encodeURIComponent(ui.searchInput.value || '');
+            if (state.mode === 'single') {
+                if (state.supplierId <= 0) {
+                    updateResultsCount(0);
+                    ui.products.innerHTML = '<section class="panel"><div class="small">اضغط "تأكيد كود الشركة" أولاً لربط شركة التوزيع.</div></section>';
+                    return;
+                }
+                const url = `/PharmacyMobile/SupplierProducts?supplierId=${state.supplierId}&customerId=${state.customerId}&warehouseId=${state.warehouseId}&search=${search}`;
+                const data = await getJson(url);
+                const sorted = sortItems(data.items || []);
+                updateResultsCount(sorted.length);
+                ui.products.innerHTML = sorted.length
+                    ? sorted.map(singleCard).join('')
+                    : '<section class="panel"><div class="small">لا توجد أصناف لهذه الشركة.</div></section>';
+                return;
+            }
+
+            const compareUrl = `/PharmacyMobile/CompareAcrossSuppliers?search=${search}`;
+            const compareData = await getJson(compareUrl);
+            const sortedCompare = sortItems(compareData.items || []);
+            updateResultsCount(sortedCompare.length);
+            ui.products.innerHTML = sortedCompare.length
+                ? sortedCompare.map(compareCard).join('')
+                : '<section class="panel"><div class="small">لا توجد نتائج مقارنة.</div></section>';
+        }
+
+        function fmtDate(v) {
+            if (!v) return '-';
+            const d = new Date(v);
+            if (Number.isNaN(d.getTime())) return '-';
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        async function loadCustomerStatement() {
+            if (!state.customerId) {
+                ui.balanceSummary.textContent = 'اربط الصيدلية أولاً.';
+                ui.statementBody.innerHTML = '<tr><td colspan="9" class="small">لا توجد بيانات.</td></tr>';
+                return;
+            }
+
+            const data = await getJson(`/PharmacyMobile/CustomerStatement?customerId=${state.customerId}&take=60&_=${Date.now()}`);
+            const s = data.summary || {};
+            ui.balanceSummary.innerHTML = `
+                <div class="statement-summary-head">
+                    <div>
+                        <div class="statement-summary-name">${s.CustomerName ?? '-'}</div>
+                        <div class="statement-summary-code">كود الصيدلية: ${s.CustomerCode ?? '-'}</div>
+                    </div>
+                    <div class="statement-summary-inline">
+                        <span>الحد الائتماني: <strong>${money(s.CreditLimit)} ج.م</strong></span>
+                        <span>المتاح: <strong>${money(s.RemainingCredit)} ج.م</strong></span>
+                    </div>
+                </div>
+                <div class="statement-summary-cards">
+                    <div class="statement-summary-card debit">
+                        <div class="label">إجمالي المدين</div>
+                        <div class="value">${money(s.TotalDebit)} ج.م</div>
+                    </div>
+                    <div class="statement-summary-card credit">
+                        <div class="label">إجمالي الدائن</div>
+                        <div class="value">${money(s.TotalCredit)} ج.م</div>
+                    </div>
+                    <div class="statement-summary-card balance">
+                        <div class="label">الرصيد الحالي</div>
+                        <div class="value">${money(s.Net)} ج.م</div>
+                    </div>
+                    <div class="statement-summary-card limit">
+                        <div class="label">الحد الفعّال</div>
+                        <div class="value">${money(s.EffectiveCreditLimit)} ج.م</div>
+                    </div>
+                </div>
+            `;
+
+            const entries = data.entries || [];
+            if (!entries.length) {
+                ui.statementBody.innerHTML = '<tr><td colspan="9" class="small">لا توجد حركات على الحساب.</td></tr>';
+                return;
+            }
+
+            ui.statementBody.innerHTML = entries.map((e, index) => {
+                const details = Array.isArray(e.Details ?? e.details) ? (e.Details ?? e.details) : [];
+                const hasDetails = Boolean(e.HasDetails ?? e.hasDetails) && details.length > 0;
+                const rowId = `stmt-details-${index}`;
+                const detailsHtml = hasDetails
+                    ? `
+                        <tr id="${rowId}" class="statement-detail-row">
+                            <td colspan="9" class="statement-detail-cell">
+                                <div class="statement-detail-box">
+                                    <div class="statement-detail-title">أصناف الفاتورة</div>
+                                    <div class="statement-table-wrap">
+                                        <table class="statement-detail-grid">
+                                            <thead>
+                                                <tr>
+                                                    <th>م</th>
+                                                    <th>كود الصنف</th>
+                                                    <th>اسم الصنف</th>
+                                                    <th>الكمية</th>
+                                                    <th>سعر الجمهور</th>
+                                                    <th>خصم البيع %</th>
+                                                    <th>سعر البيع</th>
+                                                    <th>الصافي</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${details.map(line => `
+                                                    <tr>
+                                                        <td>${line.LineNo ?? line.lineNo ?? '-'}</td>
+                                                        <td>${line.ProdId ?? line.prodId ?? '-'}</td>
+                                                        <td>${line.ProductName ?? line.productName ?? '-'}</td>
+                                                        <td>${line.Qty ?? line.qty ?? 0}</td>
+                                                        <td>${money(line.PriceRetail ?? line.priceRetail ?? 0)}</td>
+                                                        <td>${money(line.Disc1Percent ?? line.disc1Percent ?? 0)}%</td>
+                                                        <td>${money(line.UnitSalePrice ?? line.unitSalePrice ?? 0)}</td>
+                                                        <td>${money(line.LineNetTotal ?? line.lineNetTotal ?? 0)}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `
+                    : '';
+
+                return `
+                <tr>
+                    <td class="statement-toggle-cell">
+                        <button class="statement-toggle" data-toggle-details="${rowId}" ${hasDetails ? '' : 'disabled'}>${hasDetails ? '+' : ''}</button>
+                    </td>
+                    <td>${fmtDate(e.EntryDate ?? e.entryDate)}</td>
+                    <td>${e.SourceType ?? e.sourceType ?? '-'}</td>
+                    <td>${e.VoucherNo ?? e.voucherNo ?? '-'}</td>
+                    <td>${e.Account ?? e.account ?? '<span class="statement-muted">-</span>'}</td>
+                    <td>${e.Description ?? e.description ?? '-'}</td>
+                    <td>${money(e.Debit ?? e.debit ?? 0)}</td>
+                    <td>${money(e.Credit ?? e.credit ?? 0)}</td>
+                    <td>${money(e.RunningBalance ?? e.runningBalance ?? 0)}</td>
+                </tr>
+                ${detailsHtml}
+            `;
+            }).join('');
+        }
+
+        async function checkout() {
+            if (state.selectedAction !== 'invoice') { showCenterToast('اختر "عمل فاتورة" أولاً', true); return; }
+            if (!state.customerId) { showCenterToast('اربط الصيدلية أولاً', true); return; }
+            if (state.cart.size === 0) { showCenterToast('السلة فارغة', true); return; }
+
+            const items = Array.from(state.cart.entries()).map(([prodId, qty]) => ({ prodId, qty }));
+            if (!state.warehouseId || state.warehouseId <= 0) {
+                showCenterToast('اختر مخزنًا محددًا قبل إنشاء الفاتورة', true, 1700);
+                return;
+            }
+            const payload = { warehouseId: state.warehouseId, customerId: state.customerId, items };
+            const data = await getJson('/PharmacyMobile/CreateInvoice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const invNo = data.invoice.SIId ?? data.invoice.siId ?? '';
+            const invNet = data.invoice.NetTotal ?? data.invoice.netTotal ?? 0;
+            const customerLabel = state.customerName || 'العميل';
+            showCenterToast(`تم إنشاء الفاتورة رقم ${invNo} - ${customerLabel}`);
+            state.cart.clear();
+            updateCartSummary();
+        }
+
+        function attachCardActions() {
+            ui.products.addEventListener('click', (e) => {
+                const card = e.target.closest('.card');
+                if (!card) return;
+                const prodId = Number(card.getAttribute('data-id'));
+                if (!prodId) return;
+
+                const qtyInput = card.querySelector('[data-qty]');
+                let qty = Number(qtyInput.value || 1);
+                if (qty < 1) qty = 1;
+
+                if (e.target.hasAttribute('data-plus')) { qtyInput.value = String(qty + 1); return; }
+                if (e.target.hasAttribute('data-minus')) { qtyInput.value = String(Math.max(1, qty - 1)); return; }
+                if (e.target.hasAttribute('data-add')) {
+                    state.cart.set(prodId, Number(qtyInput.value || 1));
+                    updateCartSummary();
+                }
+            });
+        }
+
+        async function initAppData() {
+            const boot = await getJson('/PharmacyMobile/BootstrapData');
+            state.appReady = true;
+            const displayName = boot.user.DisplayName ?? boot.user.displayName ?? boot.user.UserName ?? boot.user.userName ?? '';
+            ui.userInfo.textContent = `المستخدم: ${displayName}`;
+            if (boot.programCode) ui.programCodeInput.value = boot.programCode;
+            if (boot.companyName) {
+                state.companyName = boot.companyName;
+                ui.brandCompanyName.textContent = boot.companyName;
+            }
+
+            ui.warehouseSelect.innerHTML =
+                '<option value="0">كل المخازن</option>' +
+                boot.warehouses.map(w =>
+                `<option value="${w.WarehouseId ?? w.warehouseId ?? 0}">${w.WarehouseName ?? w.warehouseName ?? ''}</option>`
+            ).join('');
+            state.warehouseId = Number(ui.warehouseSelect.value || 0);
+            state.selectedAction = '';
+            updateActionUi();
+            updateCartSummary();
+        }
+
+        function removeLegacyCompanyFields() {
+            // توافق مع أي نسخة قديمة كانت تحتوي حقل/زر ربط شركة منفصلين.
+            const legacyIds = ['supplierSelect', 'supplierCodeInput', 'supplierCodeBtn'];
+            legacyIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.parentElement) {
+                    el.parentElement.removeChild(el);
+                } else if (el) {
+                    el.style.display = 'none';
+                }
+            });
+        }
+
+        async function init() {
+            try {
+                const session = await getJson('/PharmacyMobile/AppSession');
+                if (session.authenticated) {
+                    if (normalizePortalRole(session.user?.PortalRole) === 'Collector') {
+                        window.location.replace('/PharmacyMobile/Collector');
+                        return;
+                    }
+                    await initAppData();
+                    showApp(true);
+                } else {
+                    showApp(false);
+                }
+            } catch {
+                showApp(false);
+            }
+        }
+
+        ui.loginBtn.addEventListener('click', async () => { try { await loginApp(); } catch (err) { ui.loginMsg.textContent = err.message; } });
+        ui.logoutBtn.addEventListener('click', async () => { try { await logoutApp(); } catch (err) { showCenterToast(err.message || 'تعذر تسجيل الخروج', true, 1600); } });
+        ui.programCodeBtn.addEventListener('click', async () => { try { await validateProgramCode(); } catch (err) { showCenterToast(err.message || 'تعذر تأكيد الكود', true, 1600); } });
+        ui.customerCodeBtn.addEventListener('click', async () => { try { await resolveCustomerByCode(); } catch (err) { showCenterToast(err.message || 'تعذر ربط الصيدلية', true, 1600); } });
+        ui.warehouseSelect.addEventListener('change', async () => { state.warehouseId = Number(ui.warehouseSelect.value || 0); await loadProducts(); });
+        ui.modeSelect.addEventListener('change', async () => {
+            state.mode = ui.modeSelect.value || 'single';
+            closeSearchSuggest();
+            await loadProducts();
+        });
+        ui.chooseBalanceBtn.addEventListener('click', async () => {
+            try {
+                state.selectedAction = 'balance';
+                updateActionUi();
+                await loadCustomerStatement();
+            } catch (err) {
+                showCenterToast(err.message || 'تعذر تحميل كشف الحساب', true, 1600);
+            }
+        });
+        ui.chooseInvoiceBtn.addEventListener('click', async () => {
+            try {
+                if (!state.programLinked) { showCenterToast('أكد كود الشركة أولاً', true, 1600); return; }
+                if (!state.customerId) { showCenterToast('اربط الصيدلية أولاً', true, 1600); return; }
+                if (state.mode === 'single' && state.supplierId <= 0) {
+                    const code = (ui.programCodeInput.value || '').trim();
+                    if (code) {
+                        try {
+                            await resolveSupplierByProgramCode(code);
+                        } catch {
+                            state.supplierId = 0;
+                        }
+                    }
+                    if (state.supplierId <= 0) {
+                        try {
+                            const fallback = await getJson('/PharmacyMobile/ResolveSupplierFromProgramSettings');
+                            state.supplierId = Number(fallback.supplier?.SupplierId ?? fallback.supplier?.supplierId ?? 0);
+                        } catch {
+                            state.supplierId = 0;
+                        }
+                    }
+                }
+                if (state.mode === 'single' && state.supplierId <= 0) {
+                    showCenterToast('كود الشركة متأكد لكن غير مربوط بشركة توزيع. راجع كود الشركة في ERP.', true, 1900);
+                    return;
+                }
+                const target = `/PharmacyMobile/Invoice?supplierId=${state.supplierId}&customerId=${state.customerId}&warehouseId=${state.warehouseId}&mode=${encodeURIComponent(state.mode)}&customerName=${encodeURIComponent(state.customerName || '')}`;
+                window.location.href = target;
+            } catch (err) {
+                showCenterToast(err.message || 'تعذر تحميل الأصناف', true, 1600);
+            }
+        });
+        document.querySelectorAll('[data-sort]').forEach(chip => {
+            chip.addEventListener('click', async () => {
+                state.sortMode = chip.getAttribute('data-sort') || 'default';
+                syncSortChips();
+                await loadProducts();
+            });
+        });
+
+        let searchTimer = 0;
+        ui.searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(async () => {
+                await updateSearchSuggest();
+                await loadProducts();
+            }, 250);
+        });
+        ui.searchInput.addEventListener('blur', () => {
+            setTimeout(closeSearchSuggest, 180);
+        });
+        ui.searchSuggest.addEventListener('click', async (e) => {
+            const picked = e.target.closest('[data-pick-name]');
+            if (!picked) return;
+            ui.searchInput.value = picked.getAttribute('data-pick-name') || '';
+            closeSearchSuggest();
+            await loadProducts();
+        });
+        ui.checkoutBtn.addEventListener('click', async () => { try { await checkout(); } catch (err) { showCenterToast(err.message || 'تعذر إنشاء الفاتورة', true, 1700); } });
+        ui.statementBody.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-toggle-details]');
+            if (!btn) return;
+            const targetId = btn.getAttribute('data-toggle-details');
+            if (!targetId) return;
+            const row = document.getElementById(targetId);
+            if (!row) return;
+            const isOpen = row.classList.toggle('open');
+            btn.textContent = isOpen ? '-' : '+';
+        });
+
+        attachCardActions();
+        removeLegacyCompanyFields();
+        init();
+    </script>
+</body>
+</html>

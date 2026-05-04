@@ -20,6 +20,7 @@
     var colTitles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["date"] = "التاريخ",
+        ["time"] = "الوقت",
         ["docno"] = "رقم المستند",
         ["author"] = "الكاتب",
         ["region"] = "المنطقة",
@@ -28,7 +29,9 @@
         ["productname"] = "اسم الصنف",
         ["qty"] = "الكمية",
         ["unitprice"] = "السعر",
+        ["discount"] = "الخصم",
         ["linetotal"] = "الإجمالي",
+        ["customercode"] = "كود العميل",
         ["party"] = "الطرف",
         ["warehouse"] = "المخزن",
         ["batch"] = "التشغيلة",
@@ -220,6 +223,9 @@
                                 case "date":
                                     <td>@row.Date.ToString("d/M/yyyy")</td>
                                     break;
+                                case "time":
+                                    <td>@(row.Time.HasValue ? row.Time.Value.ToString(@"hh\:mm") : "—")</td>
+                                    break;
                                 case "docno":
                                     <td class="num">@row.DocNo</td>
                                     break;
@@ -244,8 +250,25 @@
                                 case "unitprice":
                                     <td class="text-end-num">@(row.UnitPrice.HasValue ? row.UnitPrice.Value.ToString("N2", n2) : "—")</td>
                                     break;
+                                case "discount":
+                                    if (row.DiscountPercent.HasValue && row.DiscountPercent.Value != 0m)
+                                    {
+                                        <td class="text-end-num">@row.DiscountPercent.Value.ToString("N2", n2)%</td>
+                                    }
+                                    else if (row.DiscountValue.HasValue && row.DiscountValue.Value != 0m)
+                                    {
+                                        <td class="text-end-num">@row.DiscountValue.Value.ToString("N2", n2)</td>
+                                    }
+                                    else
+                                    {
+                                        <td>—</td>
+                                    }
+                                    break;
                                 case "linetotal":
                                     <td class="text-end-num">@(row.Total.HasValue ? row.Total.Value.ToString("N2", n2) : "—")</td>
+                                    break;
+                                case "customercode":
+                                    <td>@(row.CustomerCode ?? "")</td>
                                     break;
                                 case "party":
                                     <td>@(row.PartyName ?? "")</td>

@@ -48,6 +48,69 @@
             white-space: nowrap;
         }
 
+        /* ===== قوائم جانبية داخل الإعدادات ===== */
+        .settings-submenu {
+            position: relative;
+        }
+
+        .settings-submenu > .settings-submenu-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .settings-submenu > .settings-submenu-menu {
+            top: 0;
+            right: 100%;
+            left: auto;
+            margin-right: 0;
+            min-width: 220px;
+            z-index: 1060;
+        }
+
+        .settings-submenu.show > .settings-submenu-menu {
+            display: block;
+        }
+
+        .settings-submenu .submenu-arrow {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 12px;
+            height: 12px;
+            color: transparent; /* إخفاء الرمز النصي القديم */
+            font-size: 0;
+            line-height: 1;
+        }
+
+        .settings-submenu .submenu-arrow::before {
+            content: "";
+            display: block;
+            width: 0;
+            height: 0;
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+            border-right: 6px solid #adb5bd; /* سهم بسيط بدون مربع */
+        }
+
+        @@media (min-width: 992px) {
+            /* جسر حركة بين الاسم والقائمة الجانبية حتى لا تختفي أثناء التحريك */
+            .settings-submenu::after {
+                content: "";
+                position: absolute;
+                top: 0;
+                right: calc(100% - 10px);
+                width: 14px;
+                height: 100%;
+            }
+
+            .settings-submenu:hover > .settings-submenu-menu,
+            .settings-submenu:focus-within > .settings-submenu-menu {
+                display: block;
+            }
+        }
+
         /* ===== تثبيت النافبار أعلى الشاشة ===== */
         header {
             position: sticky; /* يثبت أعلى الصفحة عند الاسكرول */
@@ -61,23 +124,44 @@
             bottom: 0;
             left: 0;
             right: 0;
-            z-index: 1030;
-            font-size: 0.7rem;
-            line-height: 1.3;
+            z-index: 2000;
+            box-sizing: border-box;
+            font-size: 0.78rem;
+            line-height: 1;
             color: #6b7280;
             background: #f9fafb;
             border-top: 1px solid #e5e7eb;
-            padding: 0.2rem 0.75rem;
-            display: flex;
-            flex-wrap: wrap;
+            padding: 0 0.85rem;
+            display: flex !important;
+            flex-wrap: nowrap;
             align-items: center;
             justify-content: space-between;
-            gap: 0.5rem;
+            gap: 0.75rem;
             direction: rtl;
+            height: 42px;
+            min-height: 42px;
+            overflow: hidden;
+            visibility: visible !important;
+            opacity: 1 !important;
         }
-        body { padding-bottom: 28px; }
+
+        .erp-footer-user,
+        .erp-footer-datetime {
+            display: inline-flex;
+            align-items: center;
+            min-height: 42px;
+            white-space: nowrap;
+            flex: 0 1 auto;
+        }
+
+        body {
+            padding-bottom: 42px !important;
+        }
+
         @@media (min-width: 768px) {
-            body { padding-bottom: 24px; }
+            body {
+                padding-bottom: 42px !important;
+            }
         }
         /* عند فتح الصفحة داخل تاب (iframe) لا نعرض الشريط السفلي لتفادي التكرار — يبقى الظهور في النافذة الرئيسية فقط */
         html.in-frame .erp-app-footer { display: none !important; }
@@ -90,32 +174,53 @@
             flex-direction: row;
             justify-content: flex-start;
             align-items: center;
-            gap: 0.35rem;
-            border-bottom: 1px solid #e5e7eb;
-            padding: 0.2rem 0;
+            gap: 0.25rem;
+            border-bottom: 1px solid transparent;
+            padding: 0.3rem 0.5rem;
             margin-bottom: 0;
             overflow-x: auto;
-            min-height: 36px;
+            min-height: 40px;
+            background: transparent;
+            box-shadow: none;
+        }
+        body.has-tabs .app-tabs-bar {
+            border-bottom-color: #dbe5f1;
+            background: #ffffff;
+            box-shadow: inset 0 -1px 0 rgba(37, 99, 235, 0.08);
+            margin-bottom: 0 !important;
         }
 
         .app-tab {
             display: inline-flex;
             align-items: center;
             gap: 0.2rem;
-            border-radius: 0.3rem;
-            padding-inline: 0.6rem;
-            padding-block: 0.2rem;
+            border-radius: 0.36rem;
+            padding-inline: 0.52rem;
+            padding-block: 0.22rem;
             white-space: nowrap;
             border: 1px solid #e5e7eb;
             background-color: #f9fafb;
-            font-size: 0.8rem;
+            color: #495057;
+            font-size: 0.74rem;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+        body.has-tabs .app-tab {
+            border-color: #2563eb;
+            background-color: #2563eb;
+            color: #ffffff;
+        }
+        .app-tab:hover {
+            background-color: #1d4ed8;
+            border-color: #1d4ed8;
+            color: #ffffff;
         }
 
-            .app-tab.active {
-                background-color: #0d6efd;
-                color: #ffffff;
-                border-color: #0d6efd;
-            }
+        .app-tab.active {
+            background: #1d4ed8;
+            color: #ffffff;
+            border-color: #1e40af;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.22);
+        }
 
         .app-tab-close {
             font-size: 0.85rem;
@@ -132,8 +237,25 @@
 
         /* عندما يكون هناك تابات (body.has-tabs) نعرض مساحة للإطارات */
         body.has-tabs .app-tabs-container {
-            height: calc(100vh - 120px); /* ارتفاع الشاشة ناقص النافبار والتابات */
-            margin-bottom: 0.5rem;
+            height: calc(100vh - 82px); /* تكبير أوضح لمساحة التابات */
+            margin-bottom: 0;
+            background: #f3f6fb;
+        }
+        body.has-tabs main[role="main"] {
+            background: #f3f6fb;
+            min-height: calc(100vh - var(--erp-navbar-height) - 30px);
+            padding: 0 !important;
+        }
+        body.has-tabs #homeContent {
+            background: #f3f6fb;
+            margin-top: 0 !important;
+        }
+
+        body.has-tabs #appTabsBar:empty {
+            display: none !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
         }
 
         .app-tab-frame {
@@ -156,7 +278,14 @@
         }
 
         html.in-frame main {
-            padding-top: 1rem;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            background: transparent !important;
+        }
+        html.in-frame #homeContent {
+            margin-top: 0 !important;
+            min-height: 100vh;
+            background: #f3f6fb !important;
         }
     </style>
 </head>
@@ -231,6 +360,25 @@
 
                                 <li>
                                     <a class="dropdown-item app-menu-link"
+                                       asp-controller="MobileAppSettings"
+                                       asp-action="Index"
+                                       data-tab-id="mobile-app-settings"
+                                       data-tab-title="إعدادات تطبيق الصيدلي">
+                                        إعدادات تطبيق الصيدلي
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CustomerCollectors"
+                                       asp-action="Index"
+                                       data-tab-id="customer-collectors-settings"
+                                       data-tab-title="ربط العملاء بالموزعين">
+                                        ربط العملاء بالموزعين
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
                                        asp-controller="UserActivityLogs"
                                        asp-action="Index"
                                        data-tab-id="user-activity-logs"
@@ -241,201 +389,181 @@
 
                                 <li><hr class="dropdown-divider" /></li>
 
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Policies"
-                                       asp-action="Index"
-                                       data-tab-id="policies"
-                                       data-tab-title="السياسات">
-                                        السياسات
+                                <li class="settings-submenu">
+                                    <a class="dropdown-item settings-submenu-toggle" href="#">
+                                        <span>المستخدمين</span>
+                                        <span class="submenu-arrow">◀</span>
                                     </a>
+                                    <ul class="dropdown-menu settings-submenu-menu">
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Users" asp-action="Index"
+                                               data-tab-id="Users"
+                                               data-tab-title=" المستخدمين">
+                                                المستخدمين
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Roles" asp-action="Index"
+                                               data-tab-id="Roles"
+                                               data-tab-title="الأدوار">
+                                                الأدوار
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Permissions" asp-action="Index"
+                                               data-tab-id="Permissions"
+                                               data-tab-title="الصلاحيات">
+                                                الصلاحيات
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="RolePermissions" asp-action="Index"
+                                               data-tab-id="RolePermissions"
+                                               data-tab-title="صلاحيات الأدوار">
+                                                صلاحيات الأدوار
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="UserRoles" asp-action="Index"
+                                               data-tab-id="UserRoles"
+                                               data-tab-title="أدوار المستخدمين">
+                                                أدوار المستخدمين
+                                            </a>
+                                        </li>
+                                    </ul>
                                 </li>
 
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="ProductGroups"
-                                       asp-action="Index"
-                                       data-tab-id="product-groups"
-                                       data-tab-title="مجموعات الأصناف الخاصة بالسياسة">
-                                        مجموعات الأصناف الخاصة بالسياسة
+                                <li class="settings-submenu">
+                                    <a class="dropdown-item settings-submenu-toggle" href="#">
+                                        <span>الموظفين</span>
+                                        <span class="submenu-arrow">◀</span>
                                     </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="ProductBonusGroups"
-                                       asp-action="Index"
-                                       data-tab-id="product-bonus-groups"
-                                       data-tab-title="مجموعات الأصناف الخاصة بالحافز">
-                                        مجموعات الأصناف الخاصة بالبونص
-                                    </a>
-                                </li>
-
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="ProductGroupPolicies"
-                                       asp-action="Index"
-                                       data-tab-id="product-group-policies"
-                                       data-tab-title="سياسات مجموعات الأصناف">
-                                        سياسات مجموعات الأصناف
-                                    </a>
-                                </li>
-
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="WarehousePolicyRules"
-                                       asp-action="Index"
-                                       data-tab-id="warehouse-policy-rules"
-                                       data-tab-title="سياسات المخازن">
-                                        سياسات المخازن
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-
-                        @* ===== المستخدمين ===== *@
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="usersMenu" role="button"
-                               data-bs-toggle="dropdown" aria-expanded="false">
-                                المستخدمين
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="usersMenu">
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Users" asp-action="Index"
-                                       data-tab-id="Users"
-                                       data-tab-title=" المستخدمين">
-                                        المستخدمين
-                                    </a>
+                                    <ul class="dropdown-menu settings-submenu-menu">
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Employees" asp-action="Index"
+                                               data-tab-id="employees"
+                                               data-tab-title="قائمة الموظفين">
+                                                قائمة الموظفين
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Departments" asp-action="Index"
+                                               data-tab-id="departments"
+                                               data-tab-title="الأقسام">
+                                                الأقسام
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Jobs" asp-action="Index"
+                                               data-tab-id="jobs"
+                                               data-tab-title="الوظائف">
+                                                الوظائف
+                                            </a>
+                                        </li>
+                                    </ul>
                                 </li>
 
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Roles" asp-action="Index"
-                                       data-tab-id="Roles"
-                                       data-tab-title="الأدوار">
-                                        الأدوار
+                                <li class="settings-submenu">
+                                    <a class="dropdown-item settings-submenu-toggle" href="#">
+                                        <span>المناطق الجغرافية</span>
+                                        <span class="submenu-arrow">◀</span>
                                     </a>
+                                    <ul class="dropdown-menu settings-submenu-menu">
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Governorates" asp-action="Index"
+                                               data-tab-id="governorates"
+                                               data-tab-title="المحافظات">
+                                                المحافظات
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Districts" asp-action="Index"
+                                               data-tab-id="districts"
+                                               data-tab-title="الأحياء/المراكز">
+                                                الأحياء/المراكز
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Areas" asp-action="Index"
+                                               data-tab-id="areas"
+                                               data-tab-title="المناطق">
+                                                المناطق
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Branches" asp-action="Index"
+                                               data-tab-id="branches"
+                                               data-tab-title="الفروع">
+                                                الفروع
+                                            </a>
+                                        </li>
+                                    </ul>
                                 </li>
 
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Permissions" asp-action="Index"
-                                       data-tab-id="Permissions"
-                                       data-tab-title="الصلاحيات">
-                                        الصلاحيات
+                                <li class="settings-submenu">
+                                    <a class="dropdown-item settings-submenu-toggle" href="#">
+                                        <span>السياسات</span>
+                                        <span class="submenu-arrow">◀</span>
                                     </a>
-                                </li>
-
-                          @*       <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="UserExtraPermissions" asp-action="Index"
-                                       data-tab-id="cash-UserExtraPermissions"
-                                       data-tab-title="صلاحيات إضافية للمستخدم">
-                                        صلاحيات إضافية للمستخدم
-                                    </a>
-                                </li>
-
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="UserDeniedPermissions" asp-action="Index"
-                                       data-tab-id="UserDeniedPermissions"
-                                       data-tab-title="استثناءات صلاحيات المستخدمين">
-                                        استثناءات صلاحيات المستخدمين
-                                    </a>
-                                </li> *@
-
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="RolePermissions" asp-action="Index"
-                                       data-tab-id="RolePermissions"
-                                       data-tab-title="صلاحيات الأدوار">
-                                        صلاحيات الأدوار
-                                    </a>
-                                </li>
-
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="UserRoles" asp-action="Index"
-                                       data-tab-id="UserRoles"
-                                       data-tab-title="أدوار المستخدمين">
-                                        أدوار المستخدمين
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-
-                        @* ===== الموظفين ===== *@
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="employeesMenu" role="button"
-                               data-bs-toggle="dropdown" aria-expanded="false">
-                                الموظفين
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="employeesMenu">
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Employees" asp-action="Index"
-                                       data-tab-id="employees"
-                                       data-tab-title="قائمة الموظفين">
-                                        قائمة الموظفين
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Departments" asp-action="Index"
-                                       data-tab-id="departments"
-                                       data-tab-title="الأقسام">
-                                        الأقسام
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Jobs" asp-action="Index"
-                                       data-tab-id="jobs"
-                                       data-tab-title="الوظائف">
-                                        الوظائف
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-
-                        @* ===== المناطق الجغرافية ===== *@
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="geoMenu" role="button"
-                               data-bs-toggle="dropdown" aria-expanded="false">
-                                المناطق الجغرافية
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="geoMenu">
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Governorates" asp-action="Index"
-                                       data-tab-id="governorates"
-                                       data-tab-title="المحافظات">
-                                        المحافظات
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Districts" asp-action="Index"
-                                       data-tab-id="districts"
-                                       data-tab-title="الأحياء/المراكز">
-                                        الأحياء/المراكز
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Areas" asp-action="Index"
-                                       data-tab-id="areas"
-                                       data-tab-title="المناطق">
-                                        المناطق
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Branches" asp-action="Index"
-                                       data-tab-id="branches"
-                                       data-tab-title="الفروع">
-                                        الفروع
-                                    </a>
+                                    <ul class="dropdown-menu settings-submenu-menu">
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="Policies"
+                                               asp-action="Index"
+                                               data-tab-id="policies"
+                                               data-tab-title="السياسات">
+                                                السياسات
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="ProductGroups"
+                                               asp-action="Index"
+                                               data-tab-id="product-groups"
+                                               data-tab-title="مجموعات الأصناف الخاصة بالسياسة">
+                                                مجموعات الأصناف الخاصة بالسياسة
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="ProductBonusGroups"
+                                               asp-action="Index"
+                                               data-tab-id="product-bonus-groups"
+                                               data-tab-title="مجموعات الأصناف الخاصة بالحافز">
+                                                مجموعات الأصناف الخاصة بالبونص
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="ProductGroupPolicies"
+                                               asp-action="Index"
+                                               data-tab-id="product-group-policies"
+                                               data-tab-title="سياسات مجموعات الأصناف">
+                                                سياسات مجموعات الأصناف
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item app-menu-link"
+                                               asp-controller="WarehousePolicyRules"
+                                               asp-action="Index"
+                                               data-tab-id="warehouse-policy-rules"
+                                               data-tab-title="سياسات المخازن">
+                                                سياسات المخازن
+                                            </a>
+                                        </li>
+                                    </ul>
                                 </li>
                             </ul>
                         </li>
@@ -463,6 +591,16 @@
                                        data-tab-title="حجم تعامل عميل">
                                         
                                         حجم تعامل عميل
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Customers"
+                                       asp-action="CreditLimitAdjustment"
+                                       asp-route-frame="1"
+                                       data-tab-id="customer-credit-limit-adjustment"
+                                       data-tab-title="تعديل الحد الائتماني">
+                                        تعديل الحد الائتماني
                                     </a>
                                 </li>
                                 <li>
@@ -877,6 +1015,27 @@
                                         قائمة أصناف مرتجعات المشتريات
                                     </a>
                                 </li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="TrackTrace"
+                                       asp-action="Index"
+                                       asp-route-frame="1"
+                                       data-tab-id="track-trace-info"
+                                       data-tab-title="معلومات التتبع">
+                                        معلومات التتبع
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="TrackTrace"
+                                       asp-action="Queue"
+                                       asp-route-frame="1"
+                                       data-tab-id="track-trace-queue"
+                                       data-tab-title="سجل إرسال التتبع">
+                                        سجل إرسال التتبع
+                                    </a>
+                                </li>
                             </ul>
                         </li>
 
@@ -980,12 +1139,21 @@
                                     </a>
                                 </li>
 
-                                  <li>
+                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="CashReceipts" asp-action="Create"
                                        data-tab-id="cash-receipt-create"
                                        data-tab-title="إذن استلام نقدية">
                                         إذن استلام نقدية 
+                                    </a>
+                                </li>
+
+                                 <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CashReceipts" asp-action="BatchCreate"
+                                       data-tab-id="cash-receipts-batch"
+                                       data-tab-title="إذن استلام مجمّع">
+                                        إذن استلام مجمّع
                                     </a>
                                 </li>
 
@@ -1519,6 +1687,40 @@
                 bindRefreshButton();
             }
 
+        })();
+    </script>
+
+    <script>
+        (function () {
+            function closeAllSettingsSubmenus() {
+                document.querySelectorAll('#settingsMenu + .dropdown-menu .settings-submenu.show')
+                    .forEach(function (el) { el.classList.remove('show'); });
+            }
+
+            document.addEventListener('click', function (e) {
+                var toggle = e.target.closest('.settings-submenu-toggle');
+                if (toggle) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    var parent = toggle.closest('.settings-submenu');
+                    if (!parent) return;
+
+                    var isOpen = parent.classList.contains('show');
+                    closeAllSettingsSubmenus();
+                    if (!isOpen) parent.classList.add('show');
+                    return;
+                }
+
+                if (!e.target.closest('#settingsMenu') && !e.target.closest('#settingsMenu + .dropdown-menu')) {
+                    closeAllSettingsSubmenus();
+                }
+            });
+
+            var settingsRoot = document.getElementById('settingsMenu');
+            if (settingsRoot) {
+                settingsRoot.addEventListener('hidden.bs.dropdown', closeAllSettingsSubmenus);
+            }
         })();
     </script>
 

@@ -73,6 +73,13 @@ namespace ERP.Models
         public decimal CreditLimit { get; set; } = 0m;      // متغير: الحد الائتماني المسموح للطرف (غالباً للعميل)
 
         [Column(TypeName = "decimal(18,2)")]
+        [Display(Name = "زيادة حد ائتماني مؤقتة")]
+        public decimal? CreditLimitTemporaryIncrease { get; set; } // متغير: زيادة مؤقتة على الحد الأساسي
+
+        [Display(Name = "انتهاء الزيادة المؤقتة")]
+        public DateTime? CreditLimitTemporaryUntil { get; set; }   // متغير: تاريخ/وقت انتهاء الزيادة المؤقتة
+
+        [Column(TypeName = "decimal(18,2)")]
         [Display(Name = "الرصيد الحالي")]
         public decimal CurrentBalance { get; set; } = 0m;   // متغير: رصيد العميل الحالي (للتقارير/كشوف الحساب)
 
@@ -119,6 +126,10 @@ namespace ERP.Models
         [Display(Name = "الشريحة")]
         public string? Segment { get; set; }
 
+        [StringLength(50)]
+        [Display(Name = "الكود المكاني")]
+        public string? LocationCode { get; set; }
+
         [StringLength(150)]
         [Display(Name = "المنطقة (نص)")]
         public string? RegionName { get; set; }        // منطقة كنص من الإكسل (إن لم تُربط بجدول المناطق)
@@ -149,6 +160,10 @@ namespace ERP.Models
         [Display(Name = "حسابات الدخول المرتبطة")]
         public virtual ICollection<User> Users { get; set; }
             = new List<User>();                  // متغير: كل المستخدمين المرتبطين بهذا العميل/الموظف/المستثمر...
+
+        [Display(Name = "روابط الموزعين")]
+        public virtual ICollection<CustomerCollector> CustomerCollectors { get; set; }
+            = new List<CustomerCollector>();     // متغير: كل روابط هذا العميل بالموزعين
 
         // ===== علاقات العميل مع مستندات البيع =====
         public virtual ICollection<SalesInvoice> SalesInvoices { get; set; }

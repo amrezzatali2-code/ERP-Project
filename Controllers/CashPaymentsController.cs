@@ -52,6 +52,47 @@ namespace ERP.Controllers
 
         private static Task<bool> CanViewInvestorsAsync() => Task.FromResult(true); // إظهار/إخفاء 3101 يعتمد على «الحسابات المسموح رؤيتها» فقط
 
+        private async Task<string?> ValidateCustomerCreditForOutflowAsync(int? customerId, decimal amount)
+        {
+            if (!customerId.HasValue || customerId.Value <= 0 || amount <= 0m)
+                return null;
+
+            var cust = await _context.Customers
+                .AsNoTracking()
+                .Where(c => c.CustomerId == customerId.Value)
+                .Select(c => new
+                {
+                    c.CustomerId,
+                    c.CurrentBalance,
+                    c.CreditLimit,
+                    c.CreditLimitTemporaryIncrease,
+                    c.CreditLimitTemporaryUntil
+                })
+                .FirstOrDefaultAsync();
+
+            if (cust == null) return null;
+
+            var ledgerBalance = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e => e.CustomerId == cust.CustomerId)
+                .SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
+
+            var effectiveLimit = CustomerCreditLimitCalculator.GetEffectiveCreditLimit(
+                cust.CreditLimit,
+                cust.CreditLimitTemporaryIncrease,
+                cust.CreditLimitTemporaryUntil,
+                DateTime.Now);
+
+            if (effectiveLimit <= 0m) return null; // حد غير مقيّد
+
+            var currentDebit = Math.Max(cust.CurrentBalance, ledgerBalance);
+            var newDebit = currentDebit + amount;
+            if (newDebit <= effectiveLimit) return null;
+
+            var remaining = Math.Max(0m, effectiveLimit - currentDebit);
+            return $"لا يمكن حفظ إذن الدفع: المبلغ يتجاوز المتبقي من الحد الائتماني للعميل ({remaining:N2} جنيه).";
+        }
+
         // =========================================================
         // دالة مساعدة: تجهيز القوائم المنسدلة (الطرف + الحسابات)
         // تُستخدم فى Create و Edit (GET + POST لو حصل خطأ).
@@ -137,6 +178,64 @@ namespace ERP.Controllers
             }).ToList();
             
             ViewData["CounterAccountId"] = new SelectList(counterAccountItems, "Value", "Text", counterAccountId);
+        }
+
+        private async Task PopulateCreateNavigationAsync(int? currentId)
+        {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenCustomerAccountIds = (await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync()).ToList();
+            var restrictedOnly = false;
+
+            var ids = await BuildQuery(
+                    search: null,
+                    searchBy: null,
+                    sort: "CashPaymentId",
+                    dir: "asc",
+                    useDateRange: false,
+                    fromDate: null,
+                    toDate: null,
+                    fromCode: null,
+                    toCode: null,
+                    canViewInvestors: canViewInvestors,
+                    hiddenCustomerAccountIds: hiddenCustomerAccountIds,
+                    restrictedToAllowedOnly: restrictedOnly,
+                    searchMode: null)
+                .Select(x => x.CashPaymentId)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToArrayAsync();
+
+            int current = currentId.GetValueOrDefault();
+            int first = ids.Length > 0 ? ids[0] : 0;
+            int last = ids.Length > 0 ? ids[ids.Length - 1] : 0;
+            int prev = 0;
+            int next = 0;
+
+            if (current > 0 && ids.Length > 0)
+            {
+                var idx = Array.IndexOf(ids, current);
+                if (idx >= 0)
+                {
+                    prev = idx > 0 ? ids[idx - 1] : 0;
+                    next = idx < ids.Length - 1 ? ids[idx + 1] : 0;
+                }
+                else
+                {
+                    prev = last;
+                    next = first;
+                }
+            }
+            else if (ids.Length > 0)
+            {
+                prev = last;
+                next = first;
+            }
+
+            ViewBag.NavCurrentId = current > 0 ? current : (int?)null;
+            ViewBag.NavFirstId = first > 0 ? first : (int?)null;
+            ViewBag.NavLastId = last > 0 ? last : (int?)null;
+            ViewBag.NavPrevId = prev > 0 ? prev : (int?)null;
+            ViewBag.NavNextId = next > 0 ? next : (int?)null;
         }
 
         // =========================================================
@@ -691,6 +790,7 @@ namespace ERP.Controllers
             }
 
             await PopulateDropdownsAsync(model.CustomerId, model.CashAccountId > 0 ? (int?)model.CashAccountId : null, model.CounterAccountId > 0 ? (int?)model.CounterAccountId : null);
+            await PopulateCreateNavigationAsync(model.CashPaymentId > 0 ? model.CashPaymentId : null);
             return View(model);
         }
 
@@ -715,6 +815,10 @@ namespace ERP.Controllers
                     ModelState.AddModelError(nameof(CashPayment.CustomerId), "لا يمكن التعامل مع عميل غير نشط. يرجى تفعيل العميل أولاً.");
             }
 
+            var creditErrorCreate = await ValidateCustomerCreditForOutflowAsync(payment.CustomerId, payment.Amount);
+            if (!string.IsNullOrWhiteSpace(creditErrorCreate))
+                ModelState.AddModelError(nameof(CashPayment.Amount), creditErrorCreate);
+
             if (payment.CashAccountId <= 0)
                 ModelState.AddModelError(nameof(CashPayment.CashAccountId), "يجب اختيار الخزينة / الصندوق.");
             else
@@ -728,6 +832,7 @@ namespace ERP.Controllers
             {
                 // لو فيه أخطاء في البيانات نرجع لنفس الفورم
                 await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+                await PopulateCreateNavigationAsync(payment.CashPaymentId > 0 ? payment.CashPaymentId : null);
                 if (payment.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
                 return View(payment);
@@ -793,6 +898,7 @@ namespace ERP.Controllers
                 
                 // ✅ إعادة تحميل الصفحة بنفس الإذن (بدون توجيه للقائمة)
                 await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+                await PopulateCreateNavigationAsync(payment.CashPaymentId);
                 if (payment.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
                 return View(payment);
@@ -801,6 +907,7 @@ namespace ERP.Controllers
             {
                 TempData["CashPaymentError"] = $"حدث خطأ أثناء حفظ إذن الدفع: {ex.Message}";
                 await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+                await PopulateCreateNavigationAsync(payment.CashPaymentId > 0 ? payment.CashPaymentId : null);
                 if (payment.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
                 return View(payment);
@@ -887,6 +994,7 @@ namespace ERP.Controllers
                 ViewBag.LockCustomer = true;
 
             await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+            await PopulateCreateNavigationAsync(payment.CashPaymentId);
             return View("Create", payment);
         }
 
@@ -914,9 +1022,14 @@ namespace ERP.Controllers
                     ModelState.AddModelError(nameof(CashPayment.CashAccountId), "يجب اختيار خزينة/صندوق صالح من القائمة.");
             }
 
+            var creditErrorEdit = await ValidateCustomerCreditForOutflowAsync(payment.CustomerId, payment.Amount);
+            if (!string.IsNullOrWhiteSpace(creditErrorEdit))
+                ModelState.AddModelError(nameof(CashPayment.Amount), creditErrorEdit);
+
             if (!ModelState.IsValid)
             {
                 await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+                await PopulateCreateNavigationAsync(payment.CashPaymentId > 0 ? payment.CashPaymentId : null);
                 if (payment.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
                 return View("Create", payment);
@@ -1005,6 +1118,7 @@ namespace ERP.Controllers
                 
                 // ✅ إعادة تحميل الصفحة بنفس الإذن
                 await PopulateDropdownsAsync(existing.CustomerId, existing.CashAccountId, existing.CounterAccountId);
+                await PopulateCreateNavigationAsync(existing.CashPaymentId);
                 if (existing.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
                 return View("Create", existing);
@@ -1013,6 +1127,7 @@ namespace ERP.Controllers
             {
                 TempData["CashPaymentError"] = $"حدث خطأ: {ex.Message}";
                 await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+                await PopulateCreateNavigationAsync(payment.CashPaymentId > 0 ? payment.CashPaymentId : null);
                 if (payment.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
                 return View("Create", payment);
